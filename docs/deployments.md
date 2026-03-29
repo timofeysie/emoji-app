@@ -38,11 +38,11 @@ Includes TLS, load balancing, and auto-scaling. No separate ALB charge.
 ```bash
 aws ecr create-repository \
   --repository-name smart-home \
-  --region us-east-1
+  --region ap-southeast-2
 ```
 
 Note the `repositoryUri` in the output — you will need it in the next step.
-It looks like `<account-id>.dkr.ecr.us-east-1.amazonaws.com/smart-home`.
+It looks like `<account-id>.dkr.ecr.ap-southeast-2.amazonaws.com/smart-home`.
 
 ---
 
@@ -52,9 +52,9 @@ Authenticate Docker with ECR, then build and push from the **workspace root**:
 
 ```bash
 # Authenticate (replace region/account as needed)
-aws ecr get-login-password --region us-east-1 \
+aws ecr get-login-password --region ap-southeast-2 \
   | docker login --username AWS --password-stdin \
-    <account-id>.dkr.ecr.us-east-1.amazonaws.com
+    <account-id>.dkr.ecr.ap-southeast-2.amazonaws.com
 
 # Build the image (Dockerfile lives in samples/smart-home/)
 docker build \
@@ -64,10 +64,10 @@ docker build \
 
 # Tag and push
 docker tag smart-home:latest \
-  <account-id>.dkr.ecr.us-east-1.amazonaws.com/smart-home:latest
+  <account-id>.dkr.ecr.ap-southeast-2.amazonaws.com/smart-home:latest
 
 docker push \
-  <account-id>.dkr.ecr.us-east-1.amazonaws.com/smart-home:latest
+  <account-id>.dkr.ecr.ap-southeast-2.amazonaws.com/smart-home:latest
 ```
 
 > **Note:** The build context must be the workspace root (`.`) because the
@@ -110,7 +110,7 @@ aws apprunner create-service \
   --service-name smart-home \
   --source-configuration '{
     "ImageRepository": {
-      "ImageIdentifier": "<account-id>.dkr.ecr.us-east-1.amazonaws.com/smart-home:latest",
+      "ImageIdentifier": "<account-id>.dkr.ecr.ap-southeast-2.amazonaws.com/smart-home:latest",
       "ImageConfiguration": {
         "Port": "3000",
         "RuntimeEnvironmentVariables": {
@@ -130,26 +130,29 @@ aws apprunner create-service \
     "Cpu": "0.25 vCPU",
     "Memory": "0.5 GB"
   }' \
-  --region us-east-1
+  --region ap-southeast-2
 ```
 
 After a few minutes the service URL will appear in the AWS Console under
 **App Runner → Services → smart-home**. It looks like
-`https://<random>.us-east-1.awsapprunner.com`.
+`https://<random>.ap-southeast-2.awsapprunner.com`.
 
 ---
 
 ### Step 5: Verify the deployment
 
 ```bash
-# Replace with your actual service URL
-curl https://<random>.us-east-1.awsapprunner.com/api/chat \
+# Replace with your actual service URL. Without a Cognito access token you
+# should receive HTTP 401 (auth is enabled in production).
+curl -i https://<random>.ap-southeast-2.awsapprunner.com/api/chat \
   -X POST \
   -H "Content-Type: application/json" \
   -d '{"messages":[]}'
 ```
 
-Open the service URL in a browser to confirm the React SPA loads.
+Open the service URL in a browser to confirm the React SPA loads. Use **Sign in**
+after configuring Cognito (see [Authentication](#authentication)) before using the
+chat panel.
 
 ---
 
@@ -161,9 +164,9 @@ automatically (because `AutoDeploymentsEnabled` is `true`):
 ```bash
 docker build -f samples/smart-home/Dockerfile -t smart-home:latest . \
   && docker tag smart-home:latest \
-       <account-id>.dkr.ecr.us-east-1.amazonaws.com/smart-home:latest \
+       <account-id>.dkr.ecr.ap-southeast-2.amazonaws.com/smart-home:latest \
   && docker push \
-       <account-id>.dkr.ecr.us-east-1.amazonaws.com/smart-home:latest
+       <account-id>.dkr.ecr.ap-southeast-2.amazonaws.com/smart-home:latest
 ```
 
 ---
@@ -189,45 +192,51 @@ for the full setup.
 
 ## Authentication
 
-The smart-home sample does not include authentication out of the box. Before
-making this service publicly accessible you will want to protect at least the
-`/api/chat` endpoint, since every request proxies a paid OpenAI call.
+`POST /api/chat` is protected with **AWS Cognito** unless auth is explicitly
+disabled for local development. The React app uses the Cognito Hosted UI (PKCE)
+and sends `Authorization: Bearer <access-token>`. Express verifies the JWT
+against Cognito’s JWKS URL.
 
-There are three practical options, ranked by implementation effort:
+Full setup (user pool, app client, hosted domain, callback URLs) is documented
+in [auth.md](./auth.md).
 
-### Option A — JWT middleware in Express (recommended starting point)
+### App Runner / Docker environment
 
-Add a middleware that verifies a signed JWT on every `/api/chat` request. Your
-frontend obtains a token from your auth provider (Cognito, Auth0, Clerk, etc.)
-and attaches it as a `Bearer` token.
+Set these on the **server** (runtime):
 
-Key decisions to discuss:
+| Variable | Purpose |
+|----------|---------|
+| `COGNITO_USER_POOL_ID` | User pool ID (e.g. `ap-southeast-2_xxxxxxxxx`) |
+| `COGNITO_APP_CLIENT_ID` | App client ID (must match the SPA client) |
+| `COGNITO_REGION` or `AWS_REGION` | Region for issuer / JWKS URL |
 
-- Which auth provider to use (Cognito is AWS-native and has a free tier up to
-  50,000 MAU)
-- Whether the entire app requires auth or only the API route
-- Whether you need social login (Google, GitHub, etc.)
+Do **not** set `DISABLE_AUTH` in production (`NODE_ENV=production` ignores it
+anyway).
 
-### Option B — AWS Cognito + App Runner environment
+The **client** needs Cognito values at **build time** (Vite embeds `VITE_*`):
 
-Cognito handles sign-up, sign-in, and token issuance. The Express server only
-needs to verify the `Authorization: Bearer <id-token>` header using the
-Cognito JWKS endpoint. No third-party auth library is required — just
-`jsonwebtoken` and a JWKS fetch.
+| Variable | Purpose |
+|----------|---------|
+| `VITE_COGNITO_DOMAIN` | Hosted UI base URL, no trailing slash |
+| `VITE_COGNITO_CLIENT_ID` | Same app client ID as on the server |
 
-Additional Cognito decisions:
+For Docker, pass `ARG` / `ENV` for those variables in the image build stage
+before `npm run build:client`, or build with a `.env.production` file in the
+build context.
 
-- Hosted UI vs. custom login page in the React app
-- User pools vs. identity pools (pools are sufficient for API protection)
-- Whether to use Cognito's built-in social identity providers
+Register callback and logout URLs in the Cognito app client, for example:
 
-### Option C — WAF IP allowlist (simplest, not user-auth)
+- `https://<your-apprunner-host>/auth/callback`
+- `https://<your-apprunner-host>/` (sign-out redirect)
 
-Attach an AWS WAF web ACL to the App Runner service and restrict access to
-specific IP ranges. Useful for internal tools or during development. Does not
-provide per-user identity.
+### Local development without Cognito
 
----
+Set `DISABLE_AUTH=true` in `.env` for the Node server and `VITE_DISABLE_AUTH=true`
+so the SPA does not require sign-in. Remove or set to `false` when testing
+Cognito end-to-end.
 
-> Once you have decided on an auth approach, update this document with the
-> implementation steps.
+### Other options
+
+For a quick internal-only guard without user identity, an API key header is
+described in [auth.md](./auth.md). A WAF IP allowlist is another alternative for
+internal tools.

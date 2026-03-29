@@ -388,7 +388,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ap-southeast-2
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -401,7 +401,7 @@ jobs:
 
 Required GitHub secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
 `ECR_REGISTRY` (the full ECR registry URI, e.g.
-`123456789.dkr.ecr.us-east-1.amazonaws.com`).
+`123456789.dkr.ecr.ap-southeast-2.amazonaws.com`).
 
 App Runner will pick up the new image automatically because `AutoDeploymentsEnabled`
 is set to `true` (see `docs/deployments.md`).

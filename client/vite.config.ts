@@ -2,8 +2,10 @@ import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import { defineConfig } from 'vite';
 
+// Load `.env` from the monorepo root (parent of `client/`), not only `client/.env`.
 export default defineConfig({
   root: __dirname,
+  envDir: '..',
   plugins: [react(), tsconfigPaths()],
   server: {
     port: 5200,

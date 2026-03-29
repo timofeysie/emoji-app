@@ -7,6 +7,15 @@ RUN npm ci --ignore-scripts
 
 FROM deps AS builder
 COPY . .
+# Vite embeds VITE_* at build time — pass when building for production Cognito
+ARG VITE_COGNITO_DOMAIN=
+ARG VITE_COGNITO_CLIENT_ID=
+ARG VITE_COGNITO_SCOPES=
+ARG VITE_DISABLE_AUTH=
+ENV VITE_COGNITO_DOMAIN=$VITE_COGNITO_DOMAIN \
+    VITE_COGNITO_CLIENT_ID=$VITE_COGNITO_CLIENT_ID \
+    VITE_COGNITO_SCOPES=$VITE_COGNITO_SCOPES \
+    VITE_DISABLE_AUTH=$VITE_DISABLE_AUTH
 RUN npm run build:client
 RUN npm run build:server
 

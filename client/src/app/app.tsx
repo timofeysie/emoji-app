@@ -1,9 +1,9 @@
-// Uncomment this line to use CSS modules
-// import styles from './app.module.css';
 import { HashbrownProvider } from '@hashbrownai/react';
 import { Link, Route, Routes } from 'react-router-dom';
+import { AuthBar } from './auth/AuthBar';
+import { AuthCallback } from './auth/AuthCallback';
+import { authFetchMiddleware } from './auth/authFetchMiddleware';
 import { StoreInitializer } from './components/StoreInitializer';
-//import { ChatPanel } from './shared/ChatPanel';
 import { RichChatPanel } from './shared/RichChatPanel';
 import {
   NavigationMenu,
@@ -18,44 +18,56 @@ import { ScenesView } from './views/ScenesView';
 import { ScheduledScenesView } from './views/ScheduledScenesView';
 import { Dashboard } from './components/dashboard/Dashboard';
 
-export function App() {
-  const url = 'http://localhost:3000/api/chat';
+const chatUrl = import.meta.env.VITE_CHAT_URL ?? '/api/chat';
 
+function MainShell() {
   return (
-    <HashbrownProvider url={url}>
+    <HashbrownProvider
+      url={chatUrl}
+      middleware={[authFetchMiddleware]}
+    >
       <StoreInitializer />
       <div className="grid grid-cols-7">
         <div className="col-span-4">
-          <div className="flex justify-between py-2 items-center border-b">
+          <div className="flex justify-between py-2 items-center border-b gap-2">
             <p className="text-xl font-bold p-2">Smart Home</p>
-            <NavigationMenu>
-              <NavigationMenuList>
-                <NavigationMenuItem>
-                  <NavigationMenuLink asChild>
-                    <Link to="/lights" className={navigationMenuTriggerStyle()}>
-                      Lights
-                    </Link>
-                  </NavigationMenuLink>
-                </NavigationMenuItem>
-                <NavigationMenuItem>
-                  <NavigationMenuLink asChild>
-                    <Link to="/scenes" className={navigationMenuTriggerStyle()}>
-                      Scenes
-                    </Link>
-                  </NavigationMenuLink>
-                </NavigationMenuItem>
-                <NavigationMenuItem>
-                  <NavigationMenuLink asChild>
-                    <Link
-                      to="/scheduled-scenes"
-                      className={navigationMenuTriggerStyle()}
-                    >
-                      Scheduled Scenes
-                    </Link>
-                  </NavigationMenuLink>
-                </NavigationMenuItem>
-              </NavigationMenuList>
-            </NavigationMenu>
+            <div className="flex items-center gap-1 flex-1 justify-end min-w-0">
+              <NavigationMenu>
+                <NavigationMenuList>
+                  <NavigationMenuItem>
+                    <NavigationMenuLink asChild>
+                      <Link
+                        to="/lights"
+                        className={navigationMenuTriggerStyle()}
+                      >
+                        Lights
+                      </Link>
+                    </NavigationMenuLink>
+                  </NavigationMenuItem>
+                  <NavigationMenuItem>
+                    <NavigationMenuLink asChild>
+                      <Link
+                        to="/scenes"
+                        className={navigationMenuTriggerStyle()}
+                      >
+                        Scenes
+                      </Link>
+                    </NavigationMenuLink>
+                  </NavigationMenuItem>
+                  <NavigationMenuItem>
+                    <NavigationMenuLink asChild>
+                      <Link
+                        to="/scheduled-scenes"
+                        className={navigationMenuTriggerStyle()}
+                      >
+                        Scheduled Scenes
+                      </Link>
+                    </NavigationMenuLink>
+                  </NavigationMenuItem>
+                </NavigationMenuList>
+              </NavigationMenu>
+              <AuthBar />
+            </div>
           </div>
           <div className="gap-4">
             <div className="col-span-3">
@@ -74,12 +86,20 @@ export function App() {
           </div>
         </div>
         <div className="col-span-3 border-l p-2 h-screen overflow-hidden">
-          {/* <ChatPanel /> */}
           <RichChatPanel />
         </div>
       </div>
       <Toaster />
     </HashbrownProvider>
+  );
+}
+
+export function App() {
+  return (
+    <Routes>
+      <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="*" element={<MainShell />} />
+    </Routes>
   );
 }
 

@@ -4,11 +4,12 @@ import path from 'path';
 import { existsSync } from 'fs';
 import { Chat } from '@hashbrownai/core';
 import { HashbrownOpenAI } from '@hashbrownai/openai';
+import { requireAuth } from './auth';
 
-const host = process.env.HOST ?? 'localhost';
-const port = process.env.PORT ? Number(process.env.PORT) : 3000;
+const host = process.env['HOST'] ?? 'localhost';
+const port = process.env['PORT'] ? Number(process.env['PORT']) : 3000;
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_API_KEY = process.env['OPENAI_API_KEY'];
 if (!OPENAI_API_KEY) {
   throw new Error('OPENAI_API_KEY is not set');
 }
@@ -64,7 +65,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', requireAuth, async (req, res) => {
   const timestamp = new Date().toISOString();
   const completionParams = req.body as Chat.Api.CompletionCreateParams;
 
