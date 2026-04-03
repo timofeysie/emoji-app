@@ -20,7 +20,7 @@ describe('App', () => {
       </BrowserRouter>,
     );
     expect(
-      getAllByText(new RegExp('Smart Home', 'gi')).length > 0,
+      getAllByText(new RegExp('Emoji App', 'gi')).length > 0,
     ).toBeTruthy();
   });
 });

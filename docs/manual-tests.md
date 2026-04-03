@@ -137,3 +137,63 @@ Manual check:
 - Confirm server remains stable and continues returning `201`.
 - If you temporarily add a debug log/inspection endpoint locally, verify only the
   last 100 events are retained.
+
+## 6) Quick badge-view smoke test (terminal + UI)
+
+Use this when testing the `Badges` page quickly.
+
+### 6a) Set base URL in the same terminal
+
+```powershell
+$base = "http://localhost:3000"
+```
+
+### 6b) Create badge status event
+
+```powershell
+$body = @{
+  controllerId = "zero-living-room"
+  badgeId = "badge-kitchen"
+  bleStatus = "connected"
+  timestamp = (Get-Date).ToUniversalTime().ToString("o")
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method POST -Uri "$base/api/status" -ContentType "application/json" -Body $body
+```
+
+### 6c) Update same badge to disconnected
+
+```powershell
+$body = @{
+  controllerId = "zero-living-room"
+  badgeId = "badge-kitchen"
+  bleStatus = "disconnected"
+  timestamp = (Get-Date).ToUniversalTime().ToString("o")
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method POST -Uri "$base/api/status" -ContentType "application/json" -Body $body
+```
+
+### 6d) Send emoji event for same badge
+
+```powershell
+$emoji = @{
+  controllerId = "zero-living-room"
+  badgeId = "badge-kitchen"
+  menu = 0
+  pos = 1
+  neg = 0
+  label = "regular"
+  timestamp = (Get-Date).ToUniversalTime().ToString("o")
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method POST -Uri "$base/api/emoji" -ContentType "application/json" -Body $emoji
+```
+
+Expected result:
+
+- Each request returns `{ "ok": true }`.
+- In the UI at `/badges`, `badge-kitchen` appears/updates with:
+  - current BLE status
+  - latest emoji fields (`label`, `menu`, `pos`, `neg`)
+  - updated timestamps
