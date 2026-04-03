@@ -2,8 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { existsSync } from 'fs';
+import { createServer } from 'http';
 import { Chat } from '@hashbrownai/core';
 import { HashbrownOpenAI } from '@hashbrownai/openai';
+import { WebSocketServer } from 'ws';
+import { z, ZodError } from 'zod';
 import { requireAuth } from './auth';
 
 const host = process.env['HOST'] ?? 'localhost';
@@ -15,9 +18,57 @@ if (!OPENAI_API_KEY) {
 }
 
 const app = express();
+const server = createServer(app);
+const wsServer = new WebSocketServer({ server, path: '/ws' });
 
 app.use(cors());
 app.use(express.json());
+
+const MAX_EMOJI_HISTORY = 100;
+
+const statusDtoSchema = z.object({
+  controllerId: z.string().min(1),
+  badgeId: z.string().min(1),
+  bleStatus: z.enum(['connected', 'disconnected']),
+  timestamp: z.string().datetime(),
+});
+
+const emojiDtoSchema = z.object({
+  controllerId: z.string().min(1),
+  badgeId: z.string().min(1),
+  menu: z.number().int(),
+  pos: z.number().int(),
+  neg: z.number().int(),
+  label: z.string().min(1),
+  timestamp: z.string().datetime(),
+});
+
+type StatusDto = z.infer<typeof statusDtoSchema>;
+type EmojiDto = z.infer<typeof emojiDtoSchema>;
+
+const bleStatusByBadgeKey = new Map<string, StatusDto>();
+const lastEmojiByBadgeKey = new Map<string, EmojiDto>();
+const emojiEventHistory: EmojiDto[] = [];
+
+function getBadgeKey(controllerId: string, badgeId: string): string {
+  return `${controllerId}::${badgeId}`;
+}
+
+function emitEvent(type: 'status.changed' | 'emoji.sent', payload: StatusDto | EmojiDto): void {
+  const serialized = JSON.stringify({ type, payload });
+  for (const client of wsServer.clients) {
+    if (client.readyState === client.OPEN) {
+      client.send(serialized);
+    }
+  }
+}
+
+function getValidationErrors(error: ZodError): Array<{ path: string; message: string }> {
+  return error.issues.map((issue) => ({
+    path: issue.path.join('.') || 'root',
+    message: issue.message,
+  }));
+}
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -168,6 +219,46 @@ app.post('/api/chat', requireAuth, async (req, res) => {
   }
 });
 
+app.post('/api/status', (req, res) => {
+  const result = statusDtoSchema.safeParse(req.body);
+  if (!result.success) {
+    res.status(400).json({
+      error: 'Validation failed',
+      details: getValidationErrors(result.error),
+    });
+    return;
+  }
+
+  const statusEvent = result.data;
+  const badgeKey = getBadgeKey(statusEvent.controllerId, statusEvent.badgeId);
+  bleStatusByBadgeKey.set(badgeKey, statusEvent);
+  emitEvent('status.changed', statusEvent);
+
+  res.status(201).json({ ok: true });
+});
+
+app.post('/api/emoji', (req, res) => {
+  const result = emojiDtoSchema.safeParse(req.body);
+  if (!result.success) {
+    res.status(400).json({
+      error: 'Validation failed',
+      details: getValidationErrors(result.error),
+    });
+    return;
+  }
+
+  const emojiEvent = result.data;
+  const badgeKey = getBadgeKey(emojiEvent.controllerId, emojiEvent.badgeId);
+  lastEmojiByBadgeKey.set(badgeKey, emojiEvent);
+  emojiEventHistory.push(emojiEvent);
+  if (emojiEventHistory.length > MAX_EMOJI_HISTORY) {
+    emojiEventHistory.splice(0, emojiEventHistory.length - MAX_EMOJI_HISTORY);
+  }
+  emitEvent('emoji.sent', emojiEvent);
+
+  res.status(201).json({ ok: true });
+});
+
 // Serve the React SPA in production. The Dockerfile copies the Vite build
 // output into a `client-react` subdirectory next to this bundle.
 const staticPath = path.join(__dirname, 'client-react');
@@ -178,6 +269,6 @@ if (existsSync(staticPath)) {
   });
 }
 
-app.listen(port, host, () => {
+server.listen(port, host, () => {
   console.log(`[ ready ] http://${host}:${port}`);
 });

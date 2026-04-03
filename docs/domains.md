@@ -110,3 +110,65 @@ Official reference:
   it from Cognito; you can allow **multiple** callback URLs on one app client.
 - If TLS or DNS validation fails, use App Runner’s **Custom domains** page for
   specific error messages and required record values.
+
+---
+
+## Raspberry Pi ingestion API
+
+The backend now exposes two unauthenticated ingestion endpoints intended for a
+Raspberry Pi Zero controller.
+
+### `POST /api/status`
+
+Called when BLE connection status changes.
+
+```json
+{
+  "controllerId": "zero-living-room",
+  "badgeId": "badge-kitchen",
+  "bleStatus": "connected",
+  "timestamp": "2026-03-25T10:00:00.000Z"
+}
+```
+
+- Returns `201` on success.
+- Returns `400` when validation fails.
+- Updates in-memory BLE status for `controllerId + badgeId`.
+- Emits WebSocket event envelope:
+  - `{ "type": "status.changed", "payload": { ... } }`
+
+### `POST /api/emoji`
+
+Called when an emoji command is sent.
+
+```json
+{
+  "controllerId": "zero-living-room",
+  "badgeId": "badge-kitchen",
+  "menu": 0,
+  "pos": 1,
+  "neg": 0,
+  "label": "regular",
+  "timestamp": "2026-03-25T10:00:01.000Z"
+}
+```
+
+- Returns `201` on success.
+- Returns `400` when validation fails.
+- Updates in-memory "last emoji" for `controllerId + badgeId`.
+- Appends to capped in-memory event history.
+- Emits WebSocket event envelope:
+  - `{ "type": "emoji.sent", "payload": { ... } }`
+
+### WebSocket stream
+
+- URL: `/ws`
+- Event envelope format:
+  - `{ "type": "status.changed", "payload": { ... } }`
+  - `{ "type": "emoji.sent", "payload": { ... } }`
+
+### Authentication status
+
+These two ingestion endpoints are intentionally open for now (no Cognito
+requirement yet). A dedicated controller authentication plan will be handled
+separately.
