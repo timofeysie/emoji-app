@@ -180,8 +180,8 @@ Invoke-RestMethod -Method POST -Uri "$base/api/status" -ContentType "application
 $emoji = @{
   controllerId = "zero-living-room"
   badgeId = "badge-kitchen"
-  menu = 0
-  pos = 1
+  menu = 3
+  pos = 2
   neg = 0
   label = "regular"
   timestamp = (Get-Date).ToUniversalTime().ToString("o")
