@@ -1,0 +1,8 @@
+# Avoid baking local `.env` into the Vite build (see docs/deployments.md workflow).
+node_modules
+dist
+.git
+.env
+.env.local
+.env.production
+.env.development
