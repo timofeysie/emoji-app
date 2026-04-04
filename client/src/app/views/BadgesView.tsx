@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   AlertTriangle,
@@ -202,6 +202,34 @@ function EmojiLabelBlock({ emoji }: { emoji?: EmojiSentEvent }) {
   );
 }
 
+type BadgesSnapshotResponse = {
+  badges: Array<{
+    key: string;
+    controllerId: string;
+    badgeId: string;
+    status: StatusChangedEvent | null;
+    emoji: EmojiSentEvent | null;
+  }>;
+};
+
+function snapshotToRecords(
+  badges: BadgesSnapshotResponse['badges'],
+): Record<string, BadgeRecord> {
+  const next: Record<string, BadgeRecord> = {};
+  for (const b of badges) {
+    next[b.key] = {
+      key: b.key,
+      controllerId: b.controllerId,
+      badgeId: b.badgeId,
+      status: b.status ?? undefined,
+      emoji: b.emoji ?? undefined,
+    };
+  }
+  return next;
+}
+
+const POLL_MS = 4000;
+
 export const BadgesView = () => {
   const [recordsByKey, setRecordsByKey] = useState<Record<string, BadgeRecord>>(
     {},
@@ -209,6 +237,47 @@ export const BadgesView = () => {
   const [socketStatus, setSocketStatus] = useState<
     'connecting' | 'connected' | 'closed'
   >('connecting');
+
+  const refreshSnapshot = useCallback(async () => {
+    try {
+      const res = await fetch('/api/badges', { credentials: 'same-origin' });
+      if (!res.ok) {
+        return;
+      }
+      const data = (await res.json()) as BadgesSnapshotResponse;
+      if (!Array.isArray(data.badges)) {
+        return;
+      }
+      const fromServer = snapshotToRecords(data.badges);
+      setRecordsByKey((prev) => ({ ...fromServer, ...prev }));
+    } catch {
+      // Snapshot is optional; WebSocket may still deliver events.
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (cancelled) {
+        return;
+      }
+      await refreshSnapshot();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshSnapshot]);
+
+  /** App Runner and some hosts do not support WebSocket upgrades; poll when WS is down. */
+  useEffect(() => {
+    if (socketStatus !== 'closed') {
+      return;
+    }
+    const id = window.setInterval(() => {
+      void refreshSnapshot();
+    }, POLL_MS);
+    return () => window.clearInterval(id);
+  }, [socketStatus, refreshSnapshot]);
 
   useEffect(() => {
     const ws = new WebSocket(getWsUrl());
@@ -285,14 +354,21 @@ export const BadgesView = () => {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-between py-2 items-center">
+      <div className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-lg font-bold">Badges</p>
-        <p className="text-sm text-gray-600">WebSocket: {socketStatus}</p>
+        <p className="text-sm text-muted-foreground">
+          {socketStatus === 'connected' && 'Live updates: WebSocket'}
+          {socketStatus === 'connecting' && 'Live updates: connecting…'}
+          {socketStatus === 'closed' &&
+            `Live updates: polling every ${POLL_MS / 1000}s (WebSocket unavailable)`}
+        </p>
       </div>
 
       {badgeRecords.length === 0 ? (
         <div className="p-4 border rounded-lg text-sm text-gray-600">
-          No badge events received yet.
+          No badge data yet. POST to <code className="text-xs">/api/status</code> or{' '}
+          <code className="text-xs">/api/emoji</code>, then wait for polling or open
+          this page after posting.
         </div>
       ) : (
         <div className="flex flex-col gap-4">

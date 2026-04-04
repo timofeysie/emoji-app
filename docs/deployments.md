@@ -293,6 +293,26 @@ If **Auto deploy** is enabled for the ECR image, App Runner starts a deployment
 after the push (may take a few minutes). Otherwise open **App Runner** → your
 service → **Deploy** (or **Actions** → deploy latest).
 
+#### If the live site still looks unchanged after `docker push`
+
+1. **Confirm a deployment actually ran** — **App Runner** → your service →
+   **Deployments**. Open the latest row; status should be **Succeeded** and the
+   **start time** should be **after** your push. If there is no new deployment,
+   **auto deployments** may be off: **Configuration** → **Source** → ensure the
+   ECR image is set to deploy on push, or use **Deploy** → **Deploy latest
+   version** manually.
+2. **Wait for the deployment to finish** — a new revision only replaces the
+   running tasks when the deployment completes (often a few minutes).
+3. **Hard refresh** the browser (`Ctrl+Shift+R`) or use a **private window** so
+   an old Service Worker or cache is not serving stale JS.
+4. **Verify the image tag** — App Runner must point at the same tag you pushed
+   (e.g. `:latest`). Pushing a new digest to `latest` still requires a deployment
+   (automatic or manual) to pull it.
+5. **Optional sanity check** — this app shows **`v` + package version** next to
+   **Emoji App** in the header (from `package.json`). Bump `version` in
+   [`package.json`](../package.json) when you want a visible release marker after
+   deploy.
+
 #### 6. When you only change server configuration
 
 If you did **not** change the React app or `VITE_*`, you can still use the same

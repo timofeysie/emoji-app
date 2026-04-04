@@ -259,6 +259,36 @@ app.post('/api/emoji', (req, res) => {
   res.status(201).json({ ok: true });
 });
 
+app.get('/api/badges', (_req, res) => {
+  const keys = new Set([
+    ...bleStatusByBadgeKey.keys(),
+    ...lastEmojiByBadgeKey.keys(),
+  ]);
+  const badges: Array<{
+    key: string;
+    controllerId: string;
+    badgeId: string;
+    status: StatusDto | null;
+    emoji: EmojiDto | null;
+  }> = [];
+
+  for (const key of keys) {
+    const status = bleStatusByBadgeKey.get(key);
+    const emoji = lastEmojiByBadgeKey.get(key);
+    const controllerId = status?.controllerId ?? emoji?.controllerId ?? '';
+    const badgeId = status?.badgeId ?? emoji?.badgeId ?? '';
+    badges.push({
+      key,
+      controllerId,
+      badgeId,
+      status: status ?? null,
+      emoji: emoji ?? null,
+    });
+  }
+
+  res.json({ badges });
+});
+
 // Serve the React SPA in production. The Dockerfile copies the Vite build
 // output into a `client-react` subdirectory next to this bundle.
 const staticPath = path.join(__dirname, 'client-react');

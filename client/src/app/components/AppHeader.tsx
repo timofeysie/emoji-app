@@ -54,7 +54,15 @@ export function AppHeader() {
   return (
     <>
       <div className="flex items-center gap-2 border-b py-2 px-2">
-        <p className="min-w-0 flex-1 truncate text-xl font-bold">Emoji App</p>
+        <p className="min-w-0 flex-1 truncate text-xl font-bold">
+          Emoji App
+          <span
+            className="ml-1.5 align-baseline text-[0.65rem] font-normal leading-none text-muted-foreground tabular-nums"
+            title={`App version ${__APP_VERSION__}`}
+          >
+            v{__APP_VERSION__}
+          </span>
+        </p>
 
         <nav
           className="hidden min-w-0 flex-1 justify-end lg:flex"
