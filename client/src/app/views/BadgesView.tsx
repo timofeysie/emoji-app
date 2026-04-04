@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   AlertTriangle,
@@ -228,7 +234,7 @@ function snapshotToRecords(
   return next;
 }
 
-const POLL_MS = 4000;
+const POLL_MS = 10_000;
 
 export const BadgesView = () => {
   const [recordsByKey, setRecordsByKey] = useState<Record<string, BadgeRecord>>(
@@ -237,6 +243,13 @@ export const BadgesView = () => {
   const [socketStatus, setSocketStatus] = useState<
     'connecting' | 'connected' | 'closed'
   >('connecting');
+  const [tabVisible, setTabVisible] = useState(
+    () =>
+      typeof document !== 'undefined' &&
+      document.visibilityState === 'visible',
+  );
+  const socketStatusRef = useRef(socketStatus);
+  socketStatusRef.current = socketStatus;
 
   const refreshSnapshot = useCallback(async () => {
     try {
@@ -268,16 +281,29 @@ export const BadgesView = () => {
     };
   }, [refreshSnapshot]);
 
+  useEffect(() => {
+    const syncVisibility = () => {
+      const visible = document.visibilityState === 'visible';
+      setTabVisible(visible);
+      if (visible && socketStatusRef.current === 'closed') {
+        void refreshSnapshot();
+      }
+    };
+    syncVisibility();
+    document.addEventListener('visibilitychange', syncVisibility);
+    return () => document.removeEventListener('visibilitychange', syncVisibility);
+  }, [refreshSnapshot]);
+
   /** App Runner and some hosts do not support WebSocket upgrades; poll when WS is down. */
   useEffect(() => {
-    if (socketStatus !== 'closed') {
+    if (socketStatus !== 'closed' || !tabVisible) {
       return;
     }
     const id = window.setInterval(() => {
       void refreshSnapshot();
     }, POLL_MS);
     return () => window.clearInterval(id);
-  }, [socketStatus, refreshSnapshot]);
+  }, [socketStatus, tabVisible, refreshSnapshot]);
 
   useEffect(() => {
     const ws = new WebSocket(getWsUrl());
@@ -360,7 +386,9 @@ export const BadgesView = () => {
           {socketStatus === 'connected' && 'Live updates: WebSocket'}
           {socketStatus === 'connecting' && 'Live updates: connecting…'}
           {socketStatus === 'closed' &&
-            `Live updates: polling every ${POLL_MS / 1000}s (WebSocket unavailable)`}
+            (tabVisible
+              ? `Live updates: polling every ${POLL_MS / 1000}s (WebSocket unavailable)`
+              : 'Live updates: paused while tab is in background')}
         </p>
       </div>
 

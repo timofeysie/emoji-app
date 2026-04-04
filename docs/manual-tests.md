@@ -282,7 +282,7 @@ Invoke-RestMethod -Method POST -Uri "$base/api/emoji" -ContentType "application/
 
 The WebSocket URL on production is **`wss://`**same host**`/ws`** (the app uses the page origin in production).
 
-**Note:** [AWS App Runner](https://docs.aws.amazon.com/apprunner/latest/dg/what-is-apprunner.html) often **does not support WebSocket upgrades**, so the browser may show a failed `wss://…/ws` connection. The Badges page **falls back to polling `GET /api/badges`** every few seconds when WebSocket is unavailable, so the UI still updates without WebSockets.
+**Note:** [AWS App Runner](https://docs.aws.amazon.com/apprunner/latest/dg/what-is-apprunner.html) often **does not support WebSocket upgrades**, so the browser may show a failed `wss://…/ws` connection. The Badges page **falls back to polling `GET /api/badges`** about every **10 seconds** when WebSocket is unavailable (polling **pauses while the tab is hidden**), so the UI still updates without WebSockets.
 
 ### 7d2) Optional: inspect snapshot (PowerShell)
 
