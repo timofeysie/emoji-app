@@ -118,6 +118,20 @@ Official reference:
 The backend now exposes two unauthenticated ingestion endpoints intended for a
 Raspberry Pi Zero controller.
 
+### Timestamps and server clock authority
+
+Raspberry Pi controllers are often offline at boot, lack a battery-backed RTC,
+or miss NTP for a long time. A client `timestamp` in the JSON body may be wrong
+(for example year 1970). **The emoji-app server owns canonical time.**
+
+- **`timestamp` in stored state, `GET /api/badges`, and WebSocket payloads** is always
+  **server UTC** at request handling time (`Date` / ISO-8601 string).
+- **Request body `timestamp`** is **optional**. If present, it must be a valid ISO-8601
+  datetime string; it is **not** used as the stored event time. When present, it may be
+  echoed as **`clientTimestamp`** on the stored object for debugging (what the device
+  thought the time was).
+- Pi firmware may keep sending `timestamp` for compatibility; that value is a **hint only**.
+
 ### `POST /api/status`
 
 Called when BLE connection status changes.
@@ -131,9 +145,12 @@ Called when BLE connection status changes.
 }
 ```
 
+The `timestamp` field is **optional** (omit it or send a valid ISO datetime for
+`clientTimestamp` debugging).
+
 - Returns `201` on success.
 - Returns `400` when validation fails.
-- Updates in-memory BLE status for `controllerId + badgeId`.
+- Updates in-memory BLE status for `controllerId + badgeId` with **server** `timestamp`.
 - Emits WebSocket event envelope:
   - `{ "type": "status.changed", "payload": { ... } }`
 
@@ -153,9 +170,11 @@ Called when an emoji command is sent.
 }
 ```
 
+The `timestamp` field is **optional** (same rules as `/api/status`).
+
 - Returns `201` on success.
 - Returns `400` when validation fails.
-- Updates in-memory "last emoji" for `controllerId + badgeId`.
+- Updates in-memory "last emoji" for `controllerId + badgeId` with **server** `timestamp`.
 - Appends to capped in-memory event history.
 - Emits WebSocket event envelope:
   - `{ "type": "emoji.sent", "payload": { ... } }`

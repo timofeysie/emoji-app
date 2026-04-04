@@ -26,25 +26,76 @@ app.use(express.json());
 
 const MAX_EMOJI_HISTORY = 100;
 
-const statusDtoSchema = z.object({
+/** Request body: client `timestamp` is optional and non-authoritative (Pi clock may be wrong). */
+const statusBodySchema = z.object({
   controllerId: z.string().min(1),
   badgeId: z.string().min(1),
   bleStatus: z.enum(['connected', 'disconnected']),
-  timestamp: z.string().datetime(),
+  timestamp: z.string().datetime().nullish(),
 });
 
-const emojiDtoSchema = z.object({
+const emojiBodySchema = z.object({
   controllerId: z.string().min(1),
   badgeId: z.string().min(1),
   menu: z.number().int(),
   pos: z.number().int(),
   neg: z.number().int(),
   label: z.string().min(1),
-  timestamp: z.string().datetime(),
+  timestamp: z.string().datetime().nullish(),
 });
 
-type StatusDto = z.infer<typeof statusDtoSchema>;
-type EmojiDto = z.infer<typeof emojiDtoSchema>;
+/** Stored and broadcast payloads: `timestamp` is always server UTC; `clientTimestamp` is optional debug hint. */
+type StatusDto = {
+  controllerId: string;
+  badgeId: string;
+  bleStatus: 'connected' | 'disconnected';
+  timestamp: string;
+  clientTimestamp?: string;
+};
+
+type EmojiDto = {
+  controllerId: string;
+  badgeId: string;
+  menu: number;
+  pos: number;
+  neg: number;
+  label: string;
+  timestamp: string;
+  clientTimestamp?: string;
+};
+
+function serverTimestamp(): string {
+  return new Date().toISOString();
+}
+
+function toStatusDto(body: z.infer<typeof statusBodySchema>): StatusDto {
+  const ts = serverTimestamp();
+  return {
+    controllerId: body.controllerId,
+    badgeId: body.badgeId,
+    bleStatus: body.bleStatus,
+    timestamp: ts,
+    ...(body.timestamp != null && body.timestamp !== ''
+      ? { clientTimestamp: body.timestamp }
+      : {}),
+  };
+}
+
+function toEmojiDto(body: z.infer<typeof emojiBodySchema>): EmojiDto {
+  const ts = serverTimestamp();
+  return {
+    controllerId: body.controllerId,
+    badgeId: body.badgeId,
+    menu: body.menu,
+    pos: body.pos,
+    neg: body.neg,
+    label: body.label,
+    timestamp: ts,
+    ...(body.timestamp != null && body.timestamp !== ''
+      ? { clientTimestamp: body.timestamp }
+      : {}),
+  };
+}
 
 const bleStatusByBadgeKey = new Map<string, StatusDto>();
 const lastEmojiByBadgeKey = new Map<string, EmojiDto>();
@@ -220,7 +271,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 });
 
 app.post('/api/status', (req, res) => {
-  const result = statusDtoSchema.safeParse(req.body);
+  const result = statusBodySchema.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({
       error: 'Validation failed',
@@ -229,7 +280,7 @@ app.post('/api/status', (req, res) => {
     return;
   }
 
-  const statusEvent = result.data;
+  const statusEvent = toStatusDto(result.data);
   const badgeKey = getBadgeKey(statusEvent.controllerId, statusEvent.badgeId);
   bleStatusByBadgeKey.set(badgeKey, statusEvent);
   emitEvent('status.changed', statusEvent);
@@ -238,7 +289,7 @@ app.post('/api/status', (req, res) => {
 });
 
 app.post('/api/emoji', (req, res) => {
-  const result = emojiDtoSchema.safeParse(req.body);
+  const result = emojiBodySchema.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({
       error: 'Validation failed',
@@ -247,7 +298,7 @@ app.post('/api/emoji', (req, res) => {
     return;
   }
 
-  const emojiEvent = result.data;
+  const emojiEvent = toEmojiDto(result.data);
   const badgeKey = getBadgeKey(emojiEvent.controllerId, emojiEvent.badgeId);
   lastEmojiByBadgeKey.set(badgeKey, emojiEvent);
   emojiEventHistory.push(emojiEvent);

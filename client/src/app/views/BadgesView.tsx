@@ -32,7 +32,10 @@ type StatusChangedEvent = {
   controllerId: string;
   badgeId: string;
   bleStatus: BleStatus;
+  /** Server UTC (canonical). */
   timestamp: string;
+  /** Optional device hint when clock was wrong; not used for ordering. */
+  clientTimestamp?: string;
 };
 
 type EmojiSentEvent = {
@@ -42,7 +45,9 @@ type EmojiSentEvent = {
   pos: number;
   neg: number;
   label: string;
+  /** Server UTC (canonical). */
   timestamp: string;
+  clientTimestamp?: string;
 };
 
 type WsEnvelope =

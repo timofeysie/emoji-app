@@ -7,6 +7,14 @@
 - Confirm API base URL:
   - Local default: `http://localhost:3000`
 
+### Timestamps (server authority)
+
+- **`timestamp` in JSON bodies** is **optional**. If present, it must be a valid ISO-8601
+  string; the server **does not** use it as the canonical event time.
+- **Stored times, `GET /api/badges`, and WebSocket payloads** use **server UTC** at request
+  time. When the client sent a `timestamp`, the response may include **`clientTimestamp`**
+  for debugging.
+
 ## 1) Test `POST /api/status` success
 
 Run in PowerShell:
