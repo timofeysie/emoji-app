@@ -26,12 +26,18 @@ app.use(express.json());
 
 const MAX_EMOJI_HISTORY = 100;
 
+/**
+ * Optional client clock hint. Must accept Python `datetime.now(timezone.utc).isoformat()`, which
+ * uses `+00:00` — Zod's default `datetime()` only allows `Z`, so `offset: true` is required.
+ */
+const clientTimestampHintSchema = z.string().datetime({ offset: true }).nullish();
+
 /** Request body: client `timestamp` is optional and non-authoritative (Pi clock may be wrong). */
 const statusBodySchema = z.object({
   controllerId: z.string().min(1),
   badgeId: z.string().min(1),
   bleStatus: z.enum(['connected', 'disconnected']),
-  timestamp: z.string().datetime().nullish(),
+  timestamp: clientTimestampHintSchema,
 });
 
 const emojiBodySchema = z.object({
@@ -41,7 +47,7 @@ const emojiBodySchema = z.object({
   pos: z.number().int(),
   neg: z.number().int(),
   label: z.string().min(1),
-  timestamp: z.string().datetime().nullish(),
+  timestamp: clientTimestampHintSchema,
 });
 
 /** Stored and broadcast payloads: `timestamp` is always server UTC; `clientTimestamp` is optional debug hint. */

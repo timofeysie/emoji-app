@@ -127,7 +127,8 @@ or miss NTP for a long time. A client `timestamp` in the JSON body may be wrong
 - **`timestamp` in stored state, `GET /api/badges`, and WebSocket payloads** is always
   **server UTC** at request handling time (`Date` / ISO-8601 string).
 - **Request body `timestamp`** is **optional**. If present, it must be a valid ISO-8601
-  datetime string; it is **not** used as the stored event time. When present, it may be
+  datetime string (including Python-style UTC with a **`+00:00`** offset, not only **`Z`**);
+  it is **not** used as the stored event time. When present, it may be
   echoed as **`clientTimestamp`** on the stored object for debugging (what the device
   thought the time was).
 - Pi firmware may keep sending `timestamp` for compatibility; that value is a **hint only**.

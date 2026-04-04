@@ -10,7 +10,9 @@
 ### Timestamps (server authority)
 
 - **`timestamp` in JSON bodies** is **optional**. If present, it must be a valid ISO-8601
-  string; the server **does not** use it as the canonical event time.
+  string; the server **does not** use it as the canonical event time. Python’s
+  `datetime.now(timezone.utc).isoformat()` uses a **`+00:00`** suffix (not **`Z`**); the API
+  accepts both.
 - **Stored times, `GET /api/badges`, and WebSocket payloads** use **server UTC** at request
   time. When the client sent a `timestamp`, the response may include **`clientTimestamp`**
   for debugging.
