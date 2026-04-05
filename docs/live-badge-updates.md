@@ -1,4 +1,4 @@
-# WebSockets, SSE, and deployment options
+# Live badge updates: transports and deployment
 
 This app broadcasts badge updates from the server using **WebSockets** (`/ws`) and falls back to
 **polling `GET /api/badges`** when the browser cannot connect (for example on **AWS App Runner**,
@@ -66,6 +66,48 @@ bidirectional.
 
 This codebase currently uses **WebSockets** for broadcast plus **REST snapshot + polling** as a
 fallback.
+
+---
+
+## Hashbrown (LLM) streaming vs badge updates
+
+This app uses **Hashbrown** (`@hashbrownai/core`, `@hashbrownai/openai`, `@hashbrownai/react`) so the
+chat UI can show **streaming LLM output** as tokens arrive, instead of waiting for a full reply. On
+the server, `POST /api/chat` returns **`application/octet-stream`** and writes incremental chunks
+from `HashbrownOpenAI.stream.text()` to the response; the React client consumes that stream through
+`HashbrownProvider` and related hooks. That pipeline is built for **chat completions and tool
+calls**, not for hardware telemetry.
+
+**Badge data** follows a different path. A Raspberry Pi (or similar) sends discrete events with
+**HTTP `POST /api/status`** (and related endpoints); the server stores state and **broadcasts** to
+dashboard clients over **`/ws`**, with **`GET /api/badges`** plus polling as a fallback. The Python
+script on a **Raspberry Pi Zero 2 W** does not need Hashbrown or a streaming client library: short
+**request/response** posts are a good fit for intermittent BLE/status updates, constrained CPU, and
+variable networks.
+
+### Hashbrown-style streaming and Pi-to-server updates
+
+**Not as a drop-in replacement for the current badge pipeline.** Reasons:
+
+- **Protocol and purpose**: Hashbrown’s stream encodes the **chat completion** contract (model
+  tokens, tool orchestration). Reusing it for badge events would mix unrelated semantics and break
+  the chat client, which expects that binary stream format.
+- **Direction**: Streaming chat is **browser ↔ server ↔ LLM**. Badge ingestion is **device →
+  server → many browsers**; the device side is already solved with **REST** and server-side fan-out
+  (WebSocket or, if you added it, SSE).
+- **Operational fit**: For a Pi Zero 2 W, **POST a JSON body when something changes** is simple,
+  idempotent-friendly, and works through proxies and TLS the same way as any API. A long-lived
+  upload stream from the Pi to Node would add reconnection logic and backpressure without clear
+  benefit over periodic or event-driven POSTs.
+
+If you later need **lower latency or higher volume** from many devices, you would typically add a
+**message bus**, **MQTT**, or similar—not the LLM streaming stack.
+
+### If you only mean “streaming to the dashboard”
+
+You can still expose **server → browser** updates as a **chunked HTTP response** or **SSE** (see the
+table above). That is conceptually similar to “streaming” for the UI, but it is **separate** from
+Hashbrown and targets the **Badges** view, not `/api/chat`.
 
 ---
 

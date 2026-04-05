@@ -32,11 +32,20 @@ const MAX_EMOJI_HISTORY = 100;
  */
 const clientTimestampHintSchema = z.string().datetime({ offset: true }).nullish();
 
+/** Device-reported BLE/controller phases (see docs/python/emoji-os-zero.py). */
+const deviceBleStatusSchema = z.enum([
+  'startup',
+  'scanning',
+  'connecting',
+  'connected',
+  'disconnected',
+]);
+
 /** Request body: client `timestamp` is optional and non-authoritative (Pi clock may be wrong). */
 const statusBodySchema = z.object({
   controllerId: z.string().min(1),
   badgeId: z.string().min(1),
-  bleStatus: z.enum(['connected', 'disconnected']),
+  bleStatus: deviceBleStatusSchema,
   timestamp: clientTimestampHintSchema,
 });
 
@@ -54,7 +63,7 @@ const emojiBodySchema = z.object({
 type StatusDto = {
   controllerId: string;
   badgeId: string;
-  bleStatus: 'connected' | 'disconnected';
+  bleStatus: z.infer<typeof deviceBleStatusSchema>;
   timestamp: string;
   clientTimestamp?: string;
 };

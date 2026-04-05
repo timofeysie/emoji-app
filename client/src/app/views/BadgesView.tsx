@@ -16,22 +16,34 @@ import {
   Gamepad2,
   Heart,
   Laugh,
+  Loader2,
   Meh,
+  Power,
   Skull,
   Smile,
   Square,
   Star,
   ThumbsUp,
+  Unplug,
   Zap,
 } from 'lucide-react';
 import { cn } from '../shared/utils';
 
-type BleStatus = 'connected' | 'disconnected';
+/** Values accepted by `POST /api/status` (device-reported). */
+type DeviceBleStatus =
+  | 'startup'
+  | 'scanning'
+  | 'connecting'
+  | 'connected'
+  | 'disconnected';
+
+/** After `connected` goes stale (no recent liveness), UI shows offline. */
+type DisplayBleStatus = DeviceBleStatus | 'offline' | 'unknown';
 
 type StatusChangedEvent = {
   controllerId: string;
   badgeId: string;
-  bleStatus: BleStatus;
+  bleStatus: DeviceBleStatus;
   /** Server UTC (canonical). */
   timestamp: string;
   /** Optional device hint when clock was wrong; not used for ordering. */
@@ -114,6 +126,26 @@ const LABEL_ICON_MAP: Record<string, LucideIcon> = {
   unknown: CircleHelp,
 };
 
+/** If `connected` but no liveness for this long, show offline (abrupt power-off, etc.). */
+const STALE_CONNECTED_MS = 90_000;
+
+function resolveBleDisplay(status?: StatusChangedEvent): DisplayBleStatus {
+  if (!status) {
+    return 'unknown';
+  }
+  if (status.bleStatus !== 'connected') {
+    return status.bleStatus;
+  }
+  const t = new Date(status.timestamp).getTime();
+  if (Number.isNaN(t)) {
+    return 'offline';
+  }
+  if (Date.now() - t > STALE_CONNECTED_MS) {
+    return 'offline';
+  }
+  return 'connected';
+}
+
 function getEmojiIconForLabel(label: string): LucideIcon {
   const key = label.trim().toLowerCase();
   if (LABEL_ICON_MAP[key]) {
@@ -168,40 +200,72 @@ function ClientBadgeIcon({ className }: { className?: string }) {
   );
 }
 
-function BleConnectionRow({ bleStatus }: { bleStatus?: BleStatus }) {
-  const connected = bleStatus === 'connected';
-  const disconnected = bleStatus === 'disconnected';
-  const unknown = bleStatus === undefined;
+function BleConnectionRow({ status }: { status?: StatusChangedEvent }) {
+  const display = resolveBleDisplay(status);
 
   const lineClass = cn(
     'h-0.5 min-w-[0.5rem] flex-1',
-    connected && 'bg-primary/70',
-    disconnected &&
+    display === 'connected' && 'bg-primary/70',
+    (display === 'disconnected' ||
+      display === 'offline' ||
+      display === 'unknown') &&
       'border-t-2 border-dashed border-muted-foreground/70 bg-transparent',
-    unknown && 'border-t-2 border-dashed border-muted-foreground/40 bg-transparent',
+    (display === 'startup' ||
+      display === 'scanning' ||
+      display === 'connecting') &&
+      'border-t-2 border-dashed border-primary/40 bg-transparent',
   );
 
   const MidIcon =
-    connected ? Bluetooth : disconnected ? BluetoothOff : BluetoothSearching;
+    display === 'connected'
+      ? Bluetooth
+      : display === 'disconnected'
+        ? BluetoothOff
+        : display === 'offline'
+          ? Unplug
+          : display === 'scanning'
+            ? BluetoothSearching
+            : display === 'connecting'
+              ? Loader2
+              : display === 'startup'
+                ? Power
+                : BluetoothSearching;
 
   const midClass = cn(
     'mx-1.5 h-5 w-5 shrink-0',
-    connected && 'text-primary',
-    disconnected && 'text-muted-foreground',
-    unknown && 'text-muted-foreground/80',
+    display === 'connected' && 'text-primary',
+    (display === 'disconnected' || display === 'offline') &&
+      'text-muted-foreground',
+    display === 'unknown' && 'text-muted-foreground/80',
+    (display === 'startup' ||
+      display === 'scanning' ||
+      display === 'connecting') &&
+      'text-primary/80',
+    display === 'connecting' && 'animate-spin',
   );
+
+  const ariaLabel =
+    display === 'unknown'
+      ? 'Bluetooth link status unknown'
+      : display === 'connected'
+        ? 'Controller linked to badge over Bluetooth'
+        : display === 'offline'
+          ? 'Controller or badge stopped reporting; link may be lost'
+          : display === 'startup'
+            ? 'Controller starting; Bluetooth not ready yet'
+            : display === 'scanning'
+              ? 'Scanning for badge (may be advertising)'
+              : display === 'connecting'
+                ? 'Connecting to badge over Bluetooth'
+                : display === 'disconnected'
+                  ? 'Bluetooth link broken between controller and badge'
+                  : 'Bluetooth link status unknown';
 
   return (
     <div
       className="flex w-full min-w-0 items-center gap-0 py-0"
       role="img"
-      aria-label={
-        unknown
-          ? 'Bluetooth link status unknown'
-          : connected
-            ? 'Controller linked to badge over Bluetooth'
-            : 'Bluetooth link broken between controller and badge'
-      }
+      aria-label={ariaLabel}
     >
       <Gamepad2
         className="h-6 w-6 shrink-0 text-foreground"
@@ -274,6 +338,8 @@ function snapshotToRecords(
 const POLL_MS = 10_000;
 
 export const BadgesView = () => {
+  /** Re-render periodically so stale `connected` can flip to offline without waiting for poll. */
+  const [, bumpStaleCheck] = useState(0);
   const [recordsByKey, setRecordsByKey] = useState<Record<string, BadgeRecord>>(
     {},
   );
@@ -299,7 +365,7 @@ export const BadgesView = () => {
         return;
       }
       const fromServer = snapshotToRecords(data.badges);
-      setRecordsByKey((prev) => ({ ...fromServer, ...prev }));
+      setRecordsByKey((prev) => ({ ...prev, ...fromServer }));
     } catch {
       // Snapshot is optional; WebSocket may still deliver events.
     }
@@ -317,6 +383,13 @@ export const BadgesView = () => {
       cancelled = true;
     };
   }, [refreshSnapshot]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      bumpStaleCheck((n) => n + 1);
+    }, 10_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const syncVisibility = () => {
@@ -452,7 +525,7 @@ export const BadgesView = () => {
                 </p>
               </div>
               <div className="flex flex-col items-center gap-1 p-1.5">
-                <BleConnectionRow bleStatus={record.status?.bleStatus} />
+                <BleConnectionRow status={record.status} />
                 <EmojiLabelBlock emoji={record.emoji} />
               </div>
             </div>

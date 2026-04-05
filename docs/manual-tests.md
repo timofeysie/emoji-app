@@ -16,6 +16,10 @@
 - **Stored times, `GET /api/badges`, and WebSocket payloads** use **server UTC** at request
   time. When the client sent a `timestamp`, the response may include **`clientTimestamp`**
   for debugging.
+- **`bleStatus` on `POST /api/status`** must be one of: `startup`, `scanning`, `connecting`,
+  `connected`, `disconnected`. The dashboard treats `connected` as stale (shows offline) if the
+  server has not received a status update within about **90 seconds**; the Pi Zero script POSTs
+  liveness while connected (see `docs/python/emoji-os-zero.py`).
 
 ## 1) Test `POST /api/status` success
 
