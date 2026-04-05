@@ -8,9 +8,7 @@ export const ScenesView = () => {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-between py-2">
-        <p className="text-lg font-bold">Scenes</p>
-
+      <div className="flex justify-end py-2">
         <SceneDialogForm>
           <Button variant="outline">Add Scene</Button>
         </SceneDialogForm>

@@ -62,6 +62,33 @@ type BadgeRecord = {
   emoji?: EmojiSentEvent;
 };
 
+/** Shown in dev when there is no server/WebSocket data so badge card layout can be exercised. */
+const devExampleBadgeRecord: BadgeRecord = (() => {
+  const controllerId = 'dev-local';
+  const badgeId = 'example-badge';
+  const key = `${controllerId}::${badgeId}`;
+  return {
+    key,
+    controllerId,
+    badgeId,
+    status: {
+      controllerId,
+      badgeId,
+      bleStatus: 'connected',
+      timestamp: '2026-04-05T10:00:00.000Z',
+    },
+    emoji: {
+      controllerId,
+      badgeId,
+      menu: 0,
+      pos: 2,
+      neg: 1,
+      label: 'happy_dev',
+      timestamp: '2026-04-05T10:05:30.000Z',
+    },
+  };
+})();
+
 /** Maps common label strings to a Lucide icon; unknown labels fall back to a neutral icon. */
 const LABEL_ICON_MAP: Record<string, LucideIcon> = {
   regular: Smile,
@@ -127,14 +154,14 @@ function ClientBadgeIcon({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        'relative inline-flex h-7 w-7 shrink-0 items-center justify-center text-foreground',
+        'relative inline-flex h-6 w-6 shrink-0 items-center justify-center text-foreground',
         className,
       )}
       aria-hidden
     >
-      <Square className="absolute inset-0 h-7 w-7" strokeWidth={2} />
+      <Square className="absolute inset-0 h-6 w-6" strokeWidth={2} />
       <Star
-        className="relative h-3.5 w-3.5 fill-amber-400/90 text-amber-600"
+        className="relative h-3 w-3 fill-amber-400/90 text-amber-600"
         strokeWidth={1.5}
       />
     </span>
@@ -147,9 +174,10 @@ function BleConnectionRow({ bleStatus }: { bleStatus?: BleStatus }) {
   const unknown = bleStatus === undefined;
 
   const lineClass = cn(
-    'h-0.5 flex-1 min-w-[0.5rem]',
+    'h-0.5 min-w-[0.5rem] flex-1',
     connected && 'bg-primary/70',
-    disconnected && 'border-t-2 border-dashed border-muted-foreground/70 bg-transparent',
+    disconnected &&
+      'border-t-2 border-dashed border-muted-foreground/70 bg-transparent',
     unknown && 'border-t-2 border-dashed border-muted-foreground/40 bg-transparent',
   );
 
@@ -157,7 +185,7 @@ function BleConnectionRow({ bleStatus }: { bleStatus?: BleStatus }) {
     connected ? Bluetooth : disconnected ? BluetoothOff : BluetoothSearching;
 
   const midClass = cn(
-    'mx-1.5 h-6 w-6 shrink-0',
+    'mx-1.5 h-5 w-5 shrink-0',
     connected && 'text-primary',
     disconnected && 'text-muted-foreground',
     unknown && 'text-muted-foreground/80',
@@ -165,7 +193,7 @@ function BleConnectionRow({ bleStatus }: { bleStatus?: BleStatus }) {
 
   return (
     <div
-      className="flex w-full max-w-xl items-center gap-0 py-2"
+      className="flex w-full min-w-0 items-center gap-0 py-0"
       role="img"
       aria-label={
         unknown
@@ -175,7 +203,11 @@ function BleConnectionRow({ bleStatus }: { bleStatus?: BleStatus }) {
             : 'Bluetooth link broken between controller and badge'
       }
     >
-      <Gamepad2 className="h-7 w-7 shrink-0 text-foreground" strokeWidth={2} />
+      <Gamepad2
+        className="h-6 w-6 shrink-0 text-foreground"
+        strokeWidth={2}
+        aria-hidden
+      />
       <div className="flex min-h-7 min-w-0 flex-1 items-center">
         <div className={lineClass} />
         <MidIcon className={midClass} strokeWidth={2} aria-hidden />
@@ -189,8 +221,8 @@ function BleConnectionRow({ bleStatus }: { bleStatus?: BleStatus }) {
 function EmojiLabelBlock({ emoji }: { emoji?: EmojiSentEvent }) {
   if (!emoji) {
     return (
-      <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-        No emoji event yet
+      <div className="rounded border border-dashed bg-muted/20 px-1.5 py-1 text-center text-[11px] leading-tight text-muted-foreground">
+        No emoji yet
       </div>
     );
   }
@@ -198,15 +230,15 @@ function EmojiLabelBlock({ emoji }: { emoji?: EmojiSentEvent }) {
   const Icon = getEmojiIconForLabel(emoji.label);
 
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border bg-card p-4">
-      <Icon className="h-10 w-10 text-foreground" strokeWidth={1.75} aria-hidden />
-      <span className="text-center text-sm font-medium leading-tight">
+    <div className="flex min-w-0 w-full flex-col items-center gap-0.5 rounded-md border bg-muted/15 px-1.5 py-1 text-center">
+      <Icon className="h-6 w-6 shrink-0 text-foreground" strokeWidth={1.75} aria-hidden />
+      <span className="w-full break-words text-xs font-medium leading-tight">
         {emoji.label}
       </span>
-      <div className="text-xs text-muted-foreground">
+      <div className="text-[10px] leading-tight text-muted-foreground">
         menu {emoji.menu} · pos {emoji.pos} · neg {emoji.neg}
       </div>
-      <div className="text-xs text-muted-foreground">
+      <div className="text-[10px] text-muted-foreground">
         {formatTimestamp(emoji.timestamp)}
       </div>
     </div>
@@ -378,15 +410,19 @@ export const BadgesView = () => {
   }, []);
 
   const badgeRecords = useMemo(() => {
-    return Object.values(recordsByKey).sort((a, b) =>
+    const hasRealBadges = Object.keys(recordsByKey).length > 0;
+    const source =
+      import.meta.env.DEV && !hasRealBadges
+        ? { [devExampleBadgeRecord.key]: devExampleBadgeRecord }
+        : recordsByKey;
+    return Object.values(source).sort((a, b) =>
       a.badgeId.localeCompare(b.badgeId),
     );
   }, [recordsByKey]);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-lg font-bold">Badges</p>
+      <div className="py-2 sm:flex sm:justify-end">
         <p className="text-sm text-muted-foreground">
           {socketStatus === 'connected' && 'Live updates: WebSocket'}
           {socketStatus === 'connecting' && 'Live updates: connecting…'}
@@ -404,34 +440,20 @@ export const BadgesView = () => {
           this page after posting.
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="-mx-2 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2">
           {badgeRecords.map((record) => (
-            <div key={record.key} className="overflow-hidden rounded-lg border">
-              <div className="border-b bg-muted/40 px-4 py-3">
-                <p className="font-semibold">
-                  {record.badgeId}{' '}
-                  <span className="font-normal text-muted-foreground">
-                    ({record.controllerId})
-                  </span>
+            <div key={record.key} className="min-w-0 overflow-hidden rounded-lg border">
+              <div className="flex flex-col gap-0.5 border-b bg-muted/40 px-1.5 py-1">
+                <p className="break-words text-sm font-semibold leading-tight">
+                  {record.badgeId}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Status: {record.status?.bleStatus ?? '—'} ·{' '}
-                  {formatTimestamp(record.status?.timestamp)}
+                <p className="break-words text-[11px] leading-tight text-muted-foreground">
+                  {record.controllerId}
                 </p>
               </div>
-              <div className="grid gap-4 p-4 md:grid-cols-2">
-                <div>
-                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Link
-                  </p>
-                  <BleConnectionRow bleStatus={record.status?.bleStatus} />
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Last emoji
-                  </p>
-                  <EmojiLabelBlock emoji={record.emoji} />
-                </div>
+              <div className="flex flex-col items-center gap-1 p-1.5">
+                <BleConnectionRow bleStatus={record.status?.bleStatus} />
+                <EmojiLabelBlock emoji={record.emoji} />
               </div>
             </div>
           ))}

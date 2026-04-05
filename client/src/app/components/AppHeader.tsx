@@ -19,9 +19,27 @@ const NAV_LINKS = [
   { to: '/badges', label: 'Badges' },
 ] as const;
 
+function viewTitleForPathname(pathname: string): string {
+  switch (pathname) {
+    case '/':
+      return 'Dashboard';
+    case '/lights':
+      return 'Lights';
+    case '/scenes':
+      return 'Scenes';
+    case '/scheduled-scenes':
+      return 'Scheduled Scenes';
+    case '/badges':
+      return 'Badges';
+    default:
+      return 'Emoji App';
+  }
+}
+
 export function AppHeader() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
+  const viewTitle = viewTitleForPathname(location.pathname);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -53,9 +71,9 @@ export function AppHeader() {
 
   return (
     <>
-      <div className="flex items-center gap-2 border-b py-2 px-2">
-        <p className="min-w-0 flex-1 truncate text-xl font-bold">
-          Emoji App
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b py-2 px-2">
+        <p className="min-w-0 truncate text-xl font-bold">
+          <span className="font-semibold">Emoji App</span>
           <span
             className="ml-1.5 align-baseline text-[0.65rem] font-normal leading-none text-muted-foreground tabular-nums"
             title={`App version ${__APP_VERSION__}`}
@@ -64,45 +82,46 @@ export function AppHeader() {
           </span>
         </p>
 
-        <nav
-          className="hidden min-w-0 flex-1 justify-end lg:flex"
-          aria-label="Main"
-        >
-          <NavigationMenu>
-            <NavigationMenuList>
-              {NAV_LINKS.map(({ to, label }) => (
-                <NavigationMenuItem key={to}>
-                  <NavigationMenuLink asChild>
-                    <Link to={to} className={navigationMenuTriggerStyle()}>
-                      {label}
-                    </Link>
-                  </NavigationMenuLink>
-                </NavigationMenuItem>
-              ))}
-            </NavigationMenuList>
-          </NavigationMenu>
-        </nav>
+        <p className="min-w-0 truncate text-center text-xl font-bold">{viewTitle}</p>
 
-        <div className="flex shrink-0 items-center gap-1">
-          <div className="hidden lg:block">
-            <AuthBar />
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          <nav className="hidden min-w-0 lg:flex" aria-label="Main">
+            <NavigationMenu>
+              <NavigationMenuList>
+                {NAV_LINKS.map(({ to, label }) => (
+                  <NavigationMenuItem key={to}>
+                    <NavigationMenuLink asChild>
+                      <Link to={to} className={navigationMenuTriggerStyle()}>
+                        {label}
+                      </Link>
+                    </NavigationMenuLink>
+                  </NavigationMenuItem>
+                ))}
+              </NavigationMenuList>
+            </NavigationMenu>
+          </nav>
+
+          <div className="flex shrink-0 items-center gap-1">
+            <div className="hidden lg:block">
+              <AuthBar />
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="lg:hidden"
+              aria-expanded={mobileNavOpen}
+              aria-controls="mobile-nav-panel"
+              aria-label={mobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              onClick={() => setMobileNavOpen((open) => !open)}
+            >
+              {mobileNavOpen ? (
+                <X className="h-5 w-5" aria-hidden />
+              ) : (
+                <Menu className="h-5 w-5" aria-hidden />
+              )}
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="lg:hidden"
-            aria-expanded={mobileNavOpen}
-            aria-controls="mobile-nav-panel"
-            aria-label={mobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
-            onClick={() => setMobileNavOpen((open) => !open)}
-          >
-            {mobileNavOpen ? (
-              <X className="h-5 w-5" aria-hidden />
-            ) : (
-              <Menu className="h-5 w-5" aria-hidden />
-            )}
-          </Button>
         </div>
       </div>
 

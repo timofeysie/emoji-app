@@ -750,7 +750,7 @@ export const RichChatPanel = () => {
       <div className="flex flex-col text-sm text-foreground/50 gap-2 h-6 justify-end px-2">
         {isWorking && <p>Thinking...</p>}
       </div>
-      <div className="flex flex-col gap-2 px-2">
+      <div className="flex flex-col gap-2 border-border px-2 max-lg:border-t max-lg:pt-2">
         <Textarea
           value={inputValue}
           onChange={onInputChange}
