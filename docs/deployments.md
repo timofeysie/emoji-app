@@ -2,7 +2,9 @@
 
 ## AWS App Runner (this repo)
 
-This guide deploys the app as a single container on [AWS App Runner](https://aws.amazon.com/apprunner/). The Express server serves both the React SPA and the `/api/chat` endpoint from the same origin, so no CORS configuration is required in production.
+This guide deploys the app as a single container on [AWS App Runner](https://aws.amazon.com/apprunner/). The NestJS server (running on the Express adapter) serves both the React SPA and the `/api/chat` endpoint from the same origin, so no CORS configuration is required in production.
+
+Side note: in Milestone 1, the server runtime was migrated from Express to NestJS while preserving existing API behavior.
 
 ### Before you deploy
 
@@ -17,7 +19,7 @@ This guide deploys the app as a single container on [AWS App Runner](https://aws
 
 ```text
 App Runner (HTTPS, auto-scaling)
-  └── Express (port 3000)
+  └── NestJS (Express adapter, port 3000)
         ├── GET  /*           → React SPA (static files)
         └── POST /api/chat    → Hashbrown streaming endpoint
 ```
@@ -316,7 +318,7 @@ service → **Deploy** (or **Actions** → deploy latest).
 #### 6. When you only change server configuration
 
 If you did **not** change the React app or `VITE_*`, you can still use the same
-build (Express is bundled in the same image). To change secrets or Cognito
+build (NestJS with the Express adapter is bundled in the same image). To change secrets or Cognito
 **server** env vars only, update **App Runner → Configuration → Environment
 variables** and redeploy — no new image required unless you also changed code.
 
@@ -361,7 +363,7 @@ for the full setup.
 
 `POST /api/chat` is protected with **AWS Cognito** unless auth is explicitly
 disabled for local development. The React app uses the Cognito Hosted UI (PKCE)
-and sends `Authorization: Bearer <access-token>`. Express verifies the JWT
+and sends `Authorization: Bearer <access-token>`. NestJS (Express adapter) verifies the JWT
 against Cognito’s JWKS URL.
 
 Full setup (user pool, app client, hosted domain, callback URLs) is documented
