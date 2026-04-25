@@ -13,6 +13,17 @@ function runAuth(req: Request, res: Response): Promise<boolean> {
   });
 }
 
+function isVerboseChatLoggingEnabled(): boolean {
+  return process.env['LOG_CHAT_CONTENT'] === 'true' && process.env['NODE_ENV'] !== 'production';
+}
+
+function messageContentSize(content: unknown): number {
+  if (typeof content === 'string') {
+    return content.length;
+  }
+  return JSON.stringify(content ?? '').length;
+}
+
 @Controller('api')
 export class ChatController {
   @Post('chat')
@@ -27,6 +38,7 @@ export class ChatController {
     }
 
     const timestamp = new Date().toISOString();
+    const verboseChatLogs = isVerboseChatLoggingEnabled();
 
     console.log(`[${timestamp}] Operation: ${completionParams.operation || 'generate'}`);
 
@@ -38,14 +50,20 @@ export class ChatController {
         const role = msg.role.toUpperCase();
 
         if (msg.role === 'user') {
-          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-          console.log(
-            `[${msgTimestamp}]   [${index + 1}] ${role}: ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`,
-          );
+          if (verboseChatLogs) {
+            const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+            console.log(
+              `[${msgTimestamp}]   [${index + 1}] ${role}: ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`,
+            );
+          } else {
+            console.log(
+              `[${msgTimestamp}]   [${index + 1}] ${role}: (content omitted, size=${messageContentSize(msg.content)} chars)`,
+            );
+          }
         } else if (msg.role === 'assistant') {
           const hasContent = !!msg.content;
           const hasToolCalls = !!(msg.toolCalls && msg.toolCalls.length > 0);
-          const contentPreview = hasContent
+          const contentPreview = hasContent && verboseChatLogs
             ? (typeof msg.content === 'string'
                 ? msg.content
                 : JSON.stringify(msg.content)
@@ -58,26 +76,48 @@ export class ChatController {
               `[${msgTimestamp}]   [${index + 1}] ${role} TURN (with ${toolCalls.length} tool call(s)):`,
             );
             toolCalls.forEach((toolCall, tcIndex) => {
-              console.log(
-                `[${msgTimestamp}]     Tool Call ${tcIndex + 1}: ${toolCall.function.name}(${toolCall.function.arguments.substring(0, 100)}${toolCall.function.arguments.length > 100 ? '...' : ''})`,
-              );
+              if (verboseChatLogs) {
+                console.log(
+                  `[${msgTimestamp}]     Tool Call ${tcIndex + 1}: ${toolCall.function.name}(${toolCall.function.arguments.substring(0, 100)}${toolCall.function.arguments.length > 100 ? '...' : ''})`,
+                );
+              } else {
+                console.log(
+                  `[${msgTimestamp}]     Tool Call ${tcIndex + 1}: ${toolCall.function.name}(arguments omitted, size=${toolCall.function.arguments.length} chars)`,
+                );
+              }
             });
           } else if (hasContent) {
-            console.log(
-              `[${msgTimestamp}]   [${index + 1}] ${role} COMPLETION: ${contentPreview}${contentPreview.length > 200 ? '...' : ''}`,
-            );
+            if (verboseChatLogs) {
+              console.log(
+                `[${msgTimestamp}]   [${index + 1}] ${role} COMPLETION: ${contentPreview}${contentPreview.length > 200 ? '...' : ''}`,
+              );
+            } else {
+              console.log(
+                `[${msgTimestamp}]   [${index + 1}] ${role} COMPLETION: (content omitted, size=${messageContentSize(msg.content)} chars)`,
+              );
+            }
           } else {
             console.log(`[${msgTimestamp}]   [${index + 1}] ${role}: (empty)`);
           }
         } else if (msg.role === 'tool') {
-          const toolContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-          console.log(
-            `[${msgTimestamp}]   [${index + 1}] ${role} (${msg.toolName || 'unknown'}): ${toolContent.substring(0, 200)}${toolContent.length > 200 ? '...' : ''}`,
-          );
+          if (verboseChatLogs) {
+            const toolContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+            console.log(
+              `[${msgTimestamp}]   [${index + 1}] ${role} (${msg.toolName || 'unknown'}): ${toolContent.substring(0, 200)}${toolContent.length > 200 ? '...' : ''}`,
+            );
+          } else {
+            console.log(
+              `[${msgTimestamp}]   [${index + 1}] ${role} (${msg.toolName || 'unknown'}): (content omitted, size=${messageContentSize(msg.content)} chars)`,
+            );
+          }
         } else {
-          console.log(
-            `[${msgTimestamp}]   [${index + 1}] ${role}: ${JSON.stringify(msg).substring(0, 200)}`,
-          );
+          if (verboseChatLogs) {
+            console.log(
+              `[${msgTimestamp}]   [${index + 1}] ${role}: ${JSON.stringify(msg).substring(0, 200)}`,
+            );
+          } else {
+            console.log(`[${msgTimestamp}]   [${index + 1}] ${role}: (content omitted)`);
+          }
         }
       });
     }
