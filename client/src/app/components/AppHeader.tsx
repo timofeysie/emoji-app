@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { AuthBar } from '../auth/AuthBar';
+import { useAuthStore } from '../auth/auth.store';
 import { Button } from '../shared/button';
 import { cn } from '../shared/utils';
 import {
@@ -42,7 +43,11 @@ function viewTitleForPathname(pathname: string): string {
 export function AppHeader() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
+  const accessToken = useAuthStore((s) => s.accessToken);
   const viewTitle = viewTitleForPathname(location.pathname);
+  const visibleNavLinks = accessToken
+    ? NAV_LINKS
+    : NAV_LINKS.filter((link) => link.to !== '/profile');
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -91,7 +96,7 @@ export function AppHeader() {
           <nav className="hidden min-w-0 lg:flex" aria-label="Main">
             <NavigationMenu>
               <NavigationMenuList>
-                {NAV_LINKS.map(({ to, label }) => (
+                {visibleNavLinks.map(({ to, label }) => (
                   <NavigationMenuItem key={to}>
                     <NavigationMenuLink asChild>
                       <Link to={to} className={navigationMenuTriggerStyle()}>
@@ -167,7 +172,7 @@ export function AppHeader() {
             className="min-h-0 flex-1 overflow-y-auto p-2"
             aria-label="Main"
           >
-            {NAV_LINKS.map(({ to, label }) => (
+            {visibleNavLinks.map(({ to, label }) => (
               <Link
                 key={to}
                 to={to}
