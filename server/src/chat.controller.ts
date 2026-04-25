@@ -6,10 +6,21 @@ import { requireAuth } from './auth';
 
 function runAuth(req: Request, res: Response): Promise<boolean> {
   return new Promise((resolve) => {
-    requireAuth(req, res, () => resolve(true));
-    if (res.headersSent) {
-      resolve(false);
-    }
+    let settled = false;
+    const settle = (value: boolean): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      res.off('finish', onDone);
+      res.off('close', onDone);
+      resolve(value);
+    };
+    const onDone = (): void => settle(false);
+
+    res.once('finish', onDone);
+    res.once('close', onDone);
+    requireAuth(req, res, () => settle(true));
   });
 }
 

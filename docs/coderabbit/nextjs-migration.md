@@ -57,3 +57,31 @@ CodeRabbit also flagged that internal exception messages were being returned to 
 ### Outcome
 
 The API now follows a safer pattern: detailed diagnostics stay server-side, while clients receive a stable, non-sensitive error contract.
+
+## Auth wrapper race condition follow-up
+
+CodeRabbit flagged a race condition risk in the `runAuth(...)` helper used by `server/src/chat.controller.ts`.
+
+### Issue identified
+
+- The previous wrapper checked `res.headersSent` immediately after calling `requireAuth(...)`.
+- `requireAuth(...)` performs asynchronous token verification, so a synchronous `headersSent` check can run too early.
+- Result: the wrapper could resolve before auth finished, causing non-deterministic behavior.
+
+### Solution implemented
+
+- Replaced the synchronous `headersSent` check with event-based completion logic.
+- `runAuth(...)` now:
+  - Resolves `true` when `requireAuth(...)` calls `next()`.
+  - Resolves `false` when the response ends (`finish`) or closes (`close`) before `next()`.
+  - Uses a `settled` guard to prevent double resolution.
+
+### Why this approach
+
+- It is a small, local fix that preserves existing middleware behavior.
+- It is more reliable than `setImmediate(...)`, which still races with async JWT/JWKS work.
+- Longer-term, a NestJS `Guard` remains the most idiomatic option, but was not required for this milestone.
+
+### Outcome
+
+Auth handling is now deterministic in the NestJS controller wrapper while keeping migration scope minimal.
