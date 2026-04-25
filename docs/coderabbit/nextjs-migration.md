@@ -85,3 +85,41 @@ CodeRabbit flagged a race condition risk in the `runAuth(...)` helper used by `s
 ### Outcome
 
 Auth handling is now deterministic in the NestJS controller wrapper while keeping migration scope minimal.
+
+## Request body redaction follow-up
+
+CodeRabbit flagged that request body logging can expose sensitive values such as passwords, tokens, and secrets.
+
+### Issue identified
+
+- `server/src/request-logging.middleware.ts` logged POST request bodies.
+- Even with truncation, logs can still include high-risk fields in plaintext.
+- Sensitive auth-related endpoints should be excluded from body logging.
+
+### Solution implemented
+
+- Added endpoint-based exclusions for body logging on sensitive path prefixes:
+  - `/auth`
+  - `/oauth`
+  - `/signin`
+  - `/login`
+  - `/logout`
+  - `/token`
+- Added recursive field redaction before verbose body logging.
+- Redaction masks common sensitive key patterns (case-insensitive), including:
+  - `password`, `passcode`, `token`, `secret`, `authorization`
+  - `apiKey`, `api_key`, `cookie`, `session`, `jwt`
+  - `client_secret`, `refresh_token`, `id_token`
+
+### Logging behavior after change
+
+- Sensitive endpoints:
+  - Request body is omitted entirely.
+- Non-sensitive endpoints with `LOG_HTTP_BODIES=true` (and non-production):
+  - Request body is logged only after redaction.
+- Default behavior:
+  - Body content remains omitted and only body size metadata is logged.
+
+### Outcome
+
+The server keeps operational request logging while materially reducing risk of leaking credentials or authentication artifacts into persistent logs.
