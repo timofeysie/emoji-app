@@ -732,9 +732,9 @@ export const RichChatPanel = () => {
   }, [resendMessages]);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex flex-col flex-1 min-h-0">
-        <ScrollArea className="flex-1" ref={scrollAreaRef}>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex min-h-0 flex-col lg:flex-1">
+        <ScrollArea className="max-h-48 lg:flex-1" ref={scrollAreaRef}>
           <div className="flex flex-col gap-2 px-2">
             {messages.map((message, index, array) => (
               <RichMessage

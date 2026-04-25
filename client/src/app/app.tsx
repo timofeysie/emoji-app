@@ -11,6 +11,7 @@ import { ScenesView } from './views/ScenesView';
 import { ScheduledScenesView } from './views/ScheduledScenesView';
 import { BadgesView } from './views/BadgesView';
 import { Dashboard } from './components/dashboard/Dashboard';
+import { UserProfileView } from './views/UserProfileView';
 
 const chatUrl = import.meta.env.VITE_CHAT_URL ?? '/api/chat';
 
@@ -33,11 +34,12 @@ function MainShell() {
                 element={<ScheduledScenesView />}
               />
               <Route path="/badges" element={<BadgesView />} />
+              <Route path="/profile" element={<UserProfileView />} />
               <Route path="/" element={<Dashboard />} />
             </Routes>
           </div>
         </div>
-        <div className="flex min-h-0 flex-col overflow-hidden border-t-0 p-2 min-h-[18rem] h-[min(45vh,28rem)] max-h-[min(50vh,32rem)] lg:col-span-3 lg:h-full lg:max-h-none lg:min-h-0 lg:border-l lg:border-t-0">
+        <div className="flex min-h-0 flex-col border-t p-2 lg:col-span-3 lg:h-full lg:border-l lg:border-t-0">
           <RichChatPanel />
         </div>
       </div>

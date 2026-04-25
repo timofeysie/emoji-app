@@ -17,6 +17,7 @@ const NAV_LINKS = [
   { to: '/scenes', label: 'Scenes' },
   { to: '/scheduled-scenes', label: 'Scheduled Scenes' },
   { to: '/badges', label: 'Badges' },
+  { to: '/profile', label: 'Profile' },
 ] as const;
 
 function viewTitleForPathname(pathname: string): string {
@@ -31,6 +32,8 @@ function viewTitleForPathname(pathname: string): string {
       return 'Scheduled Scenes';
     case '/badges':
       return 'Badges';
+    case '/profile':
+      return 'User Profile';
     default:
       return 'Emoji App';
   }
@@ -125,58 +128,65 @@ export function AppHeader() {
         </div>
       </div>
 
-      {mobileNavOpen ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-            aria-label="Close menu"
-            onClick={() => setMobileNavOpen(false)}
-          />
-          <div
-            id="mobile-nav-panel"
-            className="fixed inset-y-0 left-0 z-50 flex h-full w-[min(100vw,18rem)] flex-col border-r bg-background shadow-lg lg:hidden"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Navigation"
+      <>
+        <button
+          type="button"
+          className={cn(
+            'fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 lg:hidden',
+            mobileNavOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
+          )}
+          aria-label="Close menu"
+          aria-hidden={!mobileNavOpen}
+          tabIndex={mobileNavOpen ? 0 : -1}
+          onClick={() => setMobileNavOpen(false)}
+        />
+        <div
+          id="mobile-nav-panel"
+          className={cn(
+            'fixed inset-y-0 right-0 z-50 flex h-full w-[min(100vw,18rem)] flex-col border-l bg-background shadow-lg transition-transform duration-300 ease-out lg:hidden',
+            mobileNavOpen ? 'translate-x-0' : 'translate-x-full',
+          )}
+          role="dialog"
+          aria-modal="true"
+          aria-hidden={!mobileNavOpen}
+          aria-label="Navigation"
+        >
+          <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
+            <span className="text-sm font-semibold">Menu</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Close menu"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+          <nav
+            className="min-h-0 flex-1 overflow-y-auto p-2"
+            aria-label="Main"
           >
-            <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
-              <span className="text-sm font-semibold">Menu</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Close menu"
+            {NAV_LINKS.map(({ to, label }) => (
+              <Link
+                key={to}
+                to={to}
+                className={cn(
+                  'block rounded-md px-3 py-2.5 text-sm font-medium',
+                  'hover:bg-accent hover:text-accent-foreground',
+                  location.pathname === to && 'bg-accent text-accent-foreground',
+                )}
                 onClick={() => setMobileNavOpen(false)}
               >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            <nav
-              className="min-h-0 flex-1 overflow-y-auto p-2"
-              aria-label="Main"
-            >
-              {NAV_LINKS.map(({ to, label }) => (
-                <Link
-                  key={to}
-                  to={to}
-                  className={cn(
-                    'block rounded-md px-3 py-2.5 text-sm font-medium',
-                    'hover:bg-accent hover:text-accent-foreground',
-                    location.pathname === to && 'bg-accent text-accent-foreground',
-                  )}
-                  onClick={() => setMobileNavOpen(false)}
-                >
-                  {label}
-                </Link>
-              ))}
-            </nav>
-            <div className="shrink-0 border-t p-3">
-              <AuthBar />
-            </div>
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <div className="shrink-0 border-t p-3">
+            <AuthBar />
           </div>
-        </>
-      ) : null}
+        </div>
+      </>
     </>
   );
 }
