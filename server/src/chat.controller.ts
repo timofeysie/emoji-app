@@ -152,7 +152,7 @@ export class ChatController {
       if (!res.headersSent) {
         res.status(500).json({
           error: 'Internal server error',
-          message: error instanceof Error ? error.message : 'Unknown error',
+          message: 'An unexpected error occurred',
         });
       }
     }

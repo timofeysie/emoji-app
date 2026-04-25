@@ -37,3 +37,23 @@ We changed server logging defaults to metadata-only and made detailed content lo
 ### Outcome
 
 The migration now keeps useful observability (route, status, duration, message counts, payload sizes) while reducing accidental leakage of sensitive user content in logs.
+
+## Safe error response follow-up
+
+CodeRabbit also flagged that internal exception messages were being returned to clients from the chat endpoint, which can expose implementation details.
+
+### Issue identified
+
+- `server/src/chat.controller.ts` returned `error.message` in the `500` JSON response for `/api/chat`.
+- Depending on upstream failures, this could leak internal configuration or runtime details to external clients.
+
+### Solution implemented
+
+- The client-facing `500` payload is now generic:
+  - `error: "Internal server error"`
+  - `message: "An unexpected error occurred"`
+- Full exception details remain in server logs via `console.error(...)` for operational debugging.
+
+### Outcome
+
+The API now follows a safer pattern: detailed diagnostics stay server-side, while clients receive a stable, non-sensitive error contract.
