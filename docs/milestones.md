@@ -105,6 +105,8 @@ Design artifact: `docs/milestone-2-data-model-finalization.md`
 
 ## Milestone 3: Atlas on AWS for MongoDB
 
+Status: **In progress**
+
 ### Milestone 3 goals
 
 - Move persistence to a managed, secure, and observable environment.
@@ -133,6 +135,17 @@ Design artifact: `docs/milestone-2-data-model-finalization.md`
 ### Milestone 3 skills practiced (career map)
 
 - Managed database operations: access control, backups, observability, restore drills.
+
+### Milestone 3 execution tracker
+
+- [x] Atlas runbook section added to `docs/deployments.md`
+- [x] Staging smoke evidence template added to `docs/manual-tests.md`
+- [ ] Atlas staging cluster provisioned and credentials created
+- [ ] Staging network access model selected and approved
+- [ ] `MONGODB_URI` wired via AWS Secrets Manager in staging runtime
+- [ ] Backup and PITR enabled, with one successful restore drill
+- [ ] Baseline alerts configured and routed to on-call owners
+- [ ] Milestone 3 closure evidence recorded
 
 ## Milestone 4: ECS on Fargate and ALB
 

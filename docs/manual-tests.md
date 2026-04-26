@@ -556,3 +556,31 @@ Expected:
   expect failure (`400` from controller, duplicate-key behavior underneath).
 - Submit guess with unknown `cardUid`: expect `400`.
 - Submit guess after question is closed: expect `400`.
+
+## 9) Atlas staging smoke evidence template
+
+Use this when Milestone 3 smoke tests are run against staging.
+
+### 9a) Set staging base URL
+
+```powershell
+$base = "https://<your-staging-host>"
+```
+
+### 9b) Run Section 8 flow against staging
+
+- Execute the same sequence from section 8 (`games`, `participants`,
+  `nfc-card-groups`, `questions`, `guesses`).
+- Capture returned IDs and the UTC timestamp.
+
+### 9c) Record artifacts in deployment runbook
+
+Copy the resulting IDs and metadata into
+`docs/deployments.md` under `Milestone 3 runbook: Atlas on AWS for MongoDB`:
+
+- `gameId`
+- `groupId`
+- `questionId`
+- `guessId`
+- timestamp
+- operator

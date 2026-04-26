@@ -1,5 +1,144 @@
 # Deployment Guide
 
+## Milestone 3 runbook: Atlas on AWS for MongoDB
+
+This section is the operational checklist for Milestone 3. It is intentionally
+focused on database environment readiness and does not include ECS/ALB compute
+migration steps (Milestone 4).
+
+### 3.1 Atlas staging baseline
+
+Target outcome:
+
+- Atlas staging cluster exists in target AWS region.
+- Cluster topology supports transactions.
+- Least-privilege runtime DB user exists.
+
+Actions:
+
+1. In Atlas, create project `emoji-app-staging` (or team standard equivalent).
+2. Create cluster in AWS region planned for compute migration.
+3. Create database and app runtime user:
+   - username: `emoji_app_staging_runtime`
+   - role: least-privilege app role for staging DB only
+4. Confirm transactions support by ensuring replica-set/Atlas topology.
+
+Evidence to record:
+
+- Atlas project name and cluster name
+- Region
+- Runtime DB user created
+- Date and owner
+
+### 3.2 Network and access model
+
+Choose one staging access path:
+
+- preferred: private connectivity aligned to upcoming VPC design, or
+- temporary: strict IP allowlist with explicit expiry date.
+
+Requirements:
+
+- TLS enforced for all database connections
+- Access rules have owners and review date
+
+Evidence to record:
+
+- Access model selected
+- Allowed source CIDRs/endpoints
+- Expiry/review date
+- Security owner
+
+### 3.3 Secrets and runtime configuration
+
+Store `MONGODB_URI` in AWS Secrets Manager (staging). Do not store Atlas
+credentials in plaintext docs or committed files.
+
+Suggested secret naming:
+
+- `emoji-app/staging/mongodb-uri`
+
+Optional AWS CLI (replace region and value):
+
+```bash
+aws secretsmanager create-secret \
+  --name "emoji-app/staging/mongodb-uri" \
+  --description "Atlas MongoDB URI for emoji-app staging" \
+  --secret-string "mongodb+srv://<user>:<pass>@<cluster>/<db>?retryWrites=true&w=majority" \
+  --region ap-southeast-2
+```
+
+If the secret already exists:
+
+```bash
+aws secretsmanager put-secret-value \
+  --secret-id "emoji-app/staging/mongodb-uri" \
+  --secret-string "mongodb+srv://<user>:<pass>@<cluster>/<db>?retryWrites=true&w=majority" \
+  --region ap-southeast-2
+```
+
+Ownership:
+
+- Secret owner:
+- Rotation owner:
+- Break-glass approver:
+
+### 3.4 App connectivity validation (staging)
+
+1. Deploy server with `MONGODB_URI` resolved from Secrets Manager.
+2. Verify startup log includes Mongo connection success.
+3. Run DB-backed smoke flow from `docs/manual-tests.md` section 8.
+
+Record smoke artifacts:
+
+- `gameId`:
+- `groupId`:
+- `questionId`:
+- `guessId`:
+- timestamp:
+- operator:
+
+### 3.5 Backup and PITR restore drill
+
+1. Enable backups and point-in-time restore in Atlas staging cluster.
+2. Perform one restore drill to a recent point in time.
+3. Validate restored data with read queries against expected smoke artifacts.
+
+Record drill evidence:
+
+- Restore start time:
+- Restore end time:
+- Recovery duration:
+- Data checks passed:
+- Follow-up actions:
+
+### 3.6 Monitoring and alert baseline
+
+Configure and validate alerts for:
+
+- Query latency
+- Connection utilization / pool pressure
+- Storage growth
+- Replication health
+
+Record alert ownership:
+
+- Primary on-call:
+- Secondary on-call:
+- Notification channel:
+- Response target:
+
+### 3.7 Milestone 3 completion gate
+
+Milestone 3 is complete when all are true:
+
+- Staging server connects to Atlas successfully.
+- Backup and restore drill completed and documented once.
+- Baseline alerts active and routed to owners.
+
+Once complete, update `docs/milestones.md` Milestone 3 status and closure
+evidence, and carry remaining compute migration risks into Milestone 4.
+
 ## AWS App Runner (this repo)
 
 Note: Choosing the App Runner was a mistake. Shortly after deploying this app, I saw the message:
@@ -29,10 +168,10 @@ App Runner (HTTPS, auto-scaling)
 
 ### Estimated cost
 
-| Traffic level | Approx. monthly cost |
-|---------------|---------------------|
-| Low (mostly idle) | $3–5 |
-| Moderate | $10–20 |
+|Traffic level|Approx. monthly cost|
+|-------------|--------------------|
+|Low (mostly idle)|$3–5|
+|Moderate|$10–20|
 
 Includes TLS, load balancing, and auto-scaling. No separate ALB charge.
 
