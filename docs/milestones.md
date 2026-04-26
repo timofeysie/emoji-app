@@ -2,29 +2,49 @@
 
 ## Table of contents
 
-- [Sequencing decision](#sequencing-decision)
-- Milestone 1: Convert Express server to NestJS.
+- [Sequencing decision (updated roadmap)](#sequencing-decision-updated-roadmap)
+- [Milestone 1: Server framework baseline (NestJS)](#milestone-1-server-framework-baseline-nestjs)
 - [Milestone 2: Persistence foundation (MongoDB + Mongoose)](#milestone-2-persistence-foundation-mongodb--mongoose)
-- [Milestone 3: Atlas on AWS deployment baseline](#milestone-3-atlas-on-aws-deployment-baseline)
-- [Milestone 4: Data migration and game workflow hardening](#milestone-4-data-migration-and-game-workflow-hardening)
-- [Milestone 5: Real-time updates via WebSocket (API Gateway)](#milestone-5-real-time-updates-via-websocket-api-gateway)
-- [Milestone 6: Production readiness and scale](#milestone-6-production-readiness-and-scale)
+- [Milestone 3: Atlas on AWS for MongoDB](#milestone-3-atlas-on-aws-for-mongodb)
+- [Milestone 4: ECS on Fargate and ALB](#milestone-4-ecs-on-fargate-and-alb)
+- [Milestone 5: Gameplay integrity and scoring](#milestone-5-gameplay-integrity-and-scoring)
+- [Milestone 6: Real-time features for game rooms](#milestone-6-real-time-features-for-game-rooms)
+- [Milestone 7: Production readiness and scale](#milestone-7-production-readiness-and-scale)
+- [Future directions (optional)](#future-directions-optional)
 - [Immediate next actions (this week)](#immediate-next-actions-this-week)
 
-## Sequencing decision
+## Sequencing decision (updated roadmap)
 
-Set up MongoDB, Mongoose, and MongoDB Atlas on AWS **before** WebSocket delivery.
-WebSockets should publish game state that already has stable persistence,
-indexes, and data access patterns.
+This app needs three foundations that should not be conflated:
 
-Recommended order:
+- **Durable data** (Atlas + well-indexed game flows)
+- **Reliable hosting** (ECS on Fargate, not App Runner, for a supported path forward)
+- **Credible real-time** (ALB to your container first; add optional edge services later if needed)
 
-1. Convert Express server to NestJS.
-2. Data model finalization and collection design.
-3. MongoDB + Mongoose integration in the app.
-4. Atlas on AWS environment setup and deployment hardening.
-5. API and game-flow migration to persisted data.
-6. Real-time delivery via WebSockets (API Gateway).
+Recommended order (best-practice, career-oriented):
+
+1. Lock domain + persistence patterns (Milestone 2) — **complete**
+2. Stand up **MongoDB Atlas** in AWS with security + ops basics (Milestone 3)
+3. Migrate **compute** to **ECS on Fargate behind an ALB** (Milestone 4)  
+   This is the most common “full-stack with DevOps awareness” default for containerized
+   services on AWS.
+4. Harden the **gameplay invariants and scoring** on durable data (Milestone 5)
+5. Implement **room-scoped real-time delivery** to clients, built on the same
+   process WebSocket path you already use, now deployed correctly behind ALB (Milestone 6)
+6. Production **SRE hardening** (Milestone 7)
+
+## Milestone 1: Server framework baseline (NestJS)
+
+Status: **Complete**
+
+### Milestone 1 goals
+
+- Establish a server architecture that supports modules, testing, and incremental API growth.
+- Keep HTTP + WebSocket hosting patterns compatible with typical AWS load balancing.
+
+### Milestone 1 skills practiced (career map)
+
+- Nest module boundaries, dependency injection, and controller-based routing patterns.
 
 ## Milestone 2: Persistence foundation (MongoDB + Mongoose)
 
@@ -83,7 +103,7 @@ Design artifact: `docs/milestone-2-data-model-finalization.md`
   - `questionId=69ee8d2c21dd52eba889ec4b`
   - `guessId=69ee8d2c21dd52eba889ec4e`
 
-## Milestone 3: Atlas on AWS deployment baseline
+## Milestone 3: Atlas on AWS for MongoDB
 
 ### Milestone 3 goals
 
@@ -110,83 +130,152 @@ Design artifact: `docs/milestone-2-data-model-finalization.md`
 - Backup and restore drill is tested once.
 - Baseline alerts are active and verified.
 
-## Milestone 4: Data migration and game workflow hardening
+### Milestone 3 skills practiced (career map)
+
+- Managed database operations: access control, backups, observability, restore drills.
+
+## Milestone 4: ECS on Fargate and ALB
+
+Rationale: App Runner is not the long-term default for new customers. A standard,
+resume-friendly path is **containers on ECS** with a load balancer. For WebSockets,
+**ALB supports WebSocket upgrades to your service**, which matches your current in-process
+`ws` design.
 
 ### Milestone 4 goals
 
-- Ensure all gameplay operations are persistence-backed and consistent.
+- Move hosting to a well-supported AWS compute path: **ECS on Fargate**.
+- Put a production-grade **ALB** in front of the service (HTTP/HTTPS and WebSocket upgrades).
 
 ### Milestone 4 scope
 
-- Migrate game creation, join flow, question setup, and guess submission to DB.
-- Implement NFC card-group attach flow per game:
-  - Pre-register cards with `cardUid`, `slotLabel`, `displayName`.
-  - Attach active card group to game before question open.
-- Add transactional or compensating logic for critical multi-write paths:
-  - Badge assignment swaps
-  - Question close and score calculation
-- Add idempotency and conflict handling for repeated scans/submissions.
-- Add integration tests for invariants and race conditions.
+- Create ECS cluster, task definition, service, autoscaling targets.
+- Configure public ingress:
+  - ALB + target group health checks
+  - WebSocket-friendly idle timeouts and routing to a single service (initially)
+- Build and deploy pipeline for immutable container releases (image tags, rollbacks).
+- Replace App Runner-specific config with standard ECS/Secrets wiring.
+- Staging and production environment separation (parameters, not copy-paste secrets).
 
 ### Milestone 4 exit criteria
 
-- Critical game flows are fully DB-backed.
-- Concurrent submissions behave correctly under load tests.
-- NFC card mapping works from scan to stored guess records.
+- Staging URL serves the app and APIs reliably.
+- `wss://` to the same host as `https://` works for the existing WebSocket path you choose
+  to expose in production (consistent with the ALB/ECS pattern).
+- Rollback is proven: deploy `N+1`, detect failure, roll back to `N`.
+- No reliance on App Runner for new environments.
 
-## Milestone 5: Real-time updates via WebSocket (API Gateway)
+### Milestone 4 reference note
+
+- Compute migration context: `docs/decicions/leaving-app-runner.md`
+
+### Milestone 4 skills practiced (career map)
+
+- Core AWS “three-tier cloud native” building blocks: VPC networking concepts, load
+  balancers, container orchestration, secrets, observability, release engineering.
+
+## Milestone 5: Gameplay integrity and scoring
+
+This milestone is where “product correctness” meets “database engineering correctness”.
 
 ### Milestone 5 goals
 
-- Deliver low-latency state updates to active game clients.
+- Make gameplay flows **provably correct** under concurrency and failure modes.
+- Add scoring, referee controls, and auditability appropriate for a classroom product.
 
 ### Milestone 5 scope
 
-- Add WebSocket API (Amazon API Gateway WebSocket or equivalent service).
-- Add connection/session tracking by game and participant.
-- Publish events for:
-  - Question opened/closed
-  - Guess accepted/rejected
-  - Score updates
-  - Badge assignment changes
-- Introduce event payload versioning and contract tests.
-- Add fallback/replay strategy for reconnecting clients.
+- Invariants and enforcement in the service layer for:
+  - join/role rules, referee progression, and guess eligibility
+  - one guess per user per question (leveraging indexes + idempotency strategy)
+- NFC group lifecycle correctness:
+  - attach and supersede behavior
+  - “lost card” operations without breaking history
+- Scoring and reveal flows:
+  - close question, compute results, store scoring artifacts (even if v1 is simple)
+- Concurrency and race tests (integration level) for the hottest write paths
+- Make transactions usage intentional:
+  - document when transactions are required vs not
+  - ensure environments are replica-set/Atlas-backed where transactions are used
 
 ### Milestone 5 exit criteria
 
-- Clients receive real-time game updates with acceptable latency.
-- Reconnect behavior recovers missed events.
-- Event contracts are documented and test-covered.
+- Load tests for concurrent guesses meet latency and correctness expectations.
+- Known edge cases (duplicate scan, out-of-order events, late reconnect) are handled
+  with explicit, tested behavior (even if the UX is simple).
 
-## Milestone 6: Production readiness and scale
+### Milestone 5 skills practiced (career map)
+
+- Distributed systems basics: invariants, idempotency, concurrency, observability, and
+  data modeling trade-offs in MongoDB.
+
+## Milestone 6: Real-time features for game rooms
 
 ### Milestone 6 goals
 
-- Prepare for classroom-scale and multi-game concurrency.
+- Ship real-time updates to clients in a way that is reliable for classroom use.
 
 ### Milestone 6 scope
 
-- Performance profiling and index tuning from real telemetry.
-- Capacity test with target concurrent games and participants.
-- Operational runbooks:
-  - Atlas incident response
-  - API/WebSocket degradation handling
-  - Data restore process
-- Security review:
-  - Secret rotation
-  - Least-privilege IAM
-  - Audit logging completeness
+- Define a minimal event model for a game “room”:
+  - `question.opened/closed`, `guess.recorded`, `score.updated` (as needed)
+- Implement connection lifecycle handling:
+  - `joinGame`, `leave`, heartbeat, reconnect, replay snapshot strategy
+- Make events versioned and backwards compatible as you iterate.
+- Align API + WebSocket security story with Cognito (short-lived tokens, refresh, etc.).
 
 ### Milestone 6 exit criteria
 
-- Target load passes with stable latency and error rates.
-- Runbooks are validated in at least one game-day simulation.
-- Security and reliability checklist is complete.
+- A classroom-scale pilot works without requiring manual server babysitting.
+- Reconnects recover a coherent UI state (snapshot + optionally incremental events).
+
+### Milestone 6 skills practiced (career map)
+
+- Real-time system design, contract-first evolution, and operational debuggability of live
+  systems.
+
+## Milestone 7: Production readiness and scale
+
+### Milestone 7 goals
+
+- Prepare for classroom-scale and multi-game concurrency with operational maturity.
+
+### Milestone 7 scope
+
+- Performance profiling and index tuning from real telemetry
+- Capacity test with target concurrent games and participants
+- Operational runbooks:
+  - Atlas incident response
+  - ECS/ALB rollbacks and “bad deploy” playbooks
+  - WebSocket degradation and forced reconnect strategy
+  - Data restore process
+- Security review:
+  - secret rotation and least privilege IAM for CI/CD and runtime roles
+  - audit logging for referee actions and game mutations
+
+### Milestone 7 exit criteria
+
+- Target load passes with stable latency and error rates
+- Runbooks are validated in at least one game-day simulation
+- Security and reliability checklist is complete
+
+## Future directions (optional)
+
+This section is intentionally out of the near-term plan. Pick these only if you have a
+specific scaling or org requirement that the baseline cannot meet.
+
+- **API Gateway (HTTP or WebSocket)** as a managed edge API layer
+- **ElastiCache/Redis** for high-volume fan-out, online presence, and ephemeral routing maps
+- **SQS/SNS** for decoupling ingest from scoring (only if/when the write pattern demands it)
+- **Split services** (game engine vs. badge ingest) if operational boundaries harden
+- **Multi-region** (only with clear business requirements)
 
 ## Immediate next actions (this week)
 
-1. Confirm final entity list, including `NfcCardGroup` and game attachment model.
-2. Implement Mongoose models and indexes.
-3. Add repository interfaces and migrate one vertical slice:
-   game create -> question create -> guess submit.
-4. Stand up Atlas staging and wire secrets/config.
+1. Stand up **Atlas staging** and set `MONGODB_URI` via a secret strategy you intend to
+   use in production.
+2. Prototype **ECS on Fargate + ALB** in a sandbox AWS account and deploy the current
+   container to staging (even if the app is not feature-complete yet).
+3. Add an integration test plan for the hottest path: `open question` -> concurrent
+   guesses -> `close question` (extend existing server tests with more realistic timing).
+4. Decide the **v1 event contract** for the client room channel (message names, payload
+   version field, and snapshot policy).
