@@ -1,5 +1,16 @@
 # Milestones Roadmap (Post Milestone 1)
 
+## Table of contents
+
+- [Sequencing decision](#sequencing-decision)
+- Milestone 1: Convert Express server to NestJS.
+- [Milestone 2: Persistence foundation (MongoDB + Mongoose)](#milestone-2-persistence-foundation-mongodb--mongoose)
+- [Milestone 3: Atlas on AWS deployment baseline](#milestone-3-atlas-on-aws-deployment-baseline)
+- [Milestone 4: Data migration and game workflow hardening](#milestone-4-data-migration-and-game-workflow-hardening)
+- [Milestone 5: Real-time updates via WebSocket (API Gateway)](#milestone-5-real-time-updates-via-websocket-api-gateway)
+- [Milestone 6: Production readiness and scale](#milestone-6-production-readiness-and-scale)
+- [Immediate next actions (this week)](#immediate-next-actions-this-week)
+
 ## Sequencing decision
 
 Set up MongoDB, Mongoose, and MongoDB Atlas on AWS **before** WebSocket delivery.
@@ -16,6 +27,8 @@ Recommended order:
 6. Real-time delivery via WebSockets (API Gateway).
 
 ## Milestone 2: Persistence foundation (MongoDB + Mongoose)
+
+Status: **Complete** (closure pass recorded on 2026-04-27)
 
 Design artifact: `docs/milestone-2-data-model-finalization.md`
 
@@ -48,6 +61,27 @@ Design artifact: `docs/milestone-2-data-model-finalization.md`
 - Core create/read/update flows work through repositories.
 - Unique constraints and key indexes are in place.
 - No breaking API contract changes for current UI.
+
+### Milestone 2 closure evidence
+
+- Added local bootstrap script `npm run seed:local` via `scripts/seed-local.mjs`
+  to seed stable smoke-test IDs:
+  - `teacherUserId=000000000000000000000001`
+  - `studentUserId=000000000000000000000002`
+  - `badgeId=000000000000000000000003`
+- Recorded successful end-to-end local Mongo smoke flow using:
+  - `POST /api/games`
+  - `POST /api/games/:gameId/participants`
+  - `POST /api/games/nfc-card-groups`
+  - `POST /api/games/:gameId/nfc-card-groups/:groupId/attach`
+  - `POST /api/questions`
+  - `POST /api/questions/:questionId/state` (open/closed)
+  - `POST /api/guesses`
+- Smoke test success artifact values:
+  - `gameId=69ee8d2c21dd52eba889ec46`
+  - `groupId=69ee8d2c21dd52eba889ec47`
+  - `questionId=69ee8d2c21dd52eba889ec4b`
+  - `guessId=69ee8d2c21dd52eba889ec4e`
 
 ## Milestone 3: Atlas on AWS deployment baseline
 

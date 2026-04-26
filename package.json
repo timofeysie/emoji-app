@@ -16,6 +16,7 @@
     "lint": "eslint client/src server/src",
     "docker:build": "docker build -t emoji-app .",
     "docker:run": "docker run -p 3000:3000 --env-file .env emoji-app",
+    "seed:local": "node scripts/seed-local.mjs",
     "test:server": "jest --config server/jest.config.ts",
     "test:server:watch": "jest --config server/jest.config.ts --watch"
   },

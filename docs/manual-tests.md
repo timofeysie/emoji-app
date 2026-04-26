@@ -316,18 +316,41 @@ instance.
 
 This validates the new Mongo-backed endpoints end-to-end.
 
-### 8a) Set base URL and reusable IDs
+### 8a) Start local Mongo as a single-node replica set
+
+Transactions are used by game-flow repository paths, so local Mongo must run as
+a replica set member.
+
+```powershell
+docker rm -f emoji-app-mongo
+docker run -d --name emoji-app-mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+docker exec emoji-app-mongo mongosh --quiet --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"
+```
+
+### 8b) Seed minimal local test IDs
+
+Run from repository root:
+
+```powershell
+npm run seed:local
+```
+
+Expected output includes:
+
+- `teacherUserId=000000000000000000000001`
+- `studentUserId=000000000000000000000002`
+- `badgeId=000000000000000000000003`
+
+### 8c) Set base URL and reusable IDs
 
 ```powershell
 $base = "http://localhost:3000"
-
-# Replace with valid existing User ObjectIds from your Mongo DB seed/data.
 $teacherUserId = "000000000000000000000001"
 $studentUserId = "000000000000000000000002"
 $badgeId = "000000000000000000000003"
 ```
 
-### 8b) Create a game
+### 8d) Create a game
 
 ```powershell
 $createGameBody = @{
@@ -350,7 +373,7 @@ Expected:
 - HTTP `201`
 - Response includes `gameId`
 
-### 8c) Add referee and player participants
+### 8e) Add referee and player participants
 
 ```powershell
 $refereeBody = @{
@@ -381,7 +404,7 @@ Expected:
 
 - Both requests return HTTP `201` with `{ "ok": true }`
 
-### 8d) Create and attach an NFC card group
+### 8f) Create and attach an NFC card group
 
 ```powershell
 $cardGroupBody = @{
@@ -426,7 +449,7 @@ Expected:
 - Group create returns HTTP `201` and `groupId`
 - Attach returns HTTP `201` with `{ "ok": true }`
 
-### 8e) Create a question with answer options
+### 8g) Create a question with answer options
 
 ```powershell
 $questionBody = @{
@@ -466,7 +489,7 @@ Expected:
 - HTTP `201`
 - Response includes `questionId`
 
-### 8f) Open the question
+### 8h) Open the question
 
 ```powershell
 $openQuestionBody = @{
@@ -485,7 +508,7 @@ Expected:
 
 - HTTP `200` with `{ "ok": true }`
 
-### 8g) Submit a guess by scanning card UID
+### 8i) Submit a guess by scanning card UID
 
 ```powershell
 $guessBody = @{
@@ -508,7 +531,7 @@ Expected:
 - HTTP `201`
 - Response includes `guessId` and `answerOptionId`
 
-### 8h) Close the question
+### 8j) Close the question
 
 ```powershell
 $closeQuestionBody = @{
@@ -527,7 +550,7 @@ Expected:
 
 - HTTP `200` with `{ "ok": true }`
 
-### 8i) Negative checks (quick)
+### 8k) Negative checks (quick)
 
 - Submit a second guess for the same `questionId` and `guesserUserId`:
   expect failure (`400` from controller, duplicate-key behavior underneath).
