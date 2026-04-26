@@ -2,6 +2,9 @@
 
 ## AWS App Runner (this repo)
 
+Note: Choosing the App Runner was a mistake. Shortly after deploying this app, I saw the message:
+*AWS App Runner will no longer accept new customers starting on April 30, 2026. Your existing App Runner services will remain operational and accessible. AWS continues to invest in security and availability, but we do not plan to introduce new features. For deploying and running containerized applications, we recommend Amazon ECS Express Mode , a new capability in Amazon ECS . To learn more, see Amazon ECS Express Mode  and the migration guidance .*
+
 This guide deploys the app as a single container on [AWS App Runner](https://aws.amazon.com/apprunner/). The NestJS server (running on the Express adapter) serves both the React SPA and the `/api/chat` endpoint from the same origin, so no CORS configuration is required in production.
 
 Side note: in Milestone 1, the server runtime was migrated from Express to NestJS while preserving existing API behavior.

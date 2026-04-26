@@ -311,3 +311,225 @@ instance.
 
 - Success: status `201` and JSON like `{ "ok": true }`
 - Validation error: status `400` and `error` / `details` from the server
+
+## 8) DB-backed game flow smoke test (`/api/games`, `/api/questions`, `/api/guesses`)
+
+This validates the new Mongo-backed endpoints end-to-end.
+
+### 8a) Set base URL and reusable IDs
+
+```powershell
+$base = "http://localhost:3000"
+
+# Replace with valid existing User ObjectIds from your Mongo DB seed/data.
+$teacherUserId = "000000000000000000000001"
+$studentUserId = "000000000000000000000002"
+$badgeId = "000000000000000000000003"
+```
+
+### 8b) Create a game
+
+```powershell
+$createGameBody = @{
+  title = "Milestone 2 Smoke Test Game"
+  createdByUserId = $teacherUserId
+} | ConvertTo-Json
+
+$gameResponse = Invoke-RestMethod `
+  -Method POST `
+  -Uri "$base/api/games" `
+  -ContentType "application/json" `
+  -Body $createGameBody
+
+$gameId = $gameResponse.gameId
+$gameId
+```
+
+Expected:
+
+- HTTP `201`
+- Response includes `gameId`
+
+### 8c) Add referee and player participants
+
+```powershell
+$refereeBody = @{
+  userId = $teacherUserId
+  role = "referee"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$base/api/games/$gameId/participants" `
+  -ContentType "application/json" `
+  -Body $refereeBody
+
+$playerBody = @{
+  userId = $studentUserId
+  role = "player"
+  playMode = "standard"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$base/api/games/$gameId/participants" `
+  -ContentType "application/json" `
+  -Body $playerBody
+```
+
+Expected:
+
+- Both requests return HTTP `201` with `{ "ok": true }`
+
+### 8d) Create and attach an NFC card group
+
+```powershell
+$cardGroupBody = @{
+  name = "Smoke Test Card Set"
+  description = "A/B cards for manual test"
+  cards = @(
+    @{
+      cardUid = "CARD-UID-A-001"
+      slotLabel = "A"
+      displayName = "Answer Card A"
+    },
+    @{
+      cardUid = "CARD-UID-B-001"
+      slotLabel = "B"
+      displayName = "Answer Card B"
+    }
+  )
+} | ConvertTo-Json -Depth 5
+
+$groupResponse = Invoke-RestMethod `
+  -Method POST `
+  -Uri "$base/api/games/nfc-card-groups" `
+  -ContentType "application/json" `
+  -Body $cardGroupBody
+
+$groupId = $groupResponse.groupId
+$groupId
+
+$attachBody = @{
+  assignedByUserId = $teacherUserId
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$base/api/games/$gameId/nfc-card-groups/$groupId/attach" `
+  -ContentType "application/json" `
+  -Body $attachBody
+```
+
+Expected:
+
+- Group create returns HTTP `201` and `groupId`
+- Attach returns HTTP `201` with `{ "ok": true }`
+
+### 8e) Create a question with answer options
+
+```powershell
+$questionBody = @{
+  gameId = $gameId
+  createdByUserId = $teacherUserId
+  text = "Which option is correct?"
+  sequence = 1
+  mode = "standard"
+  answerOptions = @(
+    @{
+      text = "Option A"
+      sequence = 1
+      slotLabel = "A"
+      isCorrect = $true
+    },
+    @{
+      text = "Option B"
+      sequence = 2
+      slotLabel = "B"
+      isCorrect = $false
+    }
+  )
+} | ConvertTo-Json -Depth 6
+
+$questionResponse = Invoke-RestMethod `
+  -Method POST `
+  -Uri "$base/api/questions" `
+  -ContentType "application/json" `
+  -Body $questionBody
+
+$questionId = $questionResponse.questionId
+$questionId
+```
+
+Expected:
+
+- HTTP `201`
+- Response includes `questionId`
+
+### 8f) Open the question
+
+```powershell
+$openQuestionBody = @{
+  gameId = $gameId
+  state = "open"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$base/api/questions/$questionId/state" `
+  -ContentType "application/json" `
+  -Body $openQuestionBody
+```
+
+Expected:
+
+- HTTP `200` with `{ "ok": true }`
+
+### 8g) Submit a guess by scanning card UID
+
+```powershell
+$guessBody = @{
+  gameId = $gameId
+  questionId = $questionId
+  guesserUserId = $studentUserId
+  badgeId = $badgeId
+  cardUid = "CARD-UID-A-001"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$base/api/guesses" `
+  -ContentType "application/json" `
+  -Body $guessBody
+```
+
+Expected:
+
+- HTTP `201`
+- Response includes `guessId` and `answerOptionId`
+
+### 8h) Close the question
+
+```powershell
+$closeQuestionBody = @{
+  gameId = $gameId
+  state = "closed"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$base/api/questions/$questionId/state" `
+  -ContentType "application/json" `
+  -Body $closeQuestionBody
+```
+
+Expected:
+
+- HTTP `200` with `{ "ok": true }`
+
+### 8i) Negative checks (quick)
+
+- Submit a second guess for the same `questionId` and `guesserUserId`:
+  expect failure (`400` from controller, duplicate-key behavior underneath).
+- Submit guess with unknown `cardUid`: expect `400`.
+- Submit guess after question is closed: expect `400`.

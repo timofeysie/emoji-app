@@ -20,7 +20,7 @@ cp .env.example .env
 ### Running
 
 ```bash
-npm run dev
+npm run dev          # run both server and client
 npm run dev:client   # http://localhost:5200
 npm run dev:server   # http://localhost:3000
 npm run build        # production build of both client and server
@@ -28,10 +28,10 @@ npm run typecheck    # TypeScript check across both apps
 npm run lint         # ESLint across client/src and server/src
 npm run docker:build # build the production Docker image
 npm run docker:run   # run the image locally on port 3000
+npm run test:server  # run the server tests
 ```
 
-
-## Architecture
+## File structure
 
 ```text
 emoji-app/
