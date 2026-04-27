@@ -5,7 +5,7 @@
 - [Sequencing decision (updated roadmap)](#sequencing-decision-updated-roadmap)
 - [Milestone 1: Server framework baseline (NestJS)](#milestone-1-server-framework-baseline-nestjs)
 - [Milestone 2: Persistence foundation (MongoDB + Mongoose)](#milestone-2-persistence-foundation-mongodb--mongoose)
-- [Milestone 3: Atlas on AWS for MongoDB](#milestone-3-atlas-on-aws-for-mongodb)
+- [Milestone 3A: Atlas on AWS for MongoDB (prototype)](#milestone-3a-atlas-on-aws-for-mongodb-prototype)
 - [Milestone 4: ECS on Fargate and ALB](#milestone-4-ecs-on-fargate-and-alb)
 - [Milestone 5: Gameplay integrity and scoring](#milestone-5-gameplay-integrity-and-scoring)
 - [Milestone 6: Real-time features for game rooms](#milestone-6-real-time-features-for-game-rooms)
@@ -24,14 +24,14 @@ This app needs three foundations that should not be conflated:
 Recommended order (best-practice, career-oriented):
 
 1. Lock domain + persistence patterns (Milestone 2) — **complete**
-2. Stand up **MongoDB Atlas** in AWS with security + ops basics (Milestone 3)
+2. Stand up **MongoDB Atlas** in AWS for prototype staging (Milestone 3A)
 3. Migrate **compute** to **ECS on Fargate behind an ALB** (Milestone 4)  
    This is the most common “full-stack with DevOps awareness” default for containerized
    services on AWS.
 4. Harden the **gameplay invariants and scoring** on durable data (Milestone 5)
 5. Implement **room-scoped real-time delivery** to clients, built on the same
    process WebSocket path you already use, now deployed correctly behind ALB (Milestone 6)
-6. Production **SRE hardening** (Milestone 7)
+6. Production **SRE hardening** including backup/restore drills (Milestone 7)
 
 ## Milestone 1: Server framework baseline (NestJS)
 
@@ -103,13 +103,13 @@ Design artifact: `docs/milestone-2-data-model-finalization.md`
   - `questionId=69ee8d2c21dd52eba889ec4b`
   - `guessId=69ee8d2c21dd52eba889ec4e`
 
-## Milestone 3: Atlas on AWS for MongoDB
+## Milestone 3A: Atlas on AWS for MongoDB (prototype)
 
 Status: **In progress**
 
 ### Milestone 3 goals
 
-- Move persistence to a managed, secure, and observable environment.
+- Move persistence to a managed, secure prototype staging environment.
 
 ### Milestone 3 scope
 
@@ -119,7 +119,6 @@ Status: **In progress**
   - TLS required for all connections.
 - Store connection secret in AWS Secrets Manager.
 - Add environment-specific config (`dev`, `staging`, `prod`).
-- Enable backups and point-in-time recovery.
 - Configure monitoring and alerts for:
   - Query latency
   - Connection pool saturation
@@ -129,23 +128,23 @@ Status: **In progress**
 ### Milestone 3 exit criteria
 
 - Staging server connects to Atlas successfully.
-- Backup and restore drill is tested once.
 - Baseline alerts are active and verified.
+- DB-backed prototype smoke flow is successful against Atlas staging.
 
 ### Milestone 3 skills practiced (career map)
 
-- Managed database operations: access control, backups, observability, restore drills.
+- Managed database operations for prototype delivery: access control, secrets,
+  observability, and safe migration from local to cloud-managed data.
 
 ### Milestone 3 execution tracker
 
 - [x] Atlas runbook section added to `docs/deployments.md`
 - [x] Staging smoke evidence template added to `docs/manual-tests.md`
-- [ ] Atlas staging cluster provisioned and credentials created
-- [ ] Staging network access model selected and approved
-- [ ] `MONGODB_URI` wired via AWS Secrets Manager in staging runtime
-- [ ] Backup and PITR enabled, with one successful restore drill
-- [ ] Baseline alerts configured and routed to on-call owners
-- [ ] Milestone 3 closure evidence recorded
+- [x] Atlas staging cluster provisioned and credentials created
+- [x] Staging network access model selected and approved
+- [x] `MONGODB_URI` wired via AWS Secrets Manager in staging runtime
+- [x] Baseline alerts configured and routed to on-call owners
+- [x] Milestone 3 closure evidence recorded
 
 ## Milestone 4: ECS on Fargate and ALB
 
@@ -260,7 +259,7 @@ This milestone is where “product correctness” meets “database engineering 
   - Atlas incident response
   - ECS/ALB rollbacks and “bad deploy” playbooks
   - WebSocket degradation and forced reconnect strategy
-  - Data restore process
+  - Data backup and restore process (PITR + restore drill)
 - Security review:
   - secret rotation and least privilege IAM for CI/CD and runtime roles
   - audit logging for referee actions and game mutations

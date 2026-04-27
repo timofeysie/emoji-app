@@ -26,9 +26,17 @@ the roadmap. It is not a legal document; it is a communication aid.
 - [ODM (Object Document Mapper)](#odm-object-document-mapper)
 - [MongoDB Atlas](#mongodb-atlas)
 - [Connection string (Mongo URI)](#connection-string-mongo-uri)
+- [SRV URI (`mongodb+srv://`)](#srv-uri-mongodbsrv)
+- [Non-SRV URI (`mongodb://`)](#non-srv-uri-mongodb)
+- [DNS SRV lookup](#dns-srv-lookup)
 - [Replica set](#replica-set)
+- [Primary and secondary nodes](#primary-and-secondary-nodes)
+- [MongoDB transaction](#mongodb-transaction)
 - [WebSocket (real-time connection)](#websocket-real-time-connection)
 - [API Gateway (Amazon API Gateway) — optional “edge” layer](#api-gateway-amazon-api-gateway--optional-edge-layer)
+- [Alert rule](#alert-rule)
+- [On-call owner](#on-call-owner)
+- [Point-in-time recovery (PITR)](#point-in-time-recovery-pitr)
 - [Scalability (scale)](#scalability-scale)
 - [Observability (logs, metrics, tracing)](#observability-logs-metrics-tracing)
 - [Incident response (ops)](#incident-response-ops)
@@ -154,6 +162,21 @@ baselines, and operational guardrails are largely handled by the vendor.
 A single string that tells the app how to connect to a database, including where it lives
 and authentication parameters. In our app this is often provided as `MONGODB_URI`.
 
+## SRV URI (`mongodb+srv://`)
+
+A short MongoDB URI format that relies on DNS to discover cluster hosts and settings.
+It is convenient, but depends on your network being able to resolve SRV DNS records.
+
+## Non-SRV URI (`mongodb://`)
+
+A MongoDB URI format that explicitly lists cluster hosts. It is sometimes more reliable
+on restricted networks because it does not depend on SRV discovery.
+
+## DNS SRV lookup
+
+A DNS query type used by `mongodb+srv://` connection strings. If your network blocks
+or misroutes these lookups, app startup can fail with errors like `querySrv ECONNREFUSED`.
+
 ## Replica set
 
 A MongoDB deployment pattern with redundancy and (critically) features like replication.
@@ -162,6 +185,16 @@ concepts. This matters for features like **multi-document transactions** in some
 
 (You do not need to understand the internals, only that “production shape” and “toy local
 setup” are not always equivalent.)
+
+## Primary and secondary nodes
+
+In a replica set, the **primary** accepts writes and **secondary** nodes replicate data
+from it. If the primary fails, another node can be elected to continue service.
+
+## MongoDB transaction
+
+A way to group multiple database writes so they either all succeed or all fail together.
+This protects consistency in game flows that update multiple records.
 
 ## WebSocket (real-time connection)
 
@@ -177,6 +210,20 @@ response each time).
 A managed way to build API front doors in AWS, sometimes used for advanced routing, auth
 integration, throttling, and WebSocket topologies. It is not required to run a solid app on
 **ECS + ALB**; it is an **optional** architecture layer depending on product needs.
+
+## Alert rule
+
+A monitoring rule that triggers notifications when a condition is met, such as high
+connections or a host being down.
+
+## On-call owner
+
+The person or team responsible for acknowledging and responding to alerts.
+
+## Point-in-time recovery (PITR)
+
+A backup capability that allows restoring a database to a specific past time. Useful for
+operational recovery, but often deferred in early prototype stages.
 
 ## Scalability (scale)
 

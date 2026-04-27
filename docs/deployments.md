@@ -1,8 +1,8 @@
 # Deployment Guide
 
-## Milestone 3 runbook: Atlas on AWS for MongoDB
+## Milestone 3A runbook: Atlas on AWS for MongoDB (prototype)
 
-This section is the operational checklist for Milestone 3. It is intentionally
+This section is the operational checklist for Milestone 3A. It is intentionally
 focused on database environment readiness and does not include ECS/ALB compute
 migration steps (Milestone 4).
 
@@ -98,19 +98,11 @@ Record smoke artifacts:
 - timestamp:
 - operator:
 
-### 3.5 Backup and PITR restore drill
+### 3.5 Prototype note: backups and restore
 
-1. Enable backups and point-in-time restore in Atlas staging cluster.
-2. Perform one restore drill to a recent point in time.
-3. Validate restored data with read queries against expected smoke artifacts.
-
-Record drill evidence:
-
-- Restore start time:
-- Restore end time:
-- Recovery duration:
-- Data checks passed:
-- Follow-up actions:
+For prototype mode, backup/PITR and restore drills are optional and deferred to
+Milestone 7 hardening. If you choose to enable them early, record evidence using
+the same format as production runbooks.
 
 ### 3.6 Monitoring and alert baseline
 
@@ -133,11 +125,13 @@ Record alert ownership:
 Milestone 3 is complete when all are true:
 
 - Staging server connects to Atlas successfully.
-- Backup and restore drill completed and documented once.
 - Baseline alerts active and routed to owners.
+- DB-backed smoke flow runs successfully against Atlas staging.
 
 Once complete, update `docs/milestones.md` Milestone 3 status and closure
 evidence, and carry remaining compute migration risks into Milestone 4.
+
+Backup/PITR and restore drill completion is tracked in Milestone 7.
 
 ## AWS App Runner (this repo)
 
