@@ -81,20 +81,17 @@ the desired number running.
 
 ## Fargate
 
-An AWS “serverless” way to run containers where **AWS manages the machines** (servers)
-underneath. We choose CPU/memory, AWS runs the physical hosts.
+An AWS “serverless” way to run containers where **AWS manages the machines** (servers) underneath. We choose CPU/memory, AWS runs the physical hosts.
 
 Mental model: we rent **just the right-sized table at a restaurant**, not the building.
 
 ## Task (ECS task)
 
-A running instance of a container (or a small set of related containers) as defined by
-the ECS task definition. Think: one “serving” of the app.
+A running instance of a container (or a small set of related containers) as defined by the ECS task definition. Think: one “serving” of the app.
 
 ## Service (ECS service)
 
-A long-lived ECS configuration that **keeps tasks running** at the desired count and can
-roll out new versions. Think: “keep at least 2 waiters on shift.”
+A long-lived ECS configuration that **keeps tasks running** at the desired count and can roll out new versions. Think: “keep at least 2 waiters on shift.”
 
 ## EC2 (Elastic Compute Cloud)
 

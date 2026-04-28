@@ -171,8 +171,7 @@ resume-friendly path is **containers on ECS** with a load balancer. For WebSocke
 ### Milestone 4 exit criteria
 
 - Staging URL serves the app and APIs reliably.
-- `wss://` to the same host as `https://` works for the existing WebSocket path you choose
-  to expose in production (consistent with the ALB/ECS pattern).
+- `wss://` to the same host as `https://` works for the existing WebSocket path you choose to expose in production (consistent with the ALB/ECS pattern).
 - Rollback is proven: deploy `N+1`, detect failure, roll back to `N`.
 - No reliance on App Runner for new environments.
 
