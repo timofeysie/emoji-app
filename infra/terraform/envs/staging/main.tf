@@ -11,7 +11,7 @@ provider "aws" {
 }
 
 # Module wiring is added milestone-by-milestone:
-#   - T2 enables module.network
+#   - T2 enables module.network                (active)
 #   - T3 enables module.alb
 #   - T4 enables module.iam_ecs
 #   - T5/T6 enables module.ecs_service
@@ -19,12 +19,12 @@ provider "aws" {
 #
 # Each block stays commented out until the corresponding module has resources
 # defined. This keeps `terraform plan` clean during the import-first phase.
-#
-# module "network" {
-#   source      = "../../modules/network"
-#   environment = var.environment
-# }
-#
+
+module "network" {
+  source      = "../../modules/network"
+  environment = var.environment
+}
+
 # module "alb" {
 #   source                = "../../modules/alb"
 #   environment           = var.environment

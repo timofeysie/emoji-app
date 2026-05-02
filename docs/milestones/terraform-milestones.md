@@ -346,6 +346,8 @@ ready:
 
 ## Milestone T2: Network and security baseline (import)
 
+Status: **Complete** (2026-05-03)
+
 Goal: Terraform owns the security groups and references the existing default
 VPC and subnets without recreating them.
 
@@ -353,31 +355,64 @@ Resources to import:
 
 - `aws_security_group.alb` -> `emoji-staging-alb-sg`
 - `aws_security_group.ecs` -> `emoji-staging-ecs-sg`
-- The two security group rules between them (ingress on `3000` from ALB SG)
+- All five security group rules (ALB:80, ALB:443, ALB egress all,
+  ECS:3000-from-ALB, ECS egress all)
 
 Resources to **read-only reference** (data sources, not imported):
 
 - `data.aws_vpc.default` (default VPC)
 - `data.aws_subnets.default` (default subnets, filtered by VPC ID)
 
+Implementation note: use the modern per-rule resources
+(`aws_vpc_security_group_ingress_rule` / `aws_vpc_security_group_egress_rule`)
+introduced in AWS provider 4.x rather than the legacy inline `ingress` /
+`egress` blocks on `aws_security_group`. The per-rule resources avoid the
+classic in-place rule drift problems and are imported by `sgr-*` rule ID.
+
 Workflow:
 
-1. In `modules/network/`, write security group resources that match the live
-   inbound/outbound rules.
-2. From `envs/staging/`, run for each existing SG:
-
-   ```bash
-   terraform import module.network.aws_security_group.alb sg-XXXXXXXX
-   terraform import module.network.aws_security_group.ecs sg-YYYYYYYY
-   ```
-
-3. Run `terraform plan`. Iterate on the rule blocks until `plan` shows no
-   changes.
+1. Discover the live SG rules and rule IDs via
+   `aws ec2 describe-security-group-rules`.
+2. In `modules/network/`, write resources that mirror the live shape exactly.
+3. From `envs/staging/`, run `terraform import` for each SG and rule.
+4. Run `terraform plan`. The first plan after import will surface an
+   additive diff because default tags from the provider block don't yet
+   exist on the imported resources. Apply that diff once to establish the
+   tagging baseline; subsequent plans are no-ops.
 
 Exit criteria:
 
-- `terraform plan` is a no-op against staging for network/SG resources.
+- `terraform plan` is a no-op against staging for network/SG resources
+  (modulo the one-time additive tagging baseline).
 - Default VPC and subnets are exposed via outputs for downstream modules.
+
+### T2 closure evidence
+
+- Discovered live shape from AWS CLI: 2 SGs in default VPC
+  `vpc-00734c2d3a9a2caf0`, 5 rules total (`sgr-0af709fb085b0dc44`,
+  `sgr-0d1b5f4a8753829e8`, `sgr-04666d0183a096020`,
+  `sgr-04814651d294ff71d`, `sgr-045d11979f7357a57`).
+- Authored `modules/network/` with `data.aws_vpc.default`,
+  `data.aws_subnets.default`, two `aws_security_group` resources, three
+  `aws_vpc_security_group_ingress_rule` resources, and two
+  `aws_vpc_security_group_egress_rule` resources.
+- Wired `module.network` into `envs/staging/main.tf` and exposed
+  `vpc_id`, `subnet_ids`, `alb_security_group_id`, `ecs_security_group_id`
+  via `envs/staging/outputs.tf`.
+- All 7 imports succeeded on first attempt.
+- Initial `plan` showed 7 in-place updates (additive: default tags +
+  `revoke_rules_on_delete = false` Terraform-only fields). No replacements,
+  no destructions.
+- `terraform apply -auto-approve` reported "Apply complete! Resources:
+  0 added, 7 changed, 0 destroyed.".
+- Post-apply `plan` is a true no-op.
+- `terraform state list` reports 9 managed entities (2 data sources, 2 SGs,
+  5 rules); state file in S3 is 14,126 bytes (was 181 after T1).
+- Output values:
+  - `vpc_id = "vpc-00734c2d3a9a2caf0"`
+  - `subnet_ids = ["subnet-04d6a20297d1b8357", "subnet-07cd30b25fe228e8f", "subnet-0e7030c134b0c450d"]`
+  - `alb_security_group_id = "sg-08de63fa9f296d649"`
+  - `ecs_security_group_id = "sg-09e4348dc1fc9ee08"`
 
 ## Milestone T3: ALB and target group (import)
 
