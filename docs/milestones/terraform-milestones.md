@@ -273,6 +273,8 @@ Exit criteria:
 
 ## Milestone T1: Remote state backend bootstrap
 
+Status: **Complete** (2026-05-03)
+
 Goal: Terraform state lives in S3 with locking.
 
 Steps:
@@ -298,7 +300,49 @@ Steps:
 Exit criteria:
 
 - `terraform init` succeeds and reports the S3 backend.
-- A bucket key under `staging/` appears after the first `plan`.
+- A bucket key under `staging/` appears after the first `plan` (or first
+  `apply` for an empty configuration; Terraform skips state writes when
+  there is nothing to record).
+
+### T1 closure evidence
+
+- S3 bucket `emoji-app-tfstate-100641718971-ap-southeast-2` created in
+  `ap-southeast-2`. Versioning enabled, public access blocked, default
+  SSE-S3 (AES256) encryption applied.
+- DynamoDB table `emoji-app-tflock` created with `LockID` (string) hash key,
+  `PAY_PER_REQUEST` billing.
+- `infra/terraform/envs/staging/backend.tf` activated with the S3 backend.
+- `terraform init` reported "Successfully configured the backend s3" and
+  installed `hashicorp/aws v5.100.0`.
+- `terraform apply -auto-approve` completed cleanly ("0 added, 0 changed,
+  0 destroyed").
+- State object verified in S3:
+  `s3://emoji-app-tfstate-100641718971-ap-southeast-2/staging/terraform.tfstate`
+  (181 bytes, empty resources).
+- `terraform state list` from a fresh shell reads from S3 and returns
+  empty (exit 0), confirming the backend round-trip works.
+
+### Open follow-up: migrate to S3-native locking
+
+Terraform 1.10+ deprecates the `dynamodb_table` parameter in favor of
+`use_lockfile = true`, which uses a `.tflock` object inside the state
+bucket itself. Our `init` and `plan` runs both surfaced this warning:
+
+```text
+Warning: Deprecated Parameter
+The parameter "dynamodb_table" is deprecated. Use parameter
+"use_lockfile" instead.
+```
+
+Migrating is a small, self-contained change to consider before T8
+(CI/CD), since CI runs amplify the value of clean output. Steps when
+ready:
+
+1. Edit `backend.tf` to remove `dynamodb_table` and add `use_lockfile = true`.
+2. Run `terraform init -reconfigure`.
+3. Verify a `plan/apply` round-trip still works.
+4. Delete the `emoji-app-tflock` DynamoDB table to stop paying for an
+   unused resource (cents-per-year scale, but worth tidying).
 
 ## Milestone T2: Network and security baseline (import)
 
