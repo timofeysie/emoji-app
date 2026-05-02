@@ -162,16 +162,22 @@ infra/
       acm/            # cert + listener wiring (used by alb)
     envs/
       staging/
-        main.tf
+        versions.tf       # required_version + provider versions
+        backend.tf        # S3 + DynamoDB lock backend (wired in T1)
+        main.tf           # provider config + module wiring
         variables.tf
         outputs.tf
-        backend.tf
         terraform.tfvars  # non-secret values only, committed
       prod/
         ... (added later)
-    versions.tf       # required_version + provider versions
     README.md
 ```
+
+Note on `versions.tf` placement: Terraform only loads `*.tf` files from the
+working directory it's invoked in, so the `terraform { ... }` block must
+live inside each environment folder. Do not place a single shared
+`versions.tf` at the top of `infra/terraform/`; it will not be picked up
+when running from `envs/staging/`.
 
 Key principles:
 

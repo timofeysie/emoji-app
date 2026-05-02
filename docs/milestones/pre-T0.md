@@ -126,9 +126,22 @@ These are read via Terraform `data` sources, not managed by Terraform.
 | --- | --- | --- | --- |
 | Secrets Manager secret (Mongo) | `emoji-app/staging/mongodb-uri` | `arn:aws:secretsmanager:ap-southeast-2:100641718971:secret:emoji-app/staging/mongodb-uri-1zfIGT` | T4 (IAM scope), T5 (task def secret) |
 | ECR repository | `emoji-app` | `100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app` | T5 (task def image) |
-| Latest tagged image | `emoji-app:latest` (pushed 2026-04-27) | digest `sha256:ca33d43f00b214658bf1981dfcc56e42769913ebddf89f2ab8844adc655d2f6d` | T5 (`var.image_uri`) |
+| Pinned image for staging | `emoji-app:staging-2026-04-27` | digest `sha256:08347c0e4220461bb279ea7a9f8ddc91bc396f1aa691c44076bad15381572374` | T5 (`var.image_uri`) |
+| Mutable convenience tag | `emoji-app:latest` | digest `sha256:ca33d43f00b214658bf1981dfcc56e42769913ebddf89f2ab8844adc655d2f6d` | local/dev only; not used by Terraform |
 | Default VPC | n/a | discovered via `data "aws_vpc" "default"` | T2, T6 |
 | Default subnets | n/a | discovered via `data "aws_subnets" "default"` | T2, T6 |
+
+Note on the two image digests: the `staging-2026-04-27` tag was created by
+re-pushing the existing manifest through PowerShell's `--output text`, which
+collapsed whitespace and produced a new manifest digest. The underlying
+config blob and layer digests are byte-identical to the original `:latest`
+image, so at runtime ECS pulls the same content. Layers are deduplicated in
+ECR, so this costs no extra storage. The full `var.image_uri` value to use in
+T5 is:
+
+```text
+100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:staging-2026-04-27
+```
 
 ## Resolved follow-ups and discovered gaps
 
@@ -148,6 +161,18 @@ during the relevant later milestones; none of them block T0.
 3. **ECR repository and image confirmed.** Repo is `emoji-app`; the only
    tagged image is `:latest` (pushed 2026-04-27). The two earlier pushes are
    untagged and can be ignored or cleaned up later.
+4. **Image pinning strategy chosen.** Re-tagged the current `:latest` image
+   with the immutable tag `staging-2026-04-27` so Terraform has a stable
+   `var.image_uri` to reference. CI in T8 will switch to digest pinning.
+   Procedure used:
+   - `aws ecr batch-get-image` to retrieve the existing manifest by digest.
+   - Wrote the manifest to a temp file (avoiding PowerShell argument
+     splitting on the JSON body).
+   - `aws ecr put-image --image-tag staging-2026-04-27 --image-manifest file://...`.
+
+   Outcome: two image records now coexist in ECR with byte-identical layers
+   but different manifest digests (one tagged `:latest`, one tagged
+   `:staging-2026-04-27`). This is harmless for our purposes.
 
 ### Gaps to resolve
 
@@ -165,14 +190,7 @@ during the relevant later milestones; none of them block T0.
    Recommendation: pick option 1 before T5. We can do it via Terraform later
    in a hardening pass; for now, creating it once via the console is fine.
 
-2. **Image pinning strategy.** Only the most recent push has a tag, and it's
-   the mutable `:latest`. For T5 we should pin `var.image_uri` to either a
-   versioned tag (e.g. `staging-2026-04-27`) or to the digest
-   `sha256:ca33d43f00b214658bf1981dfcc56e42769913ebddf89f2ab8844adc655d2f6d`.
-   Digest is best for immutable rollbacks; a tag like `staging-<date>` is
-   easier to read in logs. Decide before T5.
-
-3. **Untagged ECR images.** Two of the three recent images have no tag. Worth
+2. **Untagged ECR images.** Two of the three recent images have no tag. Worth
    adding an ECR lifecycle policy to prune untagged images, but that's a
    nice-to-have, not a pre-T0 blocker.
 
@@ -294,3 +312,38 @@ PS C:\Users\timof> aws ecr describe-images --repository-name $repo --query "sort
     }
 ]
 ```
+
+### Third pass: re-tag for immutable image pinning
+
+```shell
+PS C:\Users\timof> $digest = "sha256:ca33d43f00b214658bf1981dfcc56e42769913ebddf89f2ab8844adc655d2f6d"
+PS C:\Users\timof> $manifestFile = Join-Path $env:TEMP "emoji-app-manifest.json"
+
+PS C:\Users\timof> aws ecr batch-get-image `
+>>   --repository-name emoji-app `
+>>   --image-ids imageDigest=$digest `
+>>   --query "images[0].imageManifest" `
+>>   --output text | Out-File -FilePath $manifestFile -Encoding ascii -NoNewline
+
+PS C:\Users\timof> aws ecr put-image `
+>>   --repository-name emoji-app `
+>>   --image-tag staging-2026-04-27 `
+>>   --image-manifest "file://$manifestFile"
+{
+    "image": {
+        "registryId": "100641718971",
+        "repositoryName": "emoji-app",
+        "imageId": {
+            "imageDigest": "sha256:08347c0e4220461bb279ea7a9f8ddc91bc396f1aa691c44076bad15381572374",
+            "imageTag": "staging-2026-04-27"
+        },
+        "imageManifestMediaType": "application/vnd.docker.distribution.manifest.v2+json"
+    }
+}
+```
+
+The new manifest digest (`08347c0e...`) differs from the original
+(`ca33d43f...`) because PowerShell's `--output text` collapsed JSON whitespace
+before the manifest was re-uploaded. Both image records reference the same
+underlying config blob and layer digests, so runtime behavior is identical
+and ECR's layer dedup means no extra storage cost.
