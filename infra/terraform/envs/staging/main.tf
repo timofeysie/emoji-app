@@ -12,7 +12,7 @@ provider "aws" {
 
 # Module wiring is added milestone-by-milestone:
 #   - T2 enables module.network                (active)
-#   - T3 enables module.alb
+#   - T3 enables module.alb                    (active)
 #   - T4 enables module.iam_ecs
 #   - T5/T6 enables module.ecs_service
 #   - T7 enables module.acm
@@ -25,13 +25,24 @@ module "network" {
   environment = var.environment
 }
 
-# module "alb" {
-#   source                = "../../modules/alb"
-#   environment           = var.environment
-#   vpc_id                = module.network.vpc_id
-#   subnet_ids            = module.network.subnet_ids
-#   alb_security_group_id = module.network.alb_security_group_id
-# }
+# The live ALB was created with only 2 of the 3 default subnets attached.
+# We pass that explicit pair to module.alb so the import-first plan stays a
+# pure additive-tags baseline. Extending the ALB to the third AZ is an
+# availability decision tracked separately, not part of T3 import scope.
+locals {
+  alb_subnet_ids = [
+    "subnet-04d6a20297d1b8357",
+    "subnet-0e7030c134b0c450d",
+  ]
+}
+
+module "alb" {
+  source                = "../../modules/alb"
+  environment           = var.environment
+  vpc_id                = module.network.vpc_id
+  subnet_ids            = local.alb_subnet_ids
+  alb_security_group_id = module.network.alb_security_group_id
+}
 #
 # module "iam_ecs" {
 #   source                    = "../../modules/iam-ecs"

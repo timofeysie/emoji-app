@@ -1,21 +1,37 @@
-# ALB module
-#
-# Owns:
-#   - Application Load Balancer (existing AWS name: emoji-load-balancer).
-#   - Target group (existing AWS name: emoji-staging-tg).
-#   - HTTP:80 listener (existing).
-#   - HTTPS:443 listener (added in T7).
-#
-# Status: skeleton only. Resources are added in Milestone T3.
-#
-# Inputs (planned):
-#   - environment (string)
-#   - vpc_id (string)
-#   - subnet_ids (list(string))
-#   - alb_security_group_id (string)
-#
-# Outputs (planned):
-#   - alb_arn
-#   - alb_dns_name
-#   - target_group_arn
-#   - http_listener_arn
+resource "aws_lb" "app" {
+  name               = "emoji-load-balancer"
+  internal           = false
+  load_balancer_type = "application"
+  ip_address_type    = "ipv4"
+  security_groups    = [var.alb_security_group_id]
+  subnets            = var.subnet_ids
+}
+
+resource "aws_lb_target_group" "tg" {
+  name        = "emoji-staging-tg"
+  port        = 3000
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = var.vpc_id
+
+  health_check {
+    path                = "/api/badges"
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 5
+    unhealthy_threshold = 2
+  }
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.app.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.tg.arn
+  }
+}

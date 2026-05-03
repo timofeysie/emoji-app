@@ -416,6 +416,8 @@ Exit criteria:
 
 ## Milestone T3: ALB and target group (import)
 
+Status: **Complete** (2026-05-03)
+
 Goal: Terraform owns the ALB, listeners, and target group.
 
 Resources to import (ARNs in `pre-T0.md`):
@@ -445,8 +447,49 @@ Workflow:
 
 Exit criteria:
 
-- `terraform plan` is a no-op for the ALB stack.
+- `terraform plan` is a no-op for the ALB stack (modulo the one-time
+  additive tagging baseline and listener forward-block normalization).
 - Target group ARN is exposed as an output for the ECS service module.
+
+### T3 closure evidence
+
+- Discovered live shape via AWS CLI: ALB `internet-facing`, ipv4, on
+  subnets `subnet-04d6a20297d1b8357` and `subnet-0e7030c134b0c450d` (only
+  2 of the 3 default subnets); idle timeout 60s; HTTP/2 enabled; access
+  logs disabled; HTTP:80 listener forwards to target group; target group
+  HTTP/3000, target type `ip`, health check `/api/badges`, matcher 200,
+  interval 30s, timeout 5s, healthy/unhealthy thresholds 5/2.
+- Authored `modules/alb/` with `aws_lb.app`, `aws_lb_target_group.tg`,
+  `aws_lb_listener.http`, plus `variables.tf` (vpc_id, subnet_ids,
+  alb_security_group_id, environment) and `outputs.tf` (alb_arn,
+  alb_dns_name, alb_zone_id, target_group_arn, http_listener_arn).
+- Subnet decision: pinned the ALB to the existing 2 subnets via a
+  `local.alb_subnet_ids` list in `envs/staging/main.tf`. Extending to the
+  3rd default AZ is tracked as an availability decision separate from
+  this import.
+- All 3 imports succeeded on first attempt.
+- First post-import plan showed 3 in-place updates (additive: default tags
+  on all three; plus two recorded defaulted booleans on the target group
+  and a listener `forward {}` block normalization). No replacements, no
+  destructions, no behavioral change in AWS.
+- `terraform apply -auto-approve` reported "Apply complete! Resources:
+  0 added, 3 changed, 0 destroyed.".
+- Post-apply `plan` is a true no-op.
+- Output values:
+  - `alb_arn = "arn:...loadbalancer/app/emoji-load-balancer/5320cebe2e987bb7"`
+  - `alb_dns_name = "emoji-load-balancer-28533277.ap-southeast-2.elb.amazonaws.com"`
+  - `target_group_arn = "arn:...targetgroup/emoji-staging-tg/46cf6b8cb3c5df66"`
+  - `http_listener_arn = "arn:...listener/app/emoji-load-balancer/5320cebe2e987bb7/2b06791ef4473d64"`
+
+### Tracked follow-ups (not blocking T4)
+
+- **ALB AZ coverage.** ALB currently spans 2 of 3 AZs. Extending to all 3
+  would improve availability at zero ALB cost change (data transfer cost
+  is the only consideration). Defer the explicit decision; revisit before
+  prod.
+- **Idle timeout for WebSockets.** Default 60s is fine for HTTP, but
+  long-lived WebSocket connections in T6 will need either a higher idle
+  timeout or app-level pings. Raise as part of T6 transport tuning.
 
 ## Milestone T4: IAM roles and policies (import)
 
