@@ -38,6 +38,16 @@ output "http_listener_arn" {
   value       = module.alb.http_listener_arn
 }
 
+output "ecs_execution_role_arn" {
+  description = "ARN of the ECS task execution role."
+  value       = module.iam_ecs.execution_role_arn
+}
+
+output "ecs_task_role_arn" {
+  description = "ARN of the ECS task role."
+  value       = module.iam_ecs.task_role_arn
+}
+
 # Additional outputs are added as later modules come online:
 #   - ecs_cluster_name
 #   - ecs_service_name

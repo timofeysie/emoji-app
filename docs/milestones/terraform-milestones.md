@@ -493,38 +493,144 @@ Exit criteria:
 
 ## Milestone T4: IAM roles and policies (import)
 
+Status: **Complete** (2026-05-03).
+
 Goal: Terraform owns the two ECS roles and the inline secret-read policy.
 
-Resources to import:
+Resources imported:
 
-- `aws_iam_role.ecs_execution` -> `emoji-staging-ecs-execution-role`
-- `aws_iam_role.ecs_task` -> `emoji-staging-ecs-task-role`
-- `aws_iam_role_policy_attachment` for
-  `AmazonECSTaskExecutionRolePolicy` on the execution role
-- `aws_iam_role_policy.read_secrets` -> the inline policy
+- `module.iam_ecs.aws_iam_role.ecs_execution` -> `emoji-staging-ecs-execution-role`
+- `module.iam_ecs.aws_iam_role.ecs_task` -> `emoji-staging-ecs-task-role`
+- `module.iam_ecs.aws_iam_role_policy_attachment.exec_managed` ->
+  `AmazonECSTaskExecutionRolePolicy` attached to the execution role
+- `module.iam_ecs.aws_iam_role_policy_attachment.task_legacy_ecs_role` ->
+  `AmazonEC2ContainerServiceRole` attached to the task role
+  (legacy attachment auto-added by the IAM console wizard - see follow-up
+  below)
+- `module.iam_ecs.aws_iam_role_policy.read_secrets` -> the inline policy
   `emoji-staging-read-secrets` on the task role
 
-Workflow:
+Closure evidence:
 
-1. In `modules/iam-ecs/`, recreate the trust policies (trust principal:
-   `ecs-tasks.amazonaws.com`) and the inline policy. Use a `data` source to
-   look up the staging Secrets Manager secret ARN(s) so the inline policy is
-   scoped tightly:
+1. **Discovered live IAM shape** with the AWS CLI:
+   - Both roles share the standard `ecs-tasks.amazonaws.com` trust policy
+     (single `sts:AssumeRole` Allow statement) and the AWS-default
+     description "Allows ECS tasks to call AWS services on your behalf."
+   - The execution role had exactly one managed attachment as expected:
+     `AmazonECSTaskExecutionRolePolicy`.
+   - The task role had **two** managed attachments: the expected
+     `emoji-staging-read-secrets` inline policy plus an unexpected
+     AWS-managed `AmazonEC2ContainerServiceRole` attachment, almost
+     certainly auto-attached by the IAM console wizard when the
+     "ECS tasks" trust template was selected. We imported it as-is to keep
+     the T4 plan additive only and tracked its removal separately
+     (see "Tracked follow-up" below).
+   - Inline policy `emoji-staging-read-secrets` grants
+     `secretsmanager:GetSecretValue` and `secretsmanager:DescribeSecret`
+     on two ARN patterns, both with a trailing `*` (rotation-safe form):
+     `secret:emoji-app/staging/mongodb-uri*` and
+     `secret:emoji-app/staging/openai-api-key*`. The OpenAI ARN is
+     pre-granted even though that secret does not yet exist (pre-T0
+     Gap #1); IAM happily grants access to future ARNs.
+2. **Authored `modules/iam-ecs/`** with:
+   - `data "aws_iam_policy_document" "ecs_assume"` defining the shared
+     trust policy.
+   - `aws_iam_role.ecs_execution` and `aws_iam_role.ecs_task`, both setting
+     `description` to the AWS-default string so import is drift-free.
+   - `aws_iam_role_policy_attachment.exec_managed` for the expected
+     execution-role attachment.
+   - `aws_iam_role_policy_attachment.task_legacy_ecs_role` for the
+     unexpected legacy attachment, with a code comment marking it for
+     least-privilege removal.
+   - `data "aws_caller_identity" "current"` plus a `locals` block that
+     composes the wildcard-suffixed secret ARNs from
+     `(region, account, environment, secret_name)` parts. The module input
+     `managed_secret_names = ["mongodb-uri", "openai-api-key"]` lets the
+     env list secrets by short name without hardcoding ARNs.
+   - `data "aws_iam_policy_document" "read_secrets"` and
+     `aws_iam_role_policy.read_secrets` mirroring the live document
+     (same Sid, same actions, same resources).
+3. **Wired `module.iam_ecs` into `envs/staging/main.tf`** and exposed
+   `ecs_execution_role_arn` / `ecs_task_role_arn` outputs ready for T5/T6
+   to consume.
+4. **Imports succeeded on the first attempt** for all five entities:
 
-   ```hcl
-   data "aws_secretsmanager_secret" "mongodb_uri" {
-     name = "emoji-app/staging/mongodb-uri"
-   }
+   ```text
+   terraform import 'module.iam_ecs.aws_iam_role.ecs_execution' \
+     'emoji-staging-ecs-execution-role'
+   terraform import 'module.iam_ecs.aws_iam_role.ecs_task' \
+     'emoji-staging-ecs-task-role'
+   terraform import 'module.iam_ecs.aws_iam_role_policy_attachment.exec_managed' \
+     'emoji-staging-ecs-execution-role/arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+   terraform import 'module.iam_ecs.aws_iam_role_policy_attachment.task_legacy_ecs_role' \
+     'emoji-staging-ecs-task-role/arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole'
+   terraform import 'module.iam_ecs.aws_iam_role_policy.read_secrets' \
+     'emoji-staging-ecs-task-role:emoji-staging-read-secrets'
    ```
 
-2. Import each role and the inline policy by composite ID
-   (`role-name:policy-name` for inline policies).
-3. Reconcile `plan` until it's a no-op.
+5. **Reconciled the plan** with a pure additive baseline: `0 to add,
+   2 to change, 0 to destroy`. The two `~` updates were just default tags
+   (`app`, `environment`, `managed_by`) being added to the role
+   `tags_all`. Trust policies, managed attachments, and the inline
+   policy body all matched the live state on the first pass - no drift.
+   `terraform apply -auto-approve` completed cleanly:
+   `Apply complete! Resources: 0 added, 2 changed, 0 destroyed.`
+6. **Verified true no-op** with
+   `terraform plan -detailed-exitcode` returning `0`
+   (No changes. Your infrastructure matches the configuration.).
+7. `terraform state list` now shows 17 managed resources + 5 data
+   sources = 22 entries; the five new IAM entries:
 
-Exit criteria:
+   ```text
+   module.iam_ecs.aws_iam_role.ecs_execution
+   module.iam_ecs.aws_iam_role.ecs_task
+   module.iam_ecs.aws_iam_role_policy.read_secrets
+   module.iam_ecs.aws_iam_role_policy_attachment.exec_managed
+   module.iam_ecs.aws_iam_role_policy_attachment.task_legacy_ecs_role
+   ```
+
+8. The `ecs_execution_role_arn` and `ecs_task_role_arn` outputs render
+   correctly:
+
+   ```text
+   ecs_execution_role_arn = "arn:aws:iam::100641718971:role/emoji-staging-ecs-execution-role"
+   ecs_task_role_arn      = "arn:aws:iam::100641718971:role/emoji-staging-ecs-task-role"
+   ```
+
+Exit criteria - met:
 
 - `terraform plan` is a no-op for the IAM stack.
-- Role ARNs exposed as outputs for the ECS task definition.
+- Role ARNs exposed as outputs ready for the ECS task definition module.
+
+### Tracked follow-up: remove the legacy `AmazonEC2ContainerServiceRole` attachment
+
+The task role still has `AmazonEC2ContainerServiceRole` attached (auto-added
+by the IAM console wizard). It grants broad EC2/ELB actions that a Fargate
+task role does not need; least privilege says it should go.
+
+Removal is intentionally **not** part of T4 - it would have made the import
+plan a destructive change, and IAM trims under live workloads deserve a
+focused commit. Plan: in a small follow-up PR after T6 is wired and the
+service is healthy under Terraform, delete
+`module.iam_ecs.aws_iam_role_policy_attachment.task_legacy_ecs_role`,
+`terraform plan` to confirm only that attachment removes, and apply.
+
+Verify post-removal that the running task can still:
+
+- Read both Secrets Manager secrets (covered by the inline
+  `emoji-staging-read-secrets` policy, unchanged).
+- Pass health checks and continue serving traffic.
+
+### Tracked follow-up: prerequisites for the OpenAI secret (pre-T0 Gap #1)
+
+The inline `read_secrets` policy already grants
+`secretsmanager:GetSecretValue` on
+`...:secret:emoji-app/staging/openai-api-key*`, but the secret itself does
+not yet exist. Before T5 references it from the task definition, create
+the secret in Secrets Manager (or remove that ARN from
+`managed_secret_names` if we decide OpenAI calls happen via a different
+mechanism). Currently parked behind the
+`var.openai_secret_enabled = false` flag.
 
 ## Milestone T5: Task definition under Terraform (re-author)
 
