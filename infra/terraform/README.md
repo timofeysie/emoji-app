@@ -93,7 +93,7 @@ terraform apply
 | T3: ALB and target group (import) | done | `modules/alb/` |
 | T4: IAM roles and policies (import) | done | `modules/iam-ecs/` |
 | T5: Task definition under Terraform | done | `modules/ecs-service/` |
-| T6: ECS cluster, log group, service | pending | `modules/ecs-service/` |
+| T6: ECS cluster, log group, service | infra done; runtime validation pending image rebuild | `modules/ecs-service/`, `Dockerfile` |
 | T7: HTTPS and ACM | pending | `modules/acm/` |
 | T8: CI/CD plan and apply | pending | `.github/workflows/` |
 | T9: Support for later product milestones | pending | follow-on work |

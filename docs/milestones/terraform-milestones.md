@@ -771,36 +771,157 @@ checks afterwards.
 
 ## Milestone T6: ECS cluster, log group, and service (greenfield)
 
+Status: **Infrastructure complete** (2026-05-03);
+**runtime validation pending image rebuild and redeploy** (see follow-ups).
+
 Goal: Terraform owns the ECS cluster, log group, and the service that wires
 the new task definition to the ALB target group.
 
-Resources to create fresh (none of these exist yet):
+Resources brought under Terraform:
 
-- `aws_cloudwatch_log_group.app` -> `/ecs/emoji-staging`
-- `aws_ecs_cluster.staging` -> `emoji-staging-cluster`
-- `aws_ecs_service.app` -> `emoji-staging-service`
-  - launch type `FARGATE`
-  - desired count `1` for prototype
-  - subnets from default VPC data source
-  - security group from network module
-  - load balancer block referencing target group from ALB module
-  - depends on the task definition module output
+- `module.ecs_service.aws_cloudwatch_log_group.app`
+  -> `/ecs/emoji-staging-task` (imported; pre-existed from a prior console
+  attempt)
+- `module.ecs_service.aws_ecs_cluster.this` -> `emoji-staging-cluster`
+- `module.ecs_service.aws_ecs_cluster_capacity_providers.this`
+  -> FARGATE + FARGATE_SPOT, FARGATE default strategy
+- `module.ecs_service.aws_ecs_service.app` -> `emoji-staging-service`
+- `module.iam_ecs.aws_iam_role_policy.exec_read_secrets` (added during T6
+  to fix the secret-injection AccessDeniedException; see "Fixes captured
+  during T6" below)
 
-Steps:
+A new task definition revision (`:3`) was registered as a side effect of
+flipping `awslogs-create-group` off the container's log config. Revision
+`:2` is now `INACTIVE`.
 
-1. Implement the resources in `modules/ecs-service/`.
-2. `terraform apply` from `envs/staging/`.
-3. Validate using the existing checklist:
-   - tasks reach `RUNNING`
-   - target group health goes `healthy`
-   - ALB DNS responds on `/api/badges`
-   - DB-backed smoke flow from `docs/manual-tests.md` section 8 succeeds
-   - WebSocket connection upgrades successfully through the ALB
+Closure evidence (infrastructure side):
 
-Exit criteria:
+1. **Discovered greenfield boundary**:
+   `aws ecs list-clusters` returned an empty list and
+   `aws ecs list-services` confirmed no service existed. The CloudWatch
+   log group `/ecs/emoji-staging-task` *did* exist (created by ECS-side
+   auto-creation during a prior console run, `storedBytes: 0`), so we
+   imported it rather than create a duplicate.
+2. **Authored** `cluster.tf`, `log-group.tf`, `service.tf` in
+   `modules/ecs-service/`. The cluster enables Container Insights;
+   capacity providers use `FARGATE` (default) and `FARGATE_SPOT`. The
+   service runs in the same two-subnet pair as the ALB
+   (`local.alb_subnet_ids`), uses the ECS security group from
+   `module.network`, attaches `assign_public_ip = true` (default-VPC
+   subnets are public; tasks need IGW egress for ECR + Secrets Manager
+   without a NAT gateway), and enables the deployment circuit breaker
+   with `rollback = true`. `wait_for_steady_state = true` so apply fails
+   fast if the service can't stabilise.
+3. **Imported the existing log group** (`/ecs/emoji-staging-task`) in
+   one shot:
 
-- ECS service is fully managed by Terraform.
-- Manual console-only changes for staging compute are no longer required.
+   ```text
+   terraform import module.ecs_service.aws_cloudwatch_log_group.app /ecs/emoji-staging-task
+   ```
+
+4. **Two issues surfaced during the first apply**, both fixed in-flight:
+   - `awslogs-create-group: "false"` is rejected by ECS validation; the
+     option may only be set to `"true"` or omitted entirely. We removed
+     the key (the log group is a Terraform resource now, so the agent has
+     nothing to create). Fix lives in
+     `modules/ecs-service/task-definition.tf`.
+   - `aws_ecs_cluster_capacity_providers` failed with
+     `Unable to assume the service linked role` immediately after the
+     cluster was created. Cause: the AWS-managed `AWSServiceRoleForECS`
+     role is auto-created on first ECS use and IAM had not finished
+     propagating it. A retry succeeded once the role was permanent in the
+     account. Documented inline in `cluster.tf` so future fresh-account
+     runs know to retry rather than chase a phantom missing role.
+5. **Major fix found while waiting for steady state**: the deployment
+   circuit breaker fired after 4 failed task starts with
+   `AccessDeniedException` on `secretsmanager:GetSecretValue`. Root
+   cause: ECS uses the **execution role**, not the task role, to fetch
+   secrets at task start, but the imported manual setup attached
+   `emoji-staging-read-secrets` to the *task* role only. We added
+   `aws_iam_role_policy.exec_read_secrets` in `modules/iam-ecs/main.tf`
+   that attaches the same policy document to the execution role.
+   Following that one-resource apply, a manual
+   `aws ecs update-service --force-new-deployment` triggered tasks that
+   successfully pulled image, fetched both secrets, started the
+   container, and registered with the ALB target group.
+6. **Final state in Terraform**: 5 new resources under
+   `module.ecs_service` (cluster, capacity providers, log group, task
+   definition rev `:3`, service) plus 1 new resource under
+   `module.iam_ecs` (`exec_read_secrets`). All managed entities total
+   18 + 7 data sources.
+
+Runtime validation status:
+
+- Task placement: working (image pulled, secrets injected, container
+  started).
+- Target group registration: working (tasks register on
+  `emoji-app:3000`).
+- ALB health check on `/api/badges`: not yet exercised end-to-end
+  because the container exits with code 1 immediately after start with
+  `Error: Cannot find module 'tslib'`. This is an **image bug**, not a
+  Terraform bug, surfaced for the first time by the new ECS path. The
+  current App Runner service runs an older image
+  (`UpdatedAt: 2026-03-29`) that predates the regression.
+- DB-backed smoke flow and WebSocket validation: blocked on a healthy
+  task, therefore deferred to the post-image-fix verification pass.
+
+Exit criteria status:
+
+- ECS service is fully managed by Terraform: **met**.
+- Manual console-only changes for staging compute are no longer required:
+  **met** for everything except secret values themselves (deliberate -
+  see T4/T5 closure).
+- Runtime validation against the live ALB: **pending image rebuild**.
+
+To stop fargate burning hours on the crash loop, the service was scaled
+to 0 tasks via `aws ecs update-service --desired-count 0`. This creates
+an intentional drift: Terraform state has `desired_count = 1`, AWS has
+`0`. Once the image is rebuilt and pushed, a single
+`terraform apply` will re-set desired count to 1 and ECS will deploy
+the new image automatically.
+
+### Tracked follow-up: rebuild and push the application image
+
+Root cause of the runtime crash: `Dockerfile` was missing `node_modules`
+in the `runner` stage. `tsconfig.base.json` sets `importHelpers: true`,
+which makes the TypeScript-emitted JavaScript do `require("tslib")` at
+runtime; with no `node_modules` in the runner image, that require fails.
+
+Fix already applied in this milestone: added a `prod-deps` stage to
+`Dockerfile` that runs `npm ci --omit=dev` and copies its `node_modules`
+into the runner stage. Stays small (no dev deps), gives runtime requires
+somewhere to resolve from.
+
+Action items to close runtime validation:
+
+1. Locally: `npm run docker:build` (or `docker build -t emoji-app:staging-<date> .`).
+2. Push the image to ECR with a fresh tag (e.g. `staging-2026-05-03`).
+3. Update `image_uri` in `infra/terraform/envs/staging/terraform.tfvars`
+   to the new tag.
+4. `terraform apply`: registers a new task definition revision (`:4`),
+   forces a service redeployment, and (because we untainted earlier and
+   `desired_count` is back at 1 in code) ECS will deploy a new task.
+5. Run the original T6 validation checklist:
+   - Task reaches `RUNNING` and stays there.
+   - Target group health goes `healthy`.
+   - `curl http://<alb_dns_name>/api/badges` returns 200.
+   - DB-backed smoke flow from `docs/manual-tests.md` section 8 works.
+   - WebSocket connection upgrades successfully through the ALB.
+
+When all five pass, flip the milestone status from "infrastructure
+complete" to "complete" and date the line accordingly.
+
+### Tracked follow-up: cutover from App Runner to ECS
+
+App Runner service `emoji-app-service` is still RUNNING the older
+working image. Once T6 runtime validation succeeds against the ALB:
+
+1. Decide on DNS / URL strategy (custom domain via ACM in T7, or
+   continue exposing the ALB DNS directly until then).
+2. Deregister the App Runner service to stop paying twice for the same
+   workload.
+3. Remove App Runner-specific docs from the project (already partially
+   done in `docs/decicions/leaving-app-runner.md`).
 
 ## Milestone T7: HTTPS and ACM (greenfield)
 

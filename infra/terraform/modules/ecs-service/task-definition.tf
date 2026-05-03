@@ -54,14 +54,14 @@ locals {
 
       logConfiguration = {
         logDriver = "awslogs"
+        # The "awslogs-create-group" option is intentionally omitted: ECS
+        # only accepts that option when set to "true", and rejects "false"
+        # outright. Since aws_cloudwatch_log_group.app already exists when
+        # this revision is registered, the agent has nothing to create.
         options = {
-          awslogs-group         = var.log_group_name
+          awslogs-group         = aws_cloudwatch_log_group.app.name
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "ecs"
-          # T6 will create the log group as a Terraform resource and flip this
-          # to "false". Keeping "true" here so the module is self-sufficient
-          # when applied ahead of the log group.
-          awslogs-create-group = "true"
         }
       }
     }

@@ -14,7 +14,8 @@ provider "aws" {
 #   - T2 enables module.network                (active)
 #   - T3 enables module.alb                    (active)
 #   - T4 enables module.iam_ecs                (active)
-#   - T5 enables module.ecs_service task definition (active; cluster/service in T6)
+#   - T5 enables module.ecs_service task definition  (active)
+#   - T6 enables module.ecs_service cluster/log/service (active)
 #   - T7 enables module.acm
 #
 # Each block stays commented out until the corresponding module has resources
@@ -86,4 +87,10 @@ module "ecs_service" {
   cognito_user_pool_id  = var.cognito_user_pool_id
   cognito_app_client_id = var.cognito_app_client_id
   cognito_region        = var.cognito_region
+
+  # Tasks share the ALB's subnet pair so traffic does not cross AZ
+  # boundaries that the load balancer cannot reach.
+  subnet_ids            = local.alb_subnet_ids
+  ecs_security_group_id = module.network.ecs_security_group_id
+  target_group_arn      = module.alb.target_group_arn
 }

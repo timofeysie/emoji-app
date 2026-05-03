@@ -19,10 +19,21 @@ ENV VITE_COGNITO_DOMAIN=$VITE_COGNITO_DOMAIN \
 RUN npm run build:client
 RUN npm run build:server
 
+# Separate prod-only deps stage so the runner image carries the tiny set of
+# packages that tsc-output JavaScript actually requires at runtime (notably
+# tslib, which TypeScript emits a `require("tslib")` for whenever
+# importHelpers=true). Keeping this distinct from the dev-deps `deps` stage
+# means the final image stays small and free of build-time toolchains.
+FROM node:22-alpine AS prod-deps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev --ignore-scripts
+
 FROM node:22-alpine AS runner
 ENV NODE_ENV=production
 WORKDIR /app
-COPY --from=builder /app/dist/server ./
-COPY --from=builder /app/dist/client  ./client-react
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=builder   /app/dist/server  ./
+COPY --from=builder   /app/dist/client   ./client-react
 EXPOSE 3000
 CMD ["node", "main.js"]

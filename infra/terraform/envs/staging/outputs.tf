@@ -63,6 +63,17 @@ output "task_definition_revision" {
   value       = module.ecs_service.task_definition_revision
 }
 
-# Additional outputs are added as later modules come online:
-#   - ecs_cluster_name
-#   - ecs_service_name
+output "ecs_cluster_name" {
+  description = "ECS cluster name."
+  value       = module.ecs_service.cluster_name
+}
+
+output "ecs_service_name" {
+  description = "ECS service name."
+  value       = module.ecs_service.service_name
+}
+
+output "ecs_log_group_name" {
+  description = "CloudWatch log group the application writes to."
+  value       = module.ecs_service.log_group_name
+}

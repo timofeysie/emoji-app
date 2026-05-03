@@ -49,9 +49,72 @@ variable "task_memory" {
 }
 
 variable "log_group_name" {
-  description = "CloudWatch log group for the awslogs driver. T6 will create this as a Terraform resource."
+  description = "CloudWatch log group for the awslogs driver. The module creates this resource and the task definition references it via attribute (not variable) so the two never drift."
   type        = string
   default     = "/ecs/emoji-staging-task"
+}
+
+variable "log_retention_days" {
+  description = "CloudWatch Logs retention for the application log group. 30 is a reasonable staging default; lower for cost, higher (or 0 = never expire) for audit needs."
+  type        = number
+  default     = 30
+}
+
+variable "cluster_name" {
+  description = "ECS cluster name."
+  type        = string
+  default     = "emoji-staging-cluster"
+}
+
+variable "enable_container_insights" {
+  description = "Enable CloudWatch Container Insights on the cluster. Adds a small per-task cost in exchange for resource-level metrics."
+  type        = bool
+  default     = true
+}
+
+variable "service_name" {
+  description = "ECS service name."
+  type        = string
+  default     = "emoji-staging-service"
+}
+
+variable "desired_count" {
+  description = "Number of running tasks the service should maintain. Staging defaults to 1; bump in T9 once autoscaling is wired."
+  type        = number
+  default     = 1
+}
+
+variable "subnet_ids" {
+  description = "Subnets the ECS tasks attach ENIs in. Should match the ALB's subnets so traffic doesn't cross AZ boundaries unnecessarily."
+  type        = list(string)
+}
+
+variable "ecs_security_group_id" {
+  description = "Security group attached to the task ENIs. Must allow ingress on the container port from the ALB SG."
+  type        = string
+}
+
+variable "target_group_arn" {
+  description = "ALB target group the service registers running tasks with."
+  type        = string
+}
+
+variable "health_check_grace_period_seconds" {
+  description = "Seconds the service ignores ALB health checks for newly started tasks. Tune up if cold starts are slow."
+  type        = number
+  default     = 60
+}
+
+variable "enable_execute_command" {
+  description = "Enable ECS Exec for the service so we can shell into staging tasks for debugging."
+  type        = bool
+  default     = true
+}
+
+variable "wait_for_steady_state" {
+  description = "If true, terraform apply blocks until the service reaches steady state. Useful in staging; consider disabling in CI for faster apply turnaround."
+  type        = bool
+  default     = true
 }
 
 variable "execution_role_arn" {

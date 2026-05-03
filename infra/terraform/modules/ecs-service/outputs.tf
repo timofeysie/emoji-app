@@ -19,6 +19,36 @@ output "container_name" {
 }
 
 output "container_port" {
-  description = "Container port exposed for the ALB target group registration in T6."
+  description = "Container port exposed for the ALB target group registration."
   value       = var.container_port
+}
+
+output "cluster_name" {
+  description = "ECS cluster name."
+  value       = aws_ecs_cluster.this.name
+}
+
+output "cluster_arn" {
+  description = "ECS cluster ARN."
+  value       = aws_ecs_cluster.this.arn
+}
+
+output "service_name" {
+  description = "ECS service name."
+  value       = aws_ecs_service.app.name
+}
+
+output "service_arn" {
+  description = "ECS service ARN."
+  value       = aws_ecs_service.app.id
+}
+
+output "log_group_name" {
+  description = "Application log group name (matches what the task definition writes to)."
+  value       = aws_cloudwatch_log_group.app.name
+}
+
+output "log_group_arn" {
+  description = "Application log group ARN."
+  value       = aws_cloudwatch_log_group.app.arn
 }

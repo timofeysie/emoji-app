@@ -64,3 +64,18 @@ resource "aws_iam_role_policy" "read_secrets" {
   role   = aws_iam_role.ecs_task.id
   policy = data.aws_iam_policy_document.read_secrets.json
 }
+
+# Secret injection at task start happens via the EXECUTION role, not the task
+# role. The manually created setup attached read-secrets to the task role only,
+# which silently broke the moment ECS tried to start a task: the agent could
+# pull the image but failed at GetSecretValue with AccessDeniedException. We
+# attach the same policy here so the execution role can resolve the secrets
+# referenced in the container definition's `secrets` block. Tracked follow-up:
+# the duplicate policy on the task role is now strictly redundant for this app
+# (no runtime AWS SDK calls reference Secrets Manager from inside the
+# container) and could be removed after T6 stabilises.
+resource "aws_iam_role_policy" "exec_read_secrets" {
+  name   = "emoji-staging-exec-read-secrets"
+  role   = aws_iam_role.ecs_execution.id
+  policy = data.aws_iam_policy_document.read_secrets.json
+}
