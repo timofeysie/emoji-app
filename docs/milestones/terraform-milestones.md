@@ -634,54 +634,140 @@ mechanism). Currently parked behind the
 
 ## Milestone T5: Task definition under Terraform (re-author)
 
+Status: **Complete** (2026-05-03).
+
 Goal: Terraform manages future revisions of the `emoji-staging-task`
 task definition family.
 
 Note on import: AWS task definitions are **immutable revisions**, so importing
-a single revision is low value. Instead, we'll re-author the task definition
-in Terraform and let Terraform create the next revision. The currently
-running revision stays as-is until the ECS service is updated.
+a single revision is low value. Instead, T5 re-authors the task definition
+in Terraform and lets Terraform register the next revision. The previously
+registered manual revision (`:1`) stays in the family until pruned; the new
+Terraform-managed revision is `:2`. T6 will point the ECS service at `:2`
+(or whichever revision Terraform last produced).
 
-Prerequisites surfaced in pre-T0:
+Prerequisites resolved before this step:
 
-- **OpenAI secret must exist before this step.** `pre-T0.md` shows only
-  `emoji-app/staging/mongodb-uri` exists today; there is no
-  `emoji-app/staging/openai-api-key`. Pick one of:
-  - create the OpenAI secret in Secrets Manager (preferred, same pattern as
-    Mongo URI), or
-  - omit `OPENAI_API_KEY` from the staging task definition (the AI chat
-    panel degrades but core game flow works), or
-  - pass it as a plain env var (least secure, only acceptable as a stop-gap).
-- **Image pinning decision.** The current ECR repo has only `:latest` as a
-  tag. Decide before `apply` whether `var.image_uri` resolves to:
-  - a digest (e.g.
-    `100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app@sha256:ca33d43f...`)
-    -- recommended for immutable rollbacks, or
-  - a versioned tag like `staging-2026-04-27` -- easier to read in logs.
-  Avoid pinning to `:latest` once Terraform manages the task def.
+- **OpenAI secret created** (pre-T0 Gap #1 follow-up): the secret
+  `emoji-app/staging/openai-api-key` was added in Secrets Manager with ARN
+  `...:secret:emoji-app/staging/openai-api-key-vFAit2`. The IAM inline
+  `read_secrets` policy already wildcards both ARNs, so no IAM change was
+  needed.
+- **Image pinning decision**: continued with the immutable tag
+  `emoji-app:staging-2026-04-27` (set in `terraform.tfvars`). T8/CI will
+  swap to digest pinning once the build pipeline emits a digest output.
 
-Steps:
+Latent bug found and fixed during re-authoring:
 
-1. In `modules/ecs-service/task-definition.tf`, define
-   `aws_ecs_task_definition.this` with:
-   - family `emoji-staging-task`
-   - launch type `FARGATE`
-   - CPU/memory matching current revision
-   - container `emoji-app` with image URI from `var.image_uri`
-   - environment variables: `NODE_ENV`, `HOST`, `PORT`,
-     `COGNITO_USER_POOL_ID`, `COGNITO_APP_CLIENT_ID`, `COGNITO_REGION`
-   - secrets: `MONGODB_URI` (and `OPENAI_API_KEY` only if the secret exists)
-   - log configuration: `awslogs` -> `/ecs/emoji-staging`
-2. Add `var.image_uri` so we can promote a known image from CI.
-3. Initial `terraform apply` will create a **new revision** (`:N+1`).
-   The running service still pins `:N` until T6.
+- The manually registered revision `:1` referenced `MONGODB_URI` using the
+  bare secret ARN, which on a JSON-shaped Secrets Manager secret would
+  inject the entire JSON blob (e.g. `{"MONGODB_URI":"mongodb://..."}`) as
+  the env var, and `mongoose.connect()` would have thrown on parse.
+  Revision `:1` was never actually run because no ECS service existed yet,
+  so the bug stayed dormant. Both staging secrets are JSON key/value
+  pairs, so the Terraform-managed revision pins `valueFrom` to
+  `<arn>:MONGODB_URI::` and `<arn>:OPENAI_API_KEY::` so ECS extracts only
+  the value field.
 
-Exit criteria:
+Closure evidence:
 
-- `terraform apply` produces a new task definition revision.
-- The new revision is structurally equivalent to the manual one (modulo any
-  resolved gaps above).
-- Running ECS workload is undisturbed.
+1. **Discovered live shape of revision `:1`** with
+   `aws ecs describe-task-definition --task-definition emoji-staging-task`.
+   Captured family, CPU/memory (`1024`/`3072`), launch type
+   (`FARGATE`), runtime platform (`X86_64`/`LINUX`), all seven env vars
+   (`PORT`, `HOST`, `COGNITO_REGION`, `NODE_ENV`, `COGNITO_APP_CLIENT_ID`,
+   `DISABLE_AUTH`, `COGNITO_USER_POOL_ID`), the single
+   `MONGODB_URI` secret, and the awslogs config
+   (`/ecs/emoji-staging-task`, stream prefix `ecs`, auto-create true).
+2. **Probed both secret payload formats** without echoing the values:
+   first character of each `SecretString` was `{`, confirming both are
+   JSON key/value pairs and motivating the JSON-pointer fix described
+   above.
+3. **Authored `modules/ecs-service/`** containing only the task
+   definition for now (cluster/log group/service follow in T6):
+   - `task-definition.tf` builds the container definition list via a
+     `locals` block so the resource block reads top-down. Default tags
+     flow through the provider, so `tags_all` becomes
+     `{app, environment, managed_by}` automatically.
+   - `variables.tf` exposes everything the env or future modules can
+     swap: `image_uri`, `task_cpu`, `task_memory`, `container_port`,
+     `log_group_name`, the role ARNs, both secret ARNs (the OpenAI one
+     defaults to `null` so a degraded "no AI" task definition is still
+     possible), and the Cognito triplet.
+   - `outputs.tf` exposes `task_definition_arn`,
+     `task_definition_family`, `task_definition_revision`,
+     `container_name`, and `container_port` so the T6 service module can
+     wire them into the `load_balancer` block without extra plumbing.
+4. **Wired `module.ecs_service` into `envs/staging/main.tf`**, added two
+   `data "aws_secretsmanager_secret"` lookups (the OpenAI one gated on
+   `var.openai_secret_enabled` via `count`), and exposed the new outputs.
+5. **Updated `terraform.tfvars`**:
+   - `openai_secret_enabled = true` now that the OpenAI secret exists.
+   - Filled in the real Cognito values (`ap-southeast-2_Myj579Wg2`,
+     `7d0kjtsi0h8kjhk2fg1ee64h55`) so they live in code rather than
+     drifting silently in the AWS console.
+6. **`terraform plan`** produced a clean `1 to add, 0 to change,
+   0 to destroy` for `module.ecs_service.aws_ecs_task_definition.this`,
+   with both `valueFrom` strings showing the desired
+   `:MONGODB_URI::` / `:OPENAI_API_KEY::` JSON-pointer suffixes.
+7. **`terraform apply -auto-approve`** registered revision `:2`
+   (`Apply complete! Resources: 1 added, 0 changed, 0 destroyed.`).
+   Outputs after apply:
+
+   ```text
+   task_definition_arn      = "arn:aws:ecs:ap-southeast-2:100641718971:task-definition/emoji-staging-task:2"
+   task_definition_family   = "emoji-staging-task"
+   task_definition_revision = 2
+   ```
+
+8. **Verified rev `:2` against AWS** with
+   `aws ecs list-task-definitions --family-prefix emoji-staging-task`
+   (both `:1` and `:2` are ACTIVE) and with a full `describe-task-definition`
+   query that confirmed:
+   - `Cpu = 1024`, `Memory = 3072`, FARGATE, X86_64/LINUX.
+   - Image `100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:staging-2026-04-27`.
+   - All seven env vars present.
+   - Both secrets render with JSON pointers, e.g.
+     `arn:...:secret:emoji-app/staging/mongodb-uri-1zfIGT:MONGODB_URI::`.
+   - Log group `/ecs/emoji-staging-task` with stream prefix `ecs`.
+9. **Final `terraform plan -detailed-exitcode` returned `0`** - true
+   no-op, no drift between code and the registered revision.
+
+Exit criteria - met:
+
+- `terraform apply` produced a new task definition revision (`:2`).
+- The new revision is structurally equivalent to the manual `:1` modulo
+  the deliberate JSON-pointer fix and the addition of `OPENAI_API_KEY`.
+- The currently running ECS workload is undisturbed because no ECS
+  service is yet wired to this family (T6 will create it).
+
+### Tracked follow-up: the manual revision `:1` is now stale
+
+Revision `:1` will never be used. T6 will register the service against
+whichever revision Terraform last produced, which is `:2`. We can leave
+`:1` in place (it doesn't cost anything) or call
+`aws ecs deregister-task-definition --task-definition emoji-staging-task:1`
+once the service is running healthily on `:2`. Not required; tracked here
+so it isn't forgotten during the audit pass after T6.
+
+### Tracked follow-up: rotate locally exposed credentials
+
+While determining the env var layout for T5 we read `.env`, which
+contains the real OpenAI API key and the Atlas Mongo password.
+That content is now in chat history. Action:
+
+- **OpenAI**: revoke the leaked `sk-proj-...` key in the OpenAI dashboard
+  and create a fresh one. Update both `.env` (local dev) and
+  `emoji-app/staging/openai-api-key` (paste new value into the existing
+  secret - this rotates in place without changing the ARN).
+- **Atlas**: rotate the password for the `timcurchod_db_user` Atlas DB
+  user, regenerate the connection string, and update both `.env` and
+  `emoji-app/staging/mongodb-uri` (paste new value).
+
+Both rotations are pure secret-value swaps; they require no Terraform or
+IAM changes because the inline policy is scoped to the secret ARN, not
+to the secret value. Verify by running the Mongo and OpenAI smoke
+checks afterwards.
 
 ## Milestone T6: ECS cluster, log group, and service (greenfield)
 

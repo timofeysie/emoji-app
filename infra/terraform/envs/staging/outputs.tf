@@ -48,7 +48,21 @@ output "ecs_task_role_arn" {
   value       = module.iam_ecs.task_role_arn
 }
 
+output "task_definition_arn" {
+  description = "ARN (with revision) of the latest Terraform-managed task definition."
+  value       = module.ecs_service.task_definition_arn
+}
+
+output "task_definition_family" {
+  description = "Task definition family name."
+  value       = module.ecs_service.task_definition_family
+}
+
+output "task_definition_revision" {
+  description = "Numeric revision Terraform last registered."
+  value       = module.ecs_service.task_definition_revision
+}
+
 # Additional outputs are added as later modules come online:
 #   - ecs_cluster_name
 #   - ecs_service_name
-#   - task_definition_arn

@@ -92,7 +92,7 @@ terraform apply
 | T2: Network and security baseline (import) | done | `modules/network/` |
 | T3: ALB and target group (import) | done | `modules/alb/` |
 | T4: IAM roles and policies (import) | done | `modules/iam-ecs/` |
-| T5: Task definition under Terraform | pending | `modules/ecs-service/` |
+| T5: Task definition under Terraform | done | `modules/ecs-service/` |
 | T6: ECS cluster, log group, service | pending | `modules/ecs-service/` |
 | T7: HTTPS and ACM | pending | `modules/acm/` |
 | T8: CI/CD plan and apply | pending | `.github/workflows/` |
