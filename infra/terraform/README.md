@@ -83,6 +83,82 @@ Apply (only after T8 lands, this is done by CI rather than from a laptop):
 terraform apply
 ```
 
+## Deploy a new container image (ECR + ECS)
+
+After you change application code or the `Dockerfile`, ECS needs a new image
+in ECR and Terraform needs to point the task definition at that tag.
+
+Prefer an **immutable tag** (e.g. `staging-2026-05-03`) instead of `:latest`,
+so `terraform plan` always matches a specific image you can roll back to.
+
+1. **Build** the image locally (from the repo root). Pass Cognito `VITE_*`
+   build args if the client bundle must match staging hosted UI settings.
+
+   ```powershell
+   cd <repo-root>
+   docker build -t emoji-app:staging-2026-05-03 `
+     --build-arg VITE_COGNITO_DOMAIN="https://<your-pool>.auth.<region>.amazoncognito.com" `
+     --build-arg VITE_COGNITO_CLIENT_ID="<app-client-id>" `
+     --build-arg VITE_COGNITO_SCOPES="openid email profile" `
+     .
+   ```
+
+2. **Log in to ECR** (once per shell session, or when the token expires):
+
+   ```powershell
+   aws ecr get-login-password --region ap-southeast-2 |
+     docker login --username AWS --password-stdin 100641718971.dkr.ecr.ap-southeast-2.amazonaws.com
+   ```
+
+3. **Tag and push** the same tag you will put in Terraform:
+
+   ```powershell
+   $registry = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com"
+   $tag = "staging-2026-05-03"
+   docker tag "emoji-app:$tag" "$registry/emoji-app:$tag"
+   docker push "$registry/emoji-app:$tag"
+   ```
+
+   If you already built and only tagged `:latest`, you can add a second tag
+   without rebuilding: `docker tag emoji-app:latest "$registry/emoji-app:$tag"`
+   then `docker push "$registry/emoji-app:$tag"`.
+
+4. **Set `image_uri`** in `envs/staging/terraform.tfvars` to the full URI:
+
+   ```text
+   100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:staging-2026-05-03
+   ```
+
+5. **Apply** from the staging env (registers a new task definition revision
+   and updates the service):
+
+   ```powershell
+   cd infra/terraform/envs/staging
+   terraform plan
+   terraform apply
+   ```
+
+6. **Smoke-test the ALB** — get the DNS name, then hit the health route.
+
+   ```powershell
+   terraform output -raw alb_dns_name
+   ```
+
+   On Windows, use **`curl.exe`** (not the `curl` alias) so you get real curl
+   behavior:
+
+   ```powershell
+   curl.exe -sS -w "\nHTTP %{http_code}\n" "http://$(terraform output -raw alb_dns_name)/api/badges"
+   ```
+
+   With a literal hostname (example from your environment):
+
+   ```powershell
+   curl.exe -sS -w "\nHTTP %{http_code}\n" "http://emoji-load-balancer-28533277.ap-southeast-2.elb.amazonaws.com/api/badges"
+   ```
+
+   Expect HTTP **200** if the target group health check path is healthy.
+
 ## Status by milestone
 
 | Milestone | Status | Touches |

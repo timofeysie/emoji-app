@@ -3,7 +3,7 @@ environment = "staging"
 
 # Pinned to the immutable tag created in pre-T0. CI in T8 will switch
 # to digest pinning.
-image_uri = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:staging-2026-04-27"
+image_uri = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:staging-2026-05-03"
 
 # Flipped to true after creating emoji-app/staging/openai-api-key in
 # Secrets Manager (see pre-T0 gap #1, resolved before T5).
