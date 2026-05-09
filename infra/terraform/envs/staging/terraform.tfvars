@@ -1,6 +1,9 @@
 aws_region  = "ap-southeast-2"
 environment = "staging"
 
+certificate_domain_name  = "emoji-staging.kogs.link"
+route53_hosted_zone_name = "kogs.link"
+
 # Pinned to the immutable tag created in pre-T0. CI in T8 will switch
 # to digest pinning.
 image_uri = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:staging-2026-05-03"

@@ -16,10 +16,22 @@ provider "aws" {
 #   - T4 enables module.iam_ecs                (active)
 #   - T5 enables module.ecs_service task definition  (active)
 #   - T6 enables module.ecs_service cluster/log/service (active)
-#   - T7 enables module.acm
+#   - T7 enables module.acm                    (active)
 #
 # Each block stays commented out until the corresponding module has resources
 # defined. This keeps `terraform plan` clean during the import-first phase.
+
+data "aws_route53_zone" "primary" {
+  name         = var.route53_hosted_zone_name
+  private_zone = false
+}
+
+module "acm" {
+  source = "../../modules/acm"
+
+  certificate_domain_name = var.certificate_domain_name
+  route53_zone_id         = data.aws_route53_zone.primary.zone_id
+}
 
 module "network" {
   source      = "../../modules/network"
@@ -43,6 +55,10 @@ module "alb" {
   vpc_id                = module.network.vpc_id
   subnet_ids            = local.alb_subnet_ids
   alb_security_group_id = module.network.alb_security_group_id
+
+  acm_certificate_arn = module.acm.certificate_arn
+  app_dns_name        = var.certificate_domain_name
+  route53_zone_id     = data.aws_route53_zone.primary.zone_id
 }
 
 module "iam_ecs" {

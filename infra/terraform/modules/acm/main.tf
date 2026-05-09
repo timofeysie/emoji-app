@@ -1,17 +1,34 @@
-# ACM module
-#
-# Owns:
-#   - ACM certificate (DNS-validated) for the staging domain.
-#   - HTTPS:443 listener on the ALB (added once a domain is decided).
-#   - Optional HTTP-to-HTTPS redirect on the existing port 80 listener.
-#
-# Status: skeleton only. Resources are added in Milestone T7.
-#
-# Inputs (planned):
-#   - domain_name (string)
-#   - alb_arn (string)
-#   - target_group_arn (string)
-#
-# Outputs (planned):
-#   - certificate_arn
-#   - https_listener_arn
+# T7: ACM public certificate (DNS validation in Route 53).
+# ALB listeners and the public alias record live in module.alb to avoid a
+# Terraform dependency cycle (alias needs the ALB; HTTPS needs the cert).
+
+resource "aws_acm_certificate" "app" {
+  domain_name       = var.certificate_domain_name
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_route53_record" "validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.app.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  allow_overwrite = true
+  zone_id         = var.route53_zone_id
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+}
+
+resource "aws_acm_certificate_validation" "app" {
+  certificate_arn         = aws_acm_certificate.app.arn
+  validation_record_fqdns = [for r in aws_route53_record.validation : r.fqdn]
+}

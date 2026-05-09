@@ -39,3 +39,13 @@ variable "cognito_region" {
   type        = string
   default     = "ap-southeast-2"
 }
+
+variable "certificate_domain_name" {
+  description = "Staging public hostname (FQDN). Used for ACM DNS cert and Route 53 alias → ALB."
+  type        = string
+}
+
+variable "route53_hosted_zone_name" {
+  description = "Public Route 53 hosted zone name for DNS validation and alias (e.g. kogs.link)."
+  type        = string
+}

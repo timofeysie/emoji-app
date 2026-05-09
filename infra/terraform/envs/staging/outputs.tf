@@ -38,6 +38,21 @@ output "http_listener_arn" {
   value       = module.alb.http_listener_arn
 }
 
+output "https_listener_arn" {
+  description = "ARN of the HTTPS:443 listener."
+  value       = module.alb.https_listener_arn
+}
+
+output "staging_app_url" {
+  description = "Public HTTPS URL for the staging host (after DNS and TLS propagate)."
+  value       = module.alb.app_url_https
+}
+
+output "acm_certificate_arn" {
+  description = "ACM certificate ARN (DNS-validated)."
+  value       = module.acm.certificate_arn
+}
+
 output "ecs_execution_role_arn" {
   description = "ARN of the ECS task execution role."
   value       = module.iam_ecs.execution_role_arn
