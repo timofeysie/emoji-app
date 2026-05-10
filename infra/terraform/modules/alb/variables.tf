@@ -18,8 +18,14 @@ variable "alb_security_group_id" {
   type        = string
 }
 
+variable "enable_https_listener" {
+  description = "If true, create :443 listener and redirect :80→HTTPS. Must be known at plan time (do not derive from ACM output alone)."
+  type        = bool
+  default     = false
+}
+
 variable "acm_certificate_arn" {
-  description = "ACM certificate ARN for HTTPS :443 and HTTP→HTTPS redirect. Leave empty for HTTP-forward-only :80."
+  description = "ACM certificate ARN for the HTTPS listener. Required when enable_https_listener is true; may be unknown until apply."
   type        = string
   default     = ""
 }

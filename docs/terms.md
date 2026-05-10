@@ -11,6 +11,7 @@ the roadmap. It is not a legal document; it is a communication aid.
 - [Docker (often used when people say “Docker image”)](#docker-often-used-when-people-say-docker-image)
 - [Workload (compute workload)](#workload-compute-workload)
 - [Amazon ECS (Elastic Container Service)](#amazon-ecs-elastic-container-service)
+- [ACM (AWS Certificate Manager)](#acm-aws-certificate-manager)
 - [Fargate](#fargate)
 - [Task (ECS task)](#task-ecs-task)
 - [Service (ECS service)](#service-ecs-service)
@@ -78,6 +79,18 @@ Examples: “the API service,” “the background job worker,” “the real-ti
 An AWS service that **runs and manages containerized applications**. Think of it as the
 **orchestrator** that starts/stops app instances, places them in the network, and keeps
 the desired number running.
+
+## ACM (AWS Certificate Manager)
+
+AWS service that provisions and manages **TLS certificates** for HTTPS—the
+cryptographic layer that proves the server’s hostname and encrypts traffic in
+transit.
+
+In AWS, HTTPS on an Application Load Balancer is usually wired as: **ACM issues
+(or imports) the certificate**, you prove control of the domain (often via
+**DNS validation** records), then AWS attaches the certificate to an **HTTPS
+listener** (`:443`). Think of ACM as **the DMV for website identity papers**—it
+helps browsers trust “this HTTPS site really belongs to this domain owner.”
 
 ## Fargate
 

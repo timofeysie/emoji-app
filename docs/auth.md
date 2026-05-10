@@ -54,9 +54,9 @@ afternoon.
 
 ## Recommended: AWS Cognito
 
-Cognito is the right long-term choice given the App Runner deployment: it
-stays within AWS, has the most generous free tier, and token verification
-requires no third-party service call at runtime — just a local JWKS cache.
+Cognito is the right long-term choice for AWS-hosted deployments (for example **App Runner**
+or **ECS behind an ALB**): it stays within AWS, has the most generous free tier, and token
+verification requires no third-party service call at runtime — just a local JWKS cache.
 
 ### Cognito concepts
 
@@ -150,9 +150,15 @@ Cognito** → **User pools**.
    - **Callback URLs** (must match the app exactly):  
      - `http://localhost:5200/auth/callback`  
      - Your production origin, e.g. `https://<your-app-host>/auth/callback`  
+     - **ECS staging** (emoji-app Terraform + custom domain):  
+       `https://emoji-staging.kogs.link/auth/callback`  
    - **Sign-out URLs**:  
      - `http://localhost:5200/`  
      - Your production origin base URL if applicable.  
+     - **ECS staging**: `https://emoji-staging.kogs.link/`  
+   Cognito allows **multiple** URLs on one app client; keep localhost and append each
+   deployed hostname you use (`*.awsapprunner.com`, `*.elb.amazonaws.com`, or custom
+   domains — always **HTTPS** for non-local origins).  
    - If the console offers **PKCE** for public clients, enable it (this app uses
      PKCE in the browser).  
    - Save and copy **Client ID** → this is both `COGNITO_APP_CLIENT_ID` and

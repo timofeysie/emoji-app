@@ -56,9 +56,10 @@ module "alb" {
   subnet_ids            = local.alb_subnet_ids
   alb_security_group_id = module.network.alb_security_group_id
 
-  acm_certificate_arn = module.acm.certificate_arn
-  app_dns_name        = var.certificate_domain_name
-  route53_zone_id     = data.aws_route53_zone.primary.zone_id
+  enable_https_listener = true
+  acm_certificate_arn   = module.acm.certificate_arn
+  app_dns_name          = var.certificate_domain_name
+  route53_zone_id       = data.aws_route53_zone.primary.zone_id
 }
 
 module "iam_ecs" {

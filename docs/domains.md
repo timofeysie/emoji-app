@@ -1,12 +1,32 @@
 # Domains and URLs
 
-This app is deployed on **AWS App Runner** (see [deployments.md](./deployments.md)).
-Use this guide to find the **default service URL** and optionally attach a **custom
-domain**.
+Deployed URLs vary by environment: historically **AWS App Runner**; **staging**
+for emoji-app may use **ECS + ALB** with a **custom domain** managed in Terraform
+(ACM + Route 53 — see [`infra/terraform/`](../infra/terraform/README.md)).
+
+Use this guide to find **default vs custom URLs** and to update **Amazon Cognito** callback /
+sign-out allowlists whenever the public hostname changes.
 
 ---
 
-## Find your current deployed URL (default domain)
+## ECS staging (HTTPS custom domain)
+
+For the Terraform staging stack (`envs/staging/`), public HTTPS uses:
+
+- **`https://emoji-staging.kogs.link`**
+
+In Cognito (**App integration** → your SPA **app client**), add exactly:
+
+| Setting                           | URL                                                         |
+| --------------------------------- | ----------------------------------------------------------- |
+| **Allowed callback URLs**         | `https://emoji-staging.kogs.link/auth/callback`             |
+| **Allowed sign-out URLs**         | `https://emoji-staging.kogs.link/`                          |
+
+Paths and **`https`** scheme must match (`/auth/callback`, base URL without path for sign-out unless you change the app). You may keep **additional** origins (localhost, App Runner, raw ALB URL) on the same client.
+
+---
+
+## Find your current deployed URL (default domain — App Runner)
 
 ### AWS Management Console
 

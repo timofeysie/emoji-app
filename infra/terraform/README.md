@@ -94,6 +94,10 @@ so `terraform plan` always matches a specific image you can roll back to.
 1. **Build** the image locally (from the repo root). Pass Cognito `VITE_*`
    build args if the client bundle must match staging hosted UI settings.
 
+   Cognito → app client callback / sign-out must include your **public HTTPS origin**. For ECS
+   staging with a custom domain, add **`https://emoji-staging.kogs.link/auth/callback`** and
+   **`https://emoji-staging.kogs.link/`** (see [`docs/auth.md`](../../docs/auth.md)).
+
    ```powershell
    cd <repo-root>
    docker build -t emoji-app:staging-2026-05-03 `

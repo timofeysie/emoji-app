@@ -531,10 +531,14 @@ before `npm run build:client`. Alternatively, add a `.env.production` at the
 repo root **in the build context** (not committed with secrets) so Vite picks
 it up via `envDir: '..'` in `client/vite.config.ts`.
 
-Register callback and logout URLs in the Cognito app client, for example:
+Register callback and logout URLs in the Cognito app client (add every origin you rely on):
 
-- `https://<your-apprunner-host>/auth/callback`
-- `https://<your-apprunner-host>/` (sign-out redirect)
+- `http://localhost:5200/auth/callback` and `http://localhost:5200/` (local development)
+- `https://<your-apprunner-host>/auth/callback` and `https://<your-apprunner-host>/` (App Runner default domain)
+- `https://emoji-staging.kogs.link/auth/callback` and `https://emoji-staging.kogs.link/` (ECS + ALB **staging**, custom hostname from Terraform milestone T7)
+
+The SPA computes `redirect_uri` from **`window.location.origin`**, so a new HTTPS hostname only
+needs to be added in Cognito—you do **not** need to rebuild the image for callback allowlist changes.
 
 ### Local development without Cognito
 
