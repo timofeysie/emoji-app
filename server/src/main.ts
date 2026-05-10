@@ -23,18 +23,8 @@ async function bootstrap(): Promise<void> {
   expressApp.use(express.json());
   expressApp.use(requestLoggingMiddleware);
 
-  const nestApp = await NestFactory.create(
-    AppModule,
-    new ExpressAdapter(expressApp),
-    { bodyParser: false },
-  );
-  await nestApp.init();
-
-  const httpServer = nestApp.getHttpServer();
-  const wsServer = new WebSocketServer({ server: httpServer, path: '/ws' });
-  const badgeStateService = nestApp.get(BadgeStateService);
-  badgeStateService.setWebSocketServer(wsServer);
-
+  // Serve the Vite-built SPA BEFORE Nest attaches its router. Otherwise Nest handles
+  // unmatched GET routes first and returns JSON 404 ("Cannot GET /") instead of index.html.
   const staticPath = path.join(__dirname, 'client-react');
   if (existsSync(staticPath)) {
     expressApp.use(express.static(staticPath));
@@ -46,6 +36,18 @@ async function bootstrap(): Promise<void> {
       res.sendFile(path.join(staticPath, 'index.html'));
     });
   }
+
+  const nestApp = await NestFactory.create(
+    AppModule,
+    new ExpressAdapter(expressApp),
+    { bodyParser: false },
+  );
+  await nestApp.init();
+
+  const httpServer = nestApp.getHttpServer();
+  const wsServer = new WebSocketServer({ server: httpServer, path: '/ws' });
+  const badgeStateService = nestApp.get(BadgeStateService);
+  badgeStateService.setWebSocketServer(wsServer);
 
   await nestApp.listen(port, host);
   console.log(`[ ready ] http://${host}:${port}`);
