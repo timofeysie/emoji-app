@@ -21,6 +21,8 @@ infra/terraform/
     iam-ecs/        # exec role, task role, inline policies (T4)
     ecs-service/    # cluster, log group, task def, service (T5/T6)
     acm/            # cert + HTTPS listener (T7)
+  ci/
+    T8-setup-github-oidc.md   # IAM OIDC + GH secret checklist (T8)
   envs/
     staging/        # only environment with real resources during the prototype
       versions.tf       # required_version + provider versions
@@ -77,9 +79,17 @@ Preview a change without applying it:
 terraform plan
 ```
 
-Apply (only after T8 lands, this is done by CI rather than from a laptop):
+For staging CI (T8):
+
+- Workflow: **`../../.github/workflows/terraform-staging.yml`** from repo root.
+- One-time AWS↔GitHub OIDC checklist: **`ci/T8-setup-github-oidc.md`**.
+
+After **`AWS_ROLE_TO_ASSUME`** is configured, prefer merges to **`main`** for infra
+changes so **`apply`** runs in CI (`terraform apply` from a laptop is for emergencies /
+when Actions is unavailable).
 
 ```powershell
+cd infra/terraform/envs/staging
 terraform apply
 ```
 
@@ -173,9 +183,9 @@ so `terraform plan` always matches a specific image you can roll back to.
 | T3: ALB and target group (import) | done | `modules/alb/` |
 | T4: IAM roles and policies (import) | done | `modules/iam-ecs/` |
 | T5: Task definition under Terraform | done | `modules/ecs-service/` |
-| T6: ECS cluster, log group, service | infra done; runtime validation pending image rebuild | `modules/ecs-service/`, `Dockerfile` |
-| T7: HTTPS and ACM | pending | `modules/acm/` |
-| T8: CI/CD plan and apply | pending | `.github/workflows/` |
+| T6: ECS cluster, log group, service | done | `modules/ecs-service/`, `Dockerfile`; ALB → tasks healthy |
+| T7: HTTPS and ACM | done | `modules/acm/`, ALB `:443`, Route 53 `emoji-staging.kogs.link`, Cognito HTTPS URLs |
+| T8: CI/CD plan and apply | done — add OIDC + secret per `ci/T8-setup-github-oidc.md` | `.github/workflows/terraform-staging.yml`, `infra/terraform/ci/` |
 | T9: Support for later product milestones | pending | follow-on work |
 
 ## Conventions

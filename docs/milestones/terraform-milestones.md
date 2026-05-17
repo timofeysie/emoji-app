@@ -962,6 +962,8 @@ Exit criteria:
 - A documented, repeatable PR-driven workflow for changing staging infra.
 - No long-lived AWS keys in CI.
 
+**Delivered in-repo:** Workflow [`.github/workflows/terraform-staging.yml`](../../.github/workflows/terraform-staging.yml) (plan on infra PRs, apply on merges to **`main`**). IAM + GitHub secret bootstrap: **[`infra/terraform/ci/T8-setup-github-oidc.md`](../../infra/terraform/ci/T8-setup-github-oidc.md)**. Items 3–4 (reviews + passing plan check before merge) are GitHub repo settings / rulesets, not Terraform.
+
 ## Milestone T9: Support for later product milestones
 
 Where Terraform earns its keep for future milestones in `docs/milestones.md`.

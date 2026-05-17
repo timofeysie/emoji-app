@@ -1,0 +1,135 @@
+---
+# T8: PR plan + merge apply for infra/terraform/envs/staging via GitHub OIDC (no AWS keys).
+
+name: Terraform (staging)
+
+"on":
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform-staging.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform-staging.yml"
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  AWS_REGION: ap-southeast-2
+  TF_IN_AUTOMATION: true
+
+jobs:
+  plan:
+    name: Plan (staging)
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+
+    concurrency:
+      group: terraform-plan-staging-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: infra/terraform/envs/staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Terraform fmt (check only)
+        run: terraform fmt -check -recursive
+        working-directory: infra/terraform
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+      # Exit 2 = planned diff (success). Exit 1 = error.
+      - name: Terraform plan (stdout to file + binary tfplan)
+        id: tfplan
+        run: |
+          set +e
+          terraform plan -no-color -input=false -out=tfplan 2>&1 | tee terraform-plan-output.txt
+          ec="${PIPESTATUS[0]}"
+          echo "terraform_exit=${ec}" >> "${GITHUB_OUTPUT}"
+          if [[ "${ec}" -eq 1 ]]; then exit 1; fi
+
+      - name: Upload plan artifact
+        if: always() && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-staging
+          path: |
+            infra/terraform/envs/staging/terraform-plan-output.txt
+            infra/terraform/envs/staging/tfplan
+          if-no-files-found: ignore
+
+      - name: Post plan comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        continue-on-error: true
+        if: >-
+          always() &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          header: "**Terraform plan** · `staging`"
+          recreate: true
+          path: infra/terraform/envs/staging/terraform-plan-output.txt
+
+  apply:
+    name: Apply (staging)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    concurrency:
+      group: terraform-staging-apply-main
+      cancel-in-progress: false
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: infra/terraform/envs/staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      # Auto-approve: merges to main already follow branch protection.
+      - name: Terraform apply
+        run: terraform apply -auto-approve -input=false

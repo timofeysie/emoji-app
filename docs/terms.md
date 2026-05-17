@@ -42,6 +42,7 @@ the roadmap. It is not a legal document; it is a communication aid.
 - [Observability (logs, metrics, tracing)](#observability-logs-metrics-tracing)
 - [Incident response (ops)](#incident-response-ops)
 - [Idempotency (common distributed systems term)](#idempotency-common-distributed-systems-term)
+- [OIDC (OpenID Connect)](#oidc-openid-connect)
 
 ## API (Application Programming Interface)
 
@@ -257,3 +258,14 @@ post-incident learnings.
 
 Designing an operation so repeating it (for example, double-click, duplicate scan) does
 not cause duplicate harmful effects. Important for real hardware inputs like NFC.
+
+## OIDC (OpenID Connect)
+
+A standard for authentication that sits on top of HTTP. It is a **client-server**
+protocol where a user agent (browser) talks to an **authorization server** to get
+a token. The token is then sent to the **resource server** to access protected
+resources. Like a **passport** that proves you are who you say you are.
+
+## JWKS (JSON Web Key Set)
+
+A collection of JSON objects that contain public keys for verifying tokens.
