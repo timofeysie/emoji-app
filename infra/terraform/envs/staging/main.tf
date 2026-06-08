@@ -10,6 +10,7 @@ provider "aws" {
   }
 }
 
+# Emoji App Terraform staging infrastructure v1.1.4
 # Module wiring is added milestone-by-milestone:
 #   - T2 enables module.network                (active)
 #   - T3 enables module.alb                    (active)
