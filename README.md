@@ -9,26 +9,118 @@ A generative-UI demo built with [Hashbrown](https://hashbrown.dev), React, and N
 - Node.js 22+
 - An OpenAI API key (local dev)
 
-### Setup
+### Local development
 
 ```bash
 npm install
-cp .env.example .env
-# Add your OPENAI_API_KEY to .env
+cp .env.example .env   # add OPENAI_API_KEY (and optionally Cognito values)
+npm run dev            # client on :5200, server on :3000
+npm run dev:client     # Vite SPA only
+npm run dev:server     # NestJS server only
+npm run build          # production build of both
+npm run typecheck      # TypeScript check across both
+npm run lint           # ESLint across client/src and server/src
+npm run test:server    # Jest server tests
+npm run docker:build   # build the production Docker image
+npm run docker:run     # run the image locally on port 3000
 ```
 
-### Running
+### Deploying a new image to staging
 
-```bash
-npm run dev          # run both server and client
-npm run dev:client   # http://localhost:5200
-npm run dev:server   # http://localhost:3000
-npm run build        # production build of both client and server
-npm run typecheck    # TypeScript check across both apps
-npm run lint         # ESLint across client/src and server/src
-npm run docker:build # build the production Docker image
-npm run docker:run   # run the image locally on port 3000
-npm run test:server  # run the server tests
+All commands run from the **repository root** unless noted.
+
+```powershell
+# 1. Build (pass real Cognito values so the SPA can sign users in)
+docker build -t emoji-app:latest `
+  --build-arg VITE_COGNITO_DOMAIN="https://<prefix>.auth.ap-southeast-2.amazoncognito.com" `
+  --build-arg VITE_COGNITO_CLIENT_ID="<client-id>" `
+  --build-arg VITE_COGNITO_SCOPES="openid email profile" `
+  .
+
+# 2. Log in to ECR (once per shell session)
+aws ecr get-login-password --region ap-southeast-2 | `
+  docker login --username AWS --password-stdin `
+  100641718971.dkr.ecr.ap-southeast-2.amazonaws.com
+
+# 3. Tag and push (use today's date or a git SHA)
+$tag = "staging-$(Get-Date -Format 'yyyy-MM-dd')"
+docker tag emoji-app:latest `
+  100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:$tag
+docker push `
+  100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:$tag
+
+# 4. Update image_uri in infra/terraform/envs/staging/terraform.tfvars
+#    then open a PR — CI will plan on the PR and apply on merge to main.
+```
+
+See [**`infra/terraform/README.md`**](infra/terraform/README.md) for the full deploy loop.
+
+### Staging cost management (personal / side-project use)
+
+AWS costs accumulate hourly even when idle (~$30-40/mo with ALB + Fargate running
+continuously). For a personal project the recommended habit is to **tear down staging
+between active sessions** and rebuild when needed.
+
+All commands run from `infra/terraform/envs/staging`.
+
+```powershell
+cd infra/terraform/envs/staging
+
+# Tear down all staging infra (stops billing for ECS, ALB, etc.)
+terraform destroy
+
+# Rebuild when you need it again
+terraform apply
+```
+
+**What is preserved** across a destroy/apply cycle (these are not destroyed):
+
+- ECR images (your pushed Docker images stay in ECR)
+- Secrets Manager secrets (MongoDB URI, OpenAI key)
+- S3 Terraform state bucket and DynamoDB lock table
+- ACM certificate (auto-renewed by AWS, free)
+- Route 53 hosted zone and records (`kogs.link` — $0.50/mo)
+- Domain registration (`kogs.link` — annual fee, separate from Terraform)
+
+**What is recreated** on `terraform apply`:
+
+- ECS cluster, service, and task (new public IP; DNS alias updates automatically)
+- ALB, listeners, target group
+- Security groups and IAM roles
+
+**Cheaper alternative to full teardown — scale tasks to zero:**
+
+```powershell
+# Stop paying for Fargate compute (ALB still charges ~$18/mo)
+aws ecs update-service `
+  --cluster emoji-staging-cluster `
+  --service emoji-staging-service `
+  --desired-count 0
+
+# Scale back up when needed
+aws ecs update-service `
+  --cluster emoji-staging-cluster `
+  --service emoji-staging-service `
+  --desired-count 1
+```
+
+**Task sizing** is controlled by `task_cpu` and `task_memory` in
+`infra/terraform/envs/staging/terraform.tfvars`. Current values use the minimum
+Fargate size (`256` CPU / `512` MB ≈ $4/mo) rather than the previous default
+(`1024` CPU / `3072` MB ≈ $45/mo).
+
+### Terraform CI (infra changes)
+
+Infra changes go through pull requests — the GitHub Actions workflow plans on the PR
+and applies on merge to `main`. No manual `terraform apply` from a laptop is needed
+for routine changes.
+
+```powershell
+# From infra/terraform/envs/staging — local plan preview only
+terraform plan
+
+# Emergency apply from laptop (break-glass; prefer CI)
+terraform apply
 ```
 
 ## Repository layout

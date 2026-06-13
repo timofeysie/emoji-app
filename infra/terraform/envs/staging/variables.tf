@@ -49,3 +49,21 @@ variable "route53_hosted_zone_name" {
   description = "Public Route 53 hosted zone name for DNS validation and alias (e.g. kogs.link)."
   type        = string
 }
+
+variable "task_cpu" {
+  description = "Fargate task CPU units (256 = 0.25 vCPU, 1024 = 1 vCPU). Lower values reduce cost for lightly-used staging."
+  type        = string
+  default     = "256"
+}
+
+variable "task_memory" {
+  description = "Fargate task memory in MiB (512 is minimum for 256 CPU; use 3072 if the app needs more headroom)."
+  type        = string
+  default     = "512"
+}
+
+variable "enable_container_insights" {
+  description = "Enable CloudWatch Container Insights on the ECS cluster. Adds ~$6-8/mo in metric charges; disable for cost-sensitive staging."
+  type        = bool
+  default     = false
+}

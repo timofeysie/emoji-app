@@ -18,3 +18,13 @@ openai_secret_enabled = true
 cognito_region        = "ap-southeast-2"
 cognito_user_pool_id  = "ap-southeast-2_Myj579Wg2"
 cognito_app_client_id = "7d0kjtsi0h8kjhk2fg1ee64h55"
+
+# Cost controls for personal/side-project use.
+# 256 CPU units (0.25 vCPU) + 512 MB is the minimum Fargate size and reduces
+# ECS spend from ~$45/mo to ~$4/mo. Raise to 1024/3072 if performance suffers.
+task_cpu    = "256"
+task_memory = "512"
+
+# Container Insights adds ~$6-8/mo in CloudWatch metric charges for a single
+# staging task. Disable until observability is needed for active development.
+enable_container_insights = false
