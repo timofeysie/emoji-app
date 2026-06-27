@@ -8,8 +8,13 @@ created in the web app (see
 [`db-api-workflow-diagrams.md`](./db-api-workflow-diagrams.md)) can drive the
 physical badges, and physical actions (NFC tags) flow back to the web app.
 
-It also pins down the **division of labour between the REST API and the
-WebSocket channel**, which is the main question this revision answers.
+## The Python files
+
+The `Zero Controller` is a Raspberry Pi Zero with a display which runs the `emoji-os-zero.py` script at rainbow-connection\python\emoji-os\emoji-os-zero.py
+
+The `Emoji Badge` or `Pico badge` is a Raspberry Pi Pico with a matrix display that runs the `emoji-os-pico.py` script at rainbow-connection\python\emoji-os\emoji-os-pico.py.
+
+These are connected together using BLE pairing.
 
 ## Goals
 
