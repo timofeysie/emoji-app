@@ -152,26 +152,20 @@ so `terraform plan` always matches a specific image you can roll back to.
    terraform apply
    ```
 
-6. **Smoke-test the ALB** — get the DNS name, then hit the health route.
+6. **Smoke-test** — version and a live API route:
 
    ```powershell
-   terraform output -raw alb_dns_name
+   curl.exe -sS https://emoji-staging.kogs.link/api/version
+   curl.exe -sS -w "\nHTTP %{http_code}\n" "https://emoji-staging.kogs.link/api/badges"
    ```
 
-   On Windows, use **`curl.exe`** (not the `curl` alias) so you get real curl
-   behavior:
+   Or via ALB DNS from Terraform output:
 
    ```powershell
    curl.exe -sS -w "\nHTTP %{http_code}\n" "http://$(terraform output -raw alb_dns_name)/api/badges"
    ```
 
-   With a literal hostname (example from your environment):
-
-   ```powershell
-   curl.exe -sS -w "\nHTTP %{http_code}\n" "http://emoji-load-balancer-28533277.ap-southeast-2.elb.amazonaws.com/api/badges"
-   ```
-
-   Expect HTTP **200** if the target group health check path is healthy.
+   Expect HTTP **200** on `/api/badges` when the target group health check path is healthy.
 
 ## Status by milestone
 

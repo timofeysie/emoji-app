@@ -35,5 +35,6 @@ WORKDIR /app
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder   /app/dist/server  ./
 COPY --from=builder   /app/dist/client   ./client-react
+COPY --from=builder   /app/package.json ./package.json
 EXPOSE 3000
 CMD ["node", "main.js"]

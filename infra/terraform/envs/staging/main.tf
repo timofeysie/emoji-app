@@ -94,7 +94,11 @@ module "ecs_service" {
   environment = var.environment
   aws_region  = var.aws_region
 
-  image_uri = var.image_uri
+  image_uri   = var.image_uri
+  task_cpu    = var.task_cpu
+  task_memory = var.task_memory
+
+  enable_container_insights = var.enable_container_insights
 
   execution_role_arn = module.iam_ecs.execution_role_arn
   task_role_arn      = module.iam_ecs.task_role_arn
