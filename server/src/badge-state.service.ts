@@ -19,6 +19,14 @@ export const statusBodySchema = z.object({
   badgeId: z.string().min(1),
   bleStatus: deviceBleStatusSchema,
   timestamp: clientTimestampHintSchema,
+  /** Shared pair label from pair_config.py (e.g. "white"). */
+  pairName: z.string().optional(),
+  /** Normalized Zero script version, e.g. "0.5.8". */
+  controllerVersion: z.string().optional(),
+  /** Pico badge script version parsed from PAIR_OK:<version>, e.g. "0.3.2". */
+  picoVersion: z.string().optional(),
+  /** Controller battery level 0–100 from INA219; absent when unavailable. */
+  batteryLevel: z.number().int().min(0).max(100).nullable().optional(),
 });
 
 export const emojiBodySchema = z.object({
@@ -29,6 +37,8 @@ export const emojiBodySchema = z.object({
   neg: z.number().int(),
   label: z.string().min(1),
   timestamp: clientTimestampHintSchema,
+  /** Shared pair label from pair_config.py (e.g. "white"). */
+  pairName: z.string().optional(),
 });
 
 export type StatusDto = {
@@ -37,6 +47,10 @@ export type StatusDto = {
   bleStatus: z.infer<typeof deviceBleStatusSchema>;
   timestamp: string;
   clientTimestamp?: string;
+  pairName?: string;
+  controllerVersion?: string;
+  picoVersion?: string;
+  batteryLevel?: number | null;
 };
 
 export type EmojiDto = {
@@ -48,6 +62,7 @@ export type EmojiDto = {
   label: string;
   timestamp: string;
   clientTimestamp?: string;
+  pairName?: string;
 };
 
 type BadgeStateDto = {
@@ -89,6 +104,10 @@ export class BadgeStateService {
       ...(body.timestamp != null && body.timestamp !== ''
         ? { clientTimestamp: body.timestamp }
         : {}),
+      ...(body.pairName != null ? { pairName: body.pairName } : {}),
+      ...(body.controllerVersion != null ? { controllerVersion: body.controllerVersion } : {}),
+      ...(body.picoVersion != null ? { picoVersion: body.picoVersion } : {}),
+      ...(body.batteryLevel != null ? { batteryLevel: body.batteryLevel } : {}),
     };
 
     const badgeKey = getBadgeKey(statusEvent.controllerId, statusEvent.badgeId);
@@ -108,6 +127,7 @@ export class BadgeStateService {
       ...(body.timestamp != null && body.timestamp !== ''
         ? { clientTimestamp: body.timestamp }
         : {}),
+      ...(body.pairName != null ? { pairName: body.pairName } : {}),
     };
 
     const badgeKey = getBadgeKey(emojiEvent.controllerId, emojiEvent.badgeId);

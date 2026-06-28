@@ -89,19 +89,32 @@ two fields so the frontend can confirm each station runs up-to-date software:
 
 **How the Zero learns the Pico version.** The Pico reports its version in the
 pairing handshake reply: instead of a bare `PAIR_OK`, it sends `PAIR_OK:<version>`
-(e.g. `PAIR_OK:0.3.1`). The Zero parses the optional suffix and falls back to
+(e.g. `PAIR_OK:0.3.2`). The Zero parses the optional suffix and falls back to
 `unknown` for older firmware that still replies a bare `PAIR_OK`, so the change
-is backward compatible.
+is backward compatible. **This is now implemented** — see Step 0.5 in
+`1-Server-foundations.md`.
 
 **How it flows.** The Zero includes both versions in `controller.hello` and in
 the `POST /api/status` payload. The server stores them on the pair/badge state,
 echoes them on `status.changed`, and returns them from `GET /api/badges`.
+**`pairName`, `controllerVersion`, and `picoVersion` are now implemented.**
 
 **Up-to-date check.** The server holds an expected version per role (config
 constants for the demo, e.g. `EXPECTED_CONTROLLER_VERSION`,
 `EXPECTED_PICO_VERSION`). It exposes those expected values (and/or a computed
 `outdated` flag) so the dashboard can badge each station as **current** or
-**outdated** next to its `pairName`.
+**outdated** next to its `pairName`. **(planned — Step 1)**
+
+## Controller battery level
+
+The Zero reads its UPS HAT battery level from an INA219 sensor (I2C 0x43) on a
+background daemon thread every 60 s. The resulting percentage (0–100) is
+included in `POST /api/status` as `batteryLevel` (integer, omitted when the
+sensor is unavailable or has not yet produced a reading). The server stores and
+echoes it on `status.changed` and `GET /api/badges`. The dashboard badge card
+shows a color-coded battery icon (green ≥ 40 %, amber ≥ 15 %, red < 15 %).
+
+**This is now implemented** — see Step 0.5 in `1-Server-foundations.md`.
 
 ## The core rule: API vs WebSocket
 
@@ -231,8 +244,9 @@ target count is reached can come later.)
 | Game lifecycle | `game.state` enum exists in Mongo, but **no endpoint transitions it** and nothing is broadcast |
 | Join / readiness | **does not exist** as an endpoint |
 | Pair to game link | **does not exist** |
-| Pair identity | `PAIR_NAME` exists on both devices (`pair_config.py`) but is **not sent to the server yet** |
-| Software versions | Zero `VERSION` and Pico `VERSION` exist in the scripts but are **not reported to the server**; the Zero does not know the Pico's version |
+| Pair identity | `PAIR_NAME` now sent in every `POST /api/status` and `POST /api/emoji` as `pairName`; shown as primary label on badge cards ✅ |
+| Software versions | `controllerVersion` (Zero) and `picoVersion` (from `PAIR_OK:<version>` handshake) now in `POST /api/status`; shown on badge cards ✅ |
+| Battery level | Zero INA219 reading now in `POST /api/status` as `batteryLevel`; shown on badge cards ✅ |
 | NFC tag relay | Pico has no path back to the Zero/server yet |
 | Pico commands | `MENU:POS:NEG` plus legacy `ON/OFF/STATUS/BLINK` |
 
@@ -495,12 +509,17 @@ Server to **dashboard** (broadcast, in addition to existing badge events):
 { "type": "nfc.tagged", "gameId": "...", "questionId": "...", "pairName": "white", "controllerId": "zero-1", "cardUid": "...", "slotLabel": "B", "serverTime": "..." }
 ```
 
-The existing `status.changed` event (and the `GET /api/badges` snapshot) gain
-`controllerVersion` and `picoVersion` so the dashboard can show and verify them:
+The existing `status.changed` event (and the `GET /api/badges` snapshot) now
+carry `pairName`, `controllerVersion`, `picoVersion`, and `batteryLevel` so the
+dashboard can show and verify them:
 
 ```json
-{ "type": "status.changed", "pairName": "white", "controllerId": "zero-1", "badgeId": "...", "bleStatus": "connected", "controllerVersion": "0.5.3", "picoVersion": "0.3.1", "serverTime": "..." }
+{ "type": "status.changed", "pairName": "white", "controllerId": "zero-1", "badgeId": "...", "bleStatus": "connected", "controllerVersion": "0.5.8", "picoVersion": "0.3.2", "batteryLevel": 82, "timestamp": "..." }
 ```
+
+`batteryLevel` is an integer 0–100, omitted when the INA219 sensor is
+unavailable. `pairName`, `controllerVersion`, and `picoVersion` are optional
+strings (present on all posts from firmware that includes Step 0.5 changes).
 
 Server time is canonical (consistent with the badge timestamp policy in
 [`domains.md`](./domains.md)).
@@ -509,18 +528,18 @@ Server time is canonical (consistent with the badge timestamp policy in
 
 ### Zero (`emoji-os-zero.py`)
 
+- Parse the Pico version from the pairing reply (`PAIR_OK:<version>`), defaulting
+  to `unknown` when only a bare `PAIR_OK` is received. **✅ implemented (Step 0.5).**
+- Include `pairName`, `controllerVersion`, `picoVersion`, and `batteryLevel` in
+  `POST /api/status`; include `pairName` in `POST /api/emoji`.
+  **✅ implemented (Step 0.5).**
 - Add a **WebSocket client** running in the existing BLE/asyncio thread
   (`websockets` async lib fits the asyncio loop already in use; alternative is
   `websocket-client` on a daemon thread). New dependency on the Pi.
-- On connect: send `controller.hello` with the local `PAIR_NAME` (already loaded
-  from `pair_config.py`) as `pairName`, plus `controllerVersion` (from its own
-  `VERSION`) and `picoVersion` (learned from the handshake); apply the
-  `controller.welcome` snapshot.
-- Parse the Pico version from the pairing reply (`PAIR_OK:<version>`), defaulting
-  to `unknown` when only a bare `PAIR_OK` is received.
-- Add `pairName`, `controllerVersion`, and `picoVersion` to the existing
-  `POST /api/status` payload (alongside the current `controllerId` / `badgeId`),
-  and `pairName` to `POST /api/emoji`.
+  **(planned — Step 3)**
+- On connect: send `controller.hello` with the local `PAIR_NAME` as `pairName`,
+  plus `controllerVersion` and `picoVersion`; apply the `controller.welcome`
+  snapshot. **(planned — Step 3)**
 - On `game.opened`: show a "join?" prompt; on player key press,
   `POST /api/games/:gameId/join` with `pairName`.
 - On `game.started` / `question.opened` / `question.closed` / `game.ended`:
@@ -536,17 +555,17 @@ Server time is canonical (consistent with the badge timestamp policy in
   `GET /api/pairs/:pairName` on an interval (reuses the heartbeat loop), so the
   feature still works where WS fails.
 
-### Pico (`emoji-os-pico-0.2.4.py`)
+### Pico (`emoji-os-pico.py`)
 
+- Report its version in the pairing reply by sending `PAIR_OK:<VERSION>` (e.g.
+  `PAIR_OK:0.3.2`) instead of a bare `PAIR_OK`. **✅ implemented (Step 0.5).**
 - Extend `handle_command` with new namespaced commands, e.g. `GAME:active`,
   `GAME:question_open`, `GAME:question_close`, `GAME:ended`, each mapped to a
   display routine. Additive; the existing `MENU:POS:NEG` parsing and the `PAIR:`
-  gate stay intact (commands honored only after `PAIR_OK`).
+  gate stay intact (commands honored only after `PAIR_OK`). **(planned — Step 4)**
 - On registering an **NFC tag**, send a `TAG:<cardUid>` notification back to the
   Zero over the existing UART TX characteristic (same `gatts_notify` path used
-  for `PAIR_OK`).
-- Report its version in the pairing reply by sending `PAIR_OK:<VERSION>` (e.g.
-  `PAIR_OK:0.3.1`) instead of a bare `PAIR_OK`.
+  for `PAIR_OK`). **(planned — Step 4)**
 
 ## Infrastructure changes (Terraform)
 
@@ -579,11 +598,19 @@ Server time is canonical (consistent with the badge timestamp policy in
 
 ## Phased implementation plan
 
+0.5. **Pair identity, versions, and battery reporting ✅ done**
+   - Pico sends `PAIR_OK:<VERSION>` in the handshake reply.
+   - Zero parses Pico version; adds `pairName`, `controllerVersion`,
+     `picoVersion`, and `batteryLevel` to `POST /api/status`; adds `pairName`
+     to `POST /api/emoji`.
+   - Server `statusBodySchema` / `emojiBodySchema` accept the new optional fields;
+     they flow through `StatusDto` / `EmojiDto` to `status.changed` and
+     `GET /api/badges`.
+   - Dashboard badge cards display `pairName` (primary label), version badges,
+     and a color-coded battery indicator.
+
 1. **Server foundations (no device impact)**
    - `pairBindings` model (keyed by `pairName`) + bind/get endpoints.
-   - Accept `pairName`, `controllerVersion`, and `picoVersion` on `POST /api/status`
-     (and `pairName` on `POST /api/emoji`); surface them on `status.changed` and
-     `GET /api/badges` so the dashboard can label by pair and verify versions.
    - Add `EXPECTED_CONTROLLER_VERSION` / `EXPECTED_PICO_VERSION` config and expose
      the expected values (or a computed `outdated` flag).
    - `POST /api/games/:gameId/state` (+ repository transition method) and

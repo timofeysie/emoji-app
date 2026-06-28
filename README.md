@@ -28,8 +28,8 @@ npm run docker:run     # run the image locally on port 3000
 
 ### Deploy application changes to staging
 
-> **Windows (PowerShell) instructions.** Commands below use PowerShell syntax — backtick `  `
-> for line continuation and $var = "..." for variables. If you are in Git Bash use \ for
+> **Windows (PowerShell) instructions.** Commands below use PowerShell syntax — backtick `` ` ``
+> for line continuation and `$var = "..."` for variables. If you are in Git Bash use `\` for
 > continuation and arname="..." (no $ on the left, no spaces around =).
 
 > **There is no automatic build pipeline for application code.** Merging to `main` only triggers
@@ -47,7 +47,7 @@ $tag = "staging-$(Get-Date -Format 'yyyy-MM-dd')"
 $registry = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com"
 
 # 2. Log in to ECR (once per shell session).
-aws ecr get-login-password --region ap-southeast-2 `|`
+aws ecr get-login-password --region ap-southeast-2 |
   docker login --username AWS --password-stdin `
   $registry
 
@@ -66,13 +66,13 @@ docker push "$registry/emoji-app:$tag"
 # 5. *** REQUIRED — EASY TO MISS ***
 #    Update image_uri in terraform.tfvars to the new tag, then verify.
 (Get-Content infra/terraform/envs/staging/terraform.tfvars) `
-  -replace 'image_uri = ".*"', "image_uri = `"$registry/emoji-app:$tag`"" `|`
+  -replace 'image_uri = ".*"', "image_uri = \"$($registry)/emoji-app:$($tag)\""  |
   Set-Content infra/terraform/envs/staging/terraform.tfvars
 Select-String image_uri infra/terraform/envs/staging/terraform.tfvars
 
 # 6. Commit everything (your code changes + updated terraform.tfvars).
 git add -A
-git commit --trailer "Co-authored-by: Cursor <cursoragent@cursor.com>" -m "release $tag"
+git commit -m "release $tag"
 ```
 
 Then push and open a PR against `main`. CI runs `terraform apply` automatically on merge
