@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import type { WebSocketServer } from 'ws';
+import type { WebSocket, WebSocketServer } from 'ws';
 
 const MAX_EMOJI_HISTORY = 100;
 
@@ -81,6 +81,8 @@ function getBadgeKey(controllerId: string, badgeId: string): string {
   return `${controllerId}::${badgeId}`;
 }
 
+export type RealtimeEvent = Record<string, unknown> & { type: string };
+
 @Injectable()
 export class BadgeStateService {
   private readonly bleStatusByBadgeKey = new Map<string, StatusDto>();
@@ -91,8 +93,98 @@ export class BadgeStateService {
 
   private wsServer: WebSocketServer | null = null;
 
+  /** Dashboard browser clients — receive all broadcast events. */
+  private readonly dashboards = new Set<WebSocket>();
+
+  /** Controller room: pairName → set of WebSocket connections for that pair. */
+  private readonly pairRooms = new Map<string, Set<WebSocket>>();
+
+  /** Reverse lookup: socket → pairName (for cleanup on close). */
+  private readonly socketToPair = new Map<WebSocket, string>();
+
   setWebSocketServer(wsServer: WebSocketServer): void {
     this.wsServer = wsServer;
+
+    wsServer.on('connection', (socket: WebSocket) => {
+      // Classify as dashboard until a controller.hello arrives
+      this.dashboards.add(socket);
+
+      socket.on('message', (raw) => {
+        let msg: unknown;
+        try {
+          msg = JSON.parse(String(raw));
+        } catch {
+          return;
+        }
+
+        if (
+          typeof msg === 'object' &&
+          msg !== null &&
+          (msg as Record<string, unknown>)['type'] === 'controller.hello'
+        ) {
+          const { pairName, controllerId, controllerVersion, picoVersion, token } = msg as Record<string, unknown>;
+          if (typeof pairName === 'string' && pairName.length > 0) {
+            // Move from dashboards to the pair room
+            this.dashboards.delete(socket);
+            this.socketToPair.set(socket, pairName);
+            const room = this.pairRooms.get(pairName) ?? new Set<WebSocket>();
+            room.add(socket);
+            this.pairRooms.set(pairName, room);
+
+            // Reply with a welcome snapshot (game state will be populated by the controller after
+            // calling GET /api/pairs/:pairName — the welcome here is a lightweight acknowledgement)
+            this.sendToSocket(socket, {
+              type: 'controller.welcome',
+              pairName,
+              controllerId: typeof controllerId === 'string' ? controllerId : undefined,
+              controllerVersion: typeof controllerVersion === 'string' ? controllerVersion : undefined,
+              picoVersion: typeof picoVersion === 'string' ? picoVersion : undefined,
+              token: token ?? null,
+              serverTime: new Date().toISOString(),
+            });
+          }
+        }
+      });
+
+      socket.on('close', () => {
+        this.dashboards.delete(socket);
+        const pairName = this.socketToPair.get(socket);
+        if (pairName) {
+          this.socketToPair.delete(socket);
+          const room = this.pairRooms.get(pairName);
+          if (room) {
+            room.delete(socket);
+            if (room.size === 0) {
+              this.pairRooms.delete(pairName);
+            }
+          }
+        }
+      });
+    });
+  }
+
+  /** Send an event to all dashboard browser clients. */
+  broadcastDashboard(event: RealtimeEvent): void {
+    const serialized = JSON.stringify(event);
+    for (const client of this.dashboards) {
+      if (client.readyState === client.OPEN) {
+        client.send(serialized);
+      }
+    }
+  }
+
+  /** Send an event to all controller sockets in the rooms for the given pair names. */
+  sendToPairNames(pairNames: string[], event: RealtimeEvent): void {
+    const serialized = JSON.stringify(event);
+    for (const pairName of pairNames) {
+      const room = this.pairRooms.get(pairName);
+      if (!room) continue;
+      for (const socket of room) {
+        if (socket.readyState === socket.OPEN) {
+          socket.send(serialized);
+        }
+      }
+    }
   }
 
   recordStatus(body: z.infer<typeof statusBodySchema>): void {
@@ -112,7 +204,7 @@ export class BadgeStateService {
 
     const badgeKey = getBadgeKey(statusEvent.controllerId, statusEvent.badgeId);
     this.bleStatusByBadgeKey.set(badgeKey, statusEvent);
-    this.emitEvent('status.changed', statusEvent);
+    this.broadcastDashboard({ type: 'status.changed', ...statusEvent });
   }
 
   recordEmoji(body: z.infer<typeof emojiBodySchema>): void {
@@ -138,7 +230,7 @@ export class BadgeStateService {
       this.emojiEventHistory.splice(0, this.emojiEventHistory.length - MAX_EMOJI_HISTORY);
     }
 
-    this.emitEvent('emoji.sent', emojiEvent);
+    this.broadcastDashboard({ type: 'emoji.sent', ...emojiEvent });
   }
 
   getBadges(): BadgeStateDto[] {
@@ -165,16 +257,9 @@ export class BadgeStateService {
     return badges;
   }
 
-  private emitEvent(type: 'status.changed' | 'emoji.sent', payload: StatusDto | EmojiDto): void {
-    if (!this.wsServer) {
-      return;
-    }
-
-    const serialized = JSON.stringify({ type, payload });
-    for (const client of this.wsServer.clients) {
-      if (client.readyState === client.OPEN) {
-        client.send(serialized);
-      }
+  private sendToSocket(socket: WebSocket, event: RealtimeEvent): void {
+    if (socket.readyState === socket.OPEN) {
+      socket.send(JSON.stringify(event));
     }
   }
 }

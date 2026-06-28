@@ -182,16 +182,39 @@ const guessSchema = new Schema(
     gameId: { type: objectId, ref: 'Game', required: true, immutable: true },
     questionId: { type: objectId, ref: 'Question', required: true, immutable: true },
     answerOptionId: { type: objectId, ref: 'AnswerOption', required: true, immutable: true },
-    guesserUserId: { type: objectId, ref: 'User', required: true, immutable: true },
+    guesserUserId: { type: objectId, ref: 'User', immutable: true },
+    pairName: { type: String },
     badgeId: { type: objectId, ref: 'Badge' },
     cardUid: { type: String },
     slotLabel: { type: String, enum: slotLabelValues },
   },
   { timestamps: { createdAt: true, updatedAt: false }, collection: 'guesses' },
 );
-guessSchema.index({ questionId: 1, guesserUserId: 1 }, { unique: true });
+// Partial unique index: only enforce uniqueness when guesserUserId is present
+guessSchema.index(
+  { questionId: 1, guesserUserId: 1 },
+  { unique: true, partialFilterExpression: { guesserUserId: { $exists: true } }, name: 'uniq_guess_per_user' },
+);
+// Separate index for pair-based guesses
+guessSchema.index(
+  { questionId: 1, pairName: 1 },
+  { unique: true, partialFilterExpression: { pairName: { $exists: true } }, name: 'uniq_guess_per_pair' },
+);
 guessSchema.index({ gameId: 1, questionId: 1, createdAt: -1 });
 guessSchema.index({ questionId: 1, createdAt: -1 });
+
+const pairBindingSchema = new Schema(
+  {
+    pairName: { type: String, required: true },
+    gameId: { type: objectId, ref: 'Game', default: null },
+    controllerId: { type: String },
+    joined: { type: Boolean, required: true, default: false },
+    updatedAt: { type: Date, default: () => new Date() },
+  },
+  { collection: 'pairBindings' },
+);
+pairBindingSchema.index({ pairName: 1 }, { unique: true });
+pairBindingSchema.index({ gameId: 1 });
 
 export type User = InferSchemaType<typeof userSchema>;
 export type Badge = InferSchemaType<typeof badgeSchema>;
@@ -204,6 +227,7 @@ export type NfcCardGroup = InferSchemaType<typeof nfcCardGroupSchema>;
 export type NfcCard = InferSchemaType<typeof nfcCardSchema>;
 export type GameNfcCardGroupAssignment = InferSchemaType<typeof gameNfcCardGroupAssignmentSchema>;
 export type Guess = InferSchemaType<typeof guessSchema>;
+export type PairBinding = InferSchemaType<typeof pairBindingSchema>;
 
 export type UserDocument = HydratedDocument<User>;
 export type BadgeDocument = HydratedDocument<Badge>;
@@ -216,6 +240,7 @@ export type NfcCardGroupDocument = HydratedDocument<NfcCardGroup>;
 export type NfcCardDocument = HydratedDocument<NfcCard>;
 export type GameNfcCardGroupAssignmentDocument = HydratedDocument<GameNfcCardGroupAssignment>;
 export type GuessDocument = HydratedDocument<Guess>;
+export type PairBindingDocument = HydratedDocument<PairBinding>;
 
 export type DbModels = {
   User: Model<User>;
@@ -229,6 +254,7 @@ export type DbModels = {
   NfcCard: Model<NfcCard>;
   GameNfcCardGroupAssignment: Model<GameNfcCardGroupAssignment>;
   Guess: Model<Guess>;
+  PairBinding: Model<PairBinding>;
 };
 
 export function registerModels(connection: Connection): DbModels {
@@ -247,6 +273,7 @@ export function registerModels(connection: Connection): DbModels {
       gameNfcCardGroupAssignmentSchema,
     ),
     Guess: connection.model('Guess', guessSchema),
+    PairBinding: connection.model('PairBinding', pairBindingSchema),
   };
 }
 

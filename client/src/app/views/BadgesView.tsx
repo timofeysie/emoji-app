@@ -17,6 +17,7 @@ import {
   BluetoothSearching,
   Circle,
   CircleHelp,
+  Cpu,
   Flame,
   Gamepad2,
   Heart,
@@ -449,9 +450,9 @@ function BadgeCardHeader({ record }: { record: BadgeRecord }) {
               {controllerVersion}
             </span>
           )}
-          {picoVersion && (
+          {picoVersion && picoVersion !== 'unknown' && (
             <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground" title="Pico badge version">
-              <ClientBadgeIcon className="h-2.5 w-2.5" />
+              <Cpu className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
               {picoVersion}
             </span>
           )}

@@ -10,6 +10,8 @@ const config: Config = {
   clearMocks: true,
   restoreMocks: true,
   setupFilesAfterEnv: ['<rootDir>/server/src/test/setup.ts'],
+  // Run sequentially in the main process to avoid OOM in the Jest worker pool on constrained machines
+  maxWorkers: 1,
   transform: {
     '^.+\\.ts$': [
       'ts-jest',
