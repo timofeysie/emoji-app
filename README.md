@@ -1,4 +1,4 @@
-# Emoji App
+﻿# Emoji App
 
 A generative-UI demo built with [Hashbrown](https://hashbrown.dev), React, and NestJS (Express-backed). An AI chat panel sits alongside a standard CRUD interface and can read and update app state directly — adding lights, creating scenes, and scheduling them — through structured tool calls rather than plain text.
 
@@ -28,56 +28,68 @@ npm run docker:run     # run the image locally on port 3000
 
 ### Deploy application changes to staging
 
-Run from the repository root unless noted. Full detail also lives in [`infra/terraform/README.md`](infra/terraform/README.md) (“Deploy a new container image”).
+> **Windows (PowerShell) instructions.** Commands below use PowerShell syntax — backtick `  `
+> for line continuation and $var = "..." for variables. If you are in Git Bash use \ for
+> continuation and arname="..." (no $ on the left, no spaces around =).
 
-Make sure Docker desktop is running before these steps.  The error `open //./pipe/docker_engine: The system cannot find the file specified` means the Docker CLI is installed, but the engine (daemon) isn’t up. On Windows that’s almost always because Docker Desktop is closed or still starting.
+> **There is no automatic build pipeline for application code.** Merging to `main` only triggers
+> `terraform apply` for changes under `infra/terraform/`. Building the Docker image and pushing
+> it to ECR are always manual steps — ECS keeps running whatever image is pinned in
+> `terraform.tfvars` until that file is updated **and** Terraform is applied.
+
+Run all commands from the **repository root**. Make sure Docker Desktop is running first — the
+error `open //./pipe/docker_engine: The system cannot find the file specified` means the daemon
+is not up.
 
 ```powershell
-# 1. Build production image (client + server in one container)
-#    Use the same VITE_COGNITO_* values as local .env / Cognito console.
-#    cognito_app_client_id is in infra/terraform/envs/staging/terraform.tfvars.
+# 1. Set the tag for today. Append a letter (e.g. 'b') if you already pushed one today.
 $tag = "staging-$(Get-Date -Format 'yyyy-MM-dd')"
+$registry = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com"
+
+# 2. Log in to ECR (once per shell session).
+aws ecr get-login-password --region ap-southeast-2 `|`
+  docker login --username AWS --password-stdin `
+  $registry
+
+# 3. Build the production image (client + server in one container).
+#    VITE_COGNITO_DOMAIN is the value of VITE_COGNITO_DOMAIN in your .env file.
 docker build -t "emoji-app:$tag" `
-  --build-arg VITE_COGNITO_DOMAIN="https://<prefix>.auth.ap-southeast-2.amazoncognito.com" `
+  --build-arg VITE_COGNITO_DOMAIN="https://ap-southeast-2myj579wg2.auth.ap-southeast-2.amazoncognito.com" `
   --build-arg VITE_COGNITO_CLIENT_ID="7d0kjtsi0h8kjhk2fg1ee64h55" `
   --build-arg VITE_COGNITO_SCOPES="openid email profile" `
   .
 
-# 2. Log in to ECR (once per shell session)
-aws ecr get-login-password --region ap-southeast-2 |
-  docker login --username AWS --password-stdin `
-  100641718971.dkr.ecr.ap-southeast-2.amazonaws.com
-
-# 3. Tag and push
-$registry = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com"
+# 4. Push to ECR.
 docker tag "emoji-app:$tag" "$registry/emoji-app:$tag"
 docker push "$registry/emoji-app:$tag"
 
-# 4. Point Terraform at the new image
-#    Edit infra/terraform/envs/staging/terraform.tfvars:
-#    image_uri = "<registry>/emoji-app:<tag>"
-#    Commit and open a PR for CI apply, or apply locally (see below).
+# 5. *** REQUIRED — EASY TO MISS ***
+#    Update image_uri in terraform.tfvars to the new tag, then verify.
+(Get-Content infra/terraform/envs/staging/terraform.tfvars) `
+  -replace 'image_uri = ".*"', "image_uri = `"$registry/emoji-app:$tag`"" `|`
+  Set-Content infra/terraform/envs/staging/terraform.tfvars
+Select-String image_uri infra/terraform/envs/staging/terraform.tfvars
 
-# 5. Roll out on ECS
-cd infra/terraform/envs/staging
-terraform plan
-terraform apply
+# 6. Commit everything (your code changes + updated terraform.tfvars).
+git add -A
+git commit --trailer "Co-authored-by: Cursor <cursoragent@cursor.com>" -m "release $tag"
 ```
+
+Then push and open a PR against `main`. CI runs `terraform apply` automatically on merge
+because `terraform.tfvars` changed. `terraform apply` blocks until ECS is healthy (~3-5 min).
 
 #### Verify the rollout
 
-The deployment takes roughly 3–5 minutes from terraform apply to prompt return. The health check math is the dominant factor (5 × 30s = 150s after the grace period).
-
 ```powershell
 curl.exe -sS https://emoji-staging.kogs.link/api/version
-# expect {"version":"<your package.json version>"}
+# {"version":"<your package.json version>"}
 
 curl.exe -sS -w "`nHTTP %{http_code}`n" https://emoji-staging.kogs.link/api/badges
-# expect HTTP 200
+# HTTP 200
 ```
 
-If infra was torn down, steps 1–4 are still required when you have **new code**; step 5 alone only recreates AWS resources and pulls the **existing** pinned image.
-
+If infra was previously torn down, steps 3-5 are still required for new code; step 6 alone
+only recreates AWS resources using the already-pinned image.
 ### Wake staging infrastructure (no code changes)
 
 When staging was destroyed to save cost and you only need the **last deployed image** back online:

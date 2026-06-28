@@ -11,6 +11,7 @@ import {
   Bluetooth,
   BluetoothOff,
   BluetoothSearching,
+  Circle,
   CircleHelp,
   Flame,
   Gamepad2,
@@ -25,6 +26,7 @@ import {
   Star,
   ThumbsUp,
   Unplug,
+  X as XIcon,
   Zap,
 } from 'lucide-react';
 import { cn } from '../shared/utils';
@@ -125,6 +127,26 @@ const LABEL_ICON_MAP: Record<string, LucideIcon> = {
   help: CircleHelp,
   unknown: CircleHelp,
 };
+
+/** NFC card display type returned by /api/nfc-cards. */
+type NfcCard = {
+  id: string;
+  name: string;
+  display: string;
+};
+
+/** Derived map from card ID → NfcCard for fast lookup. */
+type NfcCardMap = Record<string, NfcCard>;
+
+/** True when the label represents a positive NFC scan result (circle). */
+function isNfcPos(label: string): boolean {
+  return label === 'others_nfc_pos';
+}
+
+/** True when the label represents a negative NFC scan result (x). */
+function isNfcNeg(label: string): boolean {
+  return label === 'others_nfc_neg';
+}
 
 /** If `connected` but no liveness for this long, show offline (abrupt power-off, etc.). */
 const STALE_CONNECTED_MS = 90_000;
@@ -282,7 +304,13 @@ function BleConnectionRow({ status }: { status?: StatusChangedEvent }) {
   );
 }
 
-function EmojiLabelBlock({ emoji }: { emoji?: EmojiSentEvent }) {
+function EmojiLabelBlock({
+  emoji,
+  nfcCardMap,
+}: {
+  emoji?: EmojiSentEvent;
+  nfcCardMap: NfcCardMap;
+}) {
   if (!emoji) {
     return (
       <div className="rounded border border-dashed bg-muted/20 px-1.5 py-1 text-center text-[11px] leading-tight text-muted-foreground">
@@ -291,13 +319,38 @@ function EmojiLabelBlock({ emoji }: { emoji?: EmojiSentEvent }) {
     );
   }
 
-  const Icon = getEmojiIconForLabel(emoji.label);
+  const nfcPos = isNfcPos(emoji.label);
+  const nfcNeg = isNfcNeg(emoji.label);
+  const isNfc = nfcPos || nfcNeg;
+
+  // Determine display type from the card map when possible; fall back to label.
+  // The card map keys are NFC UIDs but the emoji event only carries the label,
+  // so we use the label to infer display type and show all matching card names.
+  const matchingCards = isNfc
+    ? Object.values(nfcCardMap).filter((c) =>
+        nfcPos ? c.display === 'circle' : c.display !== 'circle',
+      )
+    : [];
+
+  const Icon = isNfc
+    ? nfcPos
+      ? Circle
+      : XIcon
+    : getEmojiIconForLabel(emoji.label);
+
+  const iconClass = isNfc
+    ? nfcPos
+      ? 'h-6 w-6 shrink-0 text-blue-500'
+      : 'h-6 w-6 shrink-0 text-red-500'
+    : 'h-6 w-6 shrink-0 text-foreground';
+
+  const cardNames = matchingCards.map((c) => c.name).join(', ');
 
   return (
     <div className="flex min-w-0 w-full flex-col items-center gap-0.5 rounded-md border bg-muted/15 px-1.5 py-1 text-center">
-      <Icon className="h-6 w-6 shrink-0 text-foreground" strokeWidth={1.75} aria-hidden />
+      <Icon className={iconClass} strokeWidth={isNfc && nfcPos ? 2.5 : 2} aria-hidden />
       <span className="w-full break-words text-xs font-medium leading-tight">
-        {emoji.label}
+        {isNfc && cardNames ? cardNames : emoji.label}
       </span>
       <div className="text-[10px] leading-tight text-muted-foreground">
         menu {emoji.menu} · pos {emoji.pos} · neg {emoji.neg}
@@ -343,6 +396,7 @@ export const BadgesView = () => {
   const [recordsByKey, setRecordsByKey] = useState<Record<string, BadgeRecord>>(
     {},
   );
+  const [nfcCardMap, setNfcCardMap] = useState<NfcCardMap>({});
   const [socketStatus, setSocketStatus] = useState<
     'connecting' | 'connected' | 'closed'
   >('connecting');
@@ -383,6 +437,32 @@ export const BadgesView = () => {
       cancelled = true;
     };
   }, [refreshSnapshot]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/nfc-cards', { credentials: 'same-origin' });
+        if (!res.ok || cancelled) {
+          return;
+        }
+        const data = (await res.json()) as { cards: NfcCard[] };
+        if (!Array.isArray(data.cards)) {
+          return;
+        }
+        const map: NfcCardMap = {};
+        for (const card of data.cards) {
+          map[card.id] = card;
+        }
+        setNfcCardMap(map);
+      } catch {
+        // NFC card map is optional; icons will degrade gracefully.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -526,7 +606,7 @@ export const BadgesView = () => {
               </div>
               <div className="flex flex-col items-center gap-1 p-1.5">
                 <BleConnectionRow status={record.status} />
-                <EmojiLabelBlock emoji={record.emoji} />
+                <EmojiLabelBlock emoji={record.emoji} nfcCardMap={nfcCardMap} />
               </div>
             </div>
           ))}
