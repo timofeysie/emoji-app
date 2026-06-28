@@ -42,8 +42,9 @@ error `open //./pipe/docker_engine: The system cannot find the file specified` m
 is not up.
 
 ```powershell
-# 1. Set the tag for today. Append a letter (e.g. 'b') if you already pushed one today.
-$tag = "staging-$(Get-Date -Format 'yyyy-MM-dd')"
+# 1. Set the tag for today. If you already pushed one today, change the suffix (a, b, c...).
+$suffix = "e"   # <-- change this if you deploy more than once on the same day
+$tag = "staging-$(Get-Date -Format 'yyyy-MM-dd')$suffix"
 $registry = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com"
 
 # 2. Log in to ECR (once per shell session).
@@ -65,8 +66,9 @@ docker push "$registry/emoji-app:$tag"
 
 # 5. *** REQUIRED — EASY TO MISS ***
 #    Update image_uri in terraform.tfvars to the new tag, then verify.
+$newUri = "image_uri = `"$registry/emoji-app:$tag`""
 (Get-Content infra/terraform/envs/staging/terraform.tfvars) `
-  -replace 'image_uri = ".*"', "image_uri = \"$($registry)/emoji-app:$($tag)\""  |
+  -replace 'image_uri = ".*"', $newUri |
   Set-Content infra/terraform/envs/staging/terraform.tfvars
 Select-String image_uri infra/terraform/envs/staging/terraform.tfvars
 
