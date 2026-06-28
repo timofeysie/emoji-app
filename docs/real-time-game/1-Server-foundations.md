@@ -90,13 +90,67 @@ controller/Zod/service + Zod-validated HTTP patterns that Step 1 builds on
 (`/api/pairs`, version reporting, `/api/games/:id/state`), with zero game-state
 risk — a safe on-ramp into the foundations work below.
 
+## Step 0.5 — Pair identity, versions, and battery reporting ✅ implemented
+
+This slice was delivered before Step 1. It wires the existing device-side data
+(`PAIR_NAME`, `VERSION`, Pico version, battery %) into the server and
+dashboard without touching game state.
+
+### What was done
+
+#### Pico (`emoji-os-pico.py`)
+
+- `_handle_pair_attempt` now replies `PAIR_OK:<VERSION>` (e.g. `PAIR_OK:0.3.2`)
+  instead of a bare `PAIR_OK`, so the Zero can learn the Pico's version during
+  the BLE handshake. Backward-compatible: the Zero accepts both forms.
+
+#### Zero (`emoji-os-zero.py`)
+
+- Added `_CONTROLLER_VERSION` (normalized `VERSION`, e.g. `"0.5.8"`) and
+  `_pico_version` (parsed from the `PAIR_OK:<version>` reply; falls back to
+  `"unknown"` for older Pico firmware).
+- `_do_pair_handshake` now parses the optional version suffix from the Pico's
+  reply and stores it in the global `_pico_version`.
+- `_status_payload` now includes `pairName`, `controllerVersion`, `picoVersion`,
+  and `batteryLevel` (0–100 from INA219, omitted when unavailable).
+- `_emoji_payload` now includes `pairName`.
+
+#### Server (`badge-state.service.ts`)
+
+- `statusBodySchema` accepts optional `pairName`, `controllerVersion`,
+  `picoVersion`, and `batteryLevel` fields.
+- `emojiBodySchema` accepts optional `pairName`.
+- `StatusDto` and `EmojiDto` carry the new fields through to `status.changed`
+  WebSocket events and `GET /api/badges` responses.
+
+#### Frontend (`BadgesView.tsx`)
+
+- `StatusChangedEvent` and `EmojiSentEvent` types extended with new fields.
+- Badge cards now show:
+  - **`pairName`** as the primary bold label (e.g. "white"), falling back to
+    `badgeId` when absent.
+  - **`controllerVersion`** and **`picoVersion`** as small icon+text badges
+    below the identifiers.
+  - **Battery level** as a color-coded percentage with a battery icon
+    (green ≥ 40 %, amber ≥ 15 %, red < 15 %), hidden when unavailable.
+
+### What remains for Step 1
+
+- `pairBindings` model (keyed by `pairName`) + bind/get endpoints.
+- `EXPECTED_CONTROLLER_VERSION` / `EXPECTED_PICO_VERSION` config and the
+    computed `outdated` flag.
+- `POST /api/games/:gameId/state` (+ repository transition method) and
+    `POST /api/games/:gameId/join` (by `pairName`).
+- Extend `submitGuess` to accept `pairName` and emit `nfc.tagged`.
+- Refactor ws into a registry with `broadcastDashboard` +
+    `sendToPairsOfGame`; handle `controller.hello` (record `pairName`; accept but
+    do not validate `token`); emit controller and dashboard events.
+- Unit tests mirroring existing `*.spec.ts` coverage.
+
 ## Step 1 — Server foundations (no device impact)
 
 - `pairBindings` model (keyed by `pairName`) + bind/get endpoints.
-- Accept `pairName`, `controllerVersion`, and `picoVersion` on `POST /api/status`
-    (and `pairName` on `POST /api/emoji`); surface them on `status.changed` and
-    `GET /api/badges` so the dashboard can label by pair and verify versions.
-- Add `EXPECTED_CONTROLLER_VERSION` / `EXPECTED_PICO_VERSION` config and expose
+- `EXPECTED_CONTROLLER_VERSION` / `EXPECTED_PICO_VERSION` config and expose
     the expected values (or a computed `outdated` flag).
 - `POST /api/games/:gameId/state` (+ repository transition method) and
     `POST /api/games/:gameId/join` (by `pairName`).

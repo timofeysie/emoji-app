@@ -8,6 +8,10 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import {
   AlertTriangle,
+  Battery,
+  BatteryLow,
+  BatteryMedium,
+  BatteryFull,
   Bluetooth,
   BluetoothOff,
   BluetoothSearching,
@@ -50,6 +54,14 @@ type StatusChangedEvent = {
   timestamp: string;
   /** Optional device hint when clock was wrong; not used for ordering. */
   clientTimestamp?: string;
+  /** Shared pair label from pair_config.py, e.g. "white". */
+  pairName?: string;
+  /** Zero script version, e.g. "0.5.8". */
+  controllerVersion?: string;
+  /** Pico badge script version parsed from PAIR_OK handshake, e.g. "0.3.2". */
+  picoVersion?: string;
+  /** Controller battery level 0–100 from INA219; absent when unavailable. */
+  batteryLevel?: number | null;
 };
 
 type EmojiSentEvent = {
@@ -62,6 +74,7 @@ type EmojiSentEvent = {
   /** Server UTC (canonical). */
   timestamp: string;
   clientTimestamp?: string;
+  pairName?: string;
 };
 
 type WsEnvelope =
@@ -390,6 +403,65 @@ function snapshotToRecords(
 
 const POLL_MS = 10_000;
 
+function BatteryIcon({ level }: { level: number | null | undefined }) {
+  if (level == null) {
+    return null;
+  }
+  const Icon = level >= 75 ? BatteryFull : level >= 40 ? BatteryMedium : level >= 15 ? BatteryLow : Battery;
+  const colorClass =
+    level >= 40
+      ? 'text-green-600'
+      : level >= 15
+        ? 'text-amber-500'
+        : 'text-red-500';
+  return (
+    <span className="inline-flex items-center gap-0.5" title={`Battery ${level}%`}>
+      <Icon className={cn('h-3 w-3 shrink-0', colorClass)} strokeWidth={2} aria-hidden />
+      <span className={cn('text-[10px] tabular-nums', colorClass)}>{level}%</span>
+    </span>
+  );
+}
+
+function BadgeCardHeader({ record }: { record: BadgeRecord }) {
+  const pairName = record.status?.pairName;
+  const controllerVersion = record.status?.controllerVersion;
+  const picoVersion = record.status?.picoVersion;
+  const batteryLevel = record.status?.batteryLevel;
+
+  return (
+    <div className="flex flex-col gap-0.5 border-b bg-muted/40 px-1.5 py-1">
+      {pairName ? (
+        <p className="break-words text-sm font-bold leading-tight text-foreground">
+          {pairName}
+        </p>
+      ) : null}
+      <p className={cn('break-words leading-tight', pairName ? 'text-[11px] text-muted-foreground' : 'text-sm font-semibold')}>
+        {record.badgeId}
+      </p>
+      <p className="break-words text-[10px] leading-tight text-muted-foreground">
+        {record.controllerId}
+      </p>
+      {(controllerVersion || picoVersion || batteryLevel != null) && (
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          {controllerVersion && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground" title="Zero controller version">
+              <Gamepad2 className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
+              {controllerVersion}
+            </span>
+          )}
+          {picoVersion && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground" title="Pico badge version">
+              <ClientBadgeIcon className="h-2.5 w-2.5" />
+              {picoVersion}
+            </span>
+          )}
+          <BatteryIcon level={batteryLevel} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export const BadgesView = () => {
   /** Re-render periodically so stale `connected` can flip to offline without waiting for poll. */
   const [, bumpStaleCheck] = useState(0);
@@ -564,13 +636,27 @@ export const BadgesView = () => {
 
   const badgeRecords = useMemo(() => {
     const hasRealBadges = Object.keys(recordsByKey).length > 0;
+
+    // In dev mode, fall back to a static example record so the card layout can
+    // be exercised without a physical device. In production this branch never
+    // runs because import.meta.env.DEV is replaced with `false` at build time.
     const source =
       import.meta.env.DEV && !hasRealBadges
         ? { [devExampleBadgeRecord.key]: devExampleBadgeRecord }
         : recordsByKey;
-    return Object.values(source).sort((a, b) =>
-      a.badgeId.localeCompare(b.badgeId),
-    );
+
+    let records = Object.values(source);
+
+    // In production, hide "pre-connection" placeholder entries: the Zero posts
+    // status events with bleStatus "startup" / "scanning" before the Pico BLE
+    // address is known, producing a badgeId of "unknown". These entries have no
+    // useful information for the dashboard and are filtered out in production.
+    // In dev mode they remain visible as a debugging aid.
+    if (!import.meta.env.DEV) {
+      records = records.filter((r) => r.badgeId !== 'unknown');
+    }
+
+    return records.sort((a, b) => a.badgeId.localeCompare(b.badgeId));
   }, [recordsByKey]);
 
   return (
@@ -596,14 +682,7 @@ export const BadgesView = () => {
         <div className="-mx-2 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2">
           {badgeRecords.map((record) => (
             <div key={record.key} className="min-w-0 overflow-hidden rounded-lg border">
-              <div className="flex flex-col gap-0.5 border-b bg-muted/40 px-1.5 py-1">
-                <p className="break-words text-sm font-semibold leading-tight">
-                  {record.badgeId}
-                </p>
-                <p className="break-words text-[11px] leading-tight text-muted-foreground">
-                  {record.controllerId}
-                </p>
-              </div>
+              <BadgeCardHeader record={record} />
               <div className="flex flex-col items-center gap-1 p-1.5">
                 <BleConnectionRow status={record.status} />
                 <EmojiLabelBlock emoji={record.emoji} nfcCardMap={nfcCardMap} />
