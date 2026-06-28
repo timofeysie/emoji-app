@@ -9,6 +9,7 @@ import { WebSocketServer } from 'ws';
 import { AppModule } from './app.module';
 import { BadgeStateService } from './badge-state.service';
 import { requestLoggingMiddleware } from './request-logging.middleware';
+import { APP_VERSION } from './app-version';
 
 async function bootstrap(): Promise<void> {
   const host = process.env['HOST'] ?? 'localhost';
@@ -50,7 +51,7 @@ async function bootstrap(): Promise<void> {
   badgeStateService.setWebSocketServer(wsServer);
 
   await nestApp.listen(port, host);
-  console.log(`[ ready ] http://${host}:${port}`);
+  console.log(`[ ready ] http://${host}:${port} (v${APP_VERSION})`);
 }
 
 void bootstrap();

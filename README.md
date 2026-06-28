@@ -8,13 +8,14 @@ A generative-UI demo built with [Hashbrown](https://hashbrown.dev), React, and N
 
 - Node.js 22+
 - An OpenAI API key (local dev)
+- For staging deploys: AWS CLI authenticated to account `100641718971`, Docker, Terraform `>= 1.7`
 
 ### Local development
 
 ```bash
 npm install
 cp .env.example .env   # add OPENAI_API_KEY (and optionally Cognito values)
-npm run dev            # client on :5200, server on :3000
+npm run dev            # client on :5200, server on :3000 (open http://localhost:5200)
 npm run dev:client     # Vite SPA only
 npm run dev:server     # NestJS server only
 npm run build          # production build of both
@@ -25,35 +26,68 @@ npm run docker:build   # build the production Docker image
 npm run docker:run     # run the image locally on port 3000
 ```
 
-### Deploying a new image to staging
+### Deploy application changes to staging
 
-All commands run from the **repository root** unless noted.
+Run from the repository root unless noted. Full detail also lives in [`infra/terraform/README.md`](infra/terraform/README.md) (“Deploy a new container image”).
+
+Make sure Docker desktop is running before these steps.  The error `open //./pipe/docker_engine: The system cannot find the file specified` means the Docker CLI is installed, but the engine (daemon) isn’t up. On Windows that’s almost always because Docker Desktop is closed or still starting.
 
 ```powershell
-# 1. Build (pass real Cognito values so the SPA can sign users in)
-docker build -t emoji-app:latest `
+# 1. Build production image (client + server in one container)
+#    Use the same VITE_COGNITO_* values as local .env / Cognito console.
+#    cognito_app_client_id is in infra/terraform/envs/staging/terraform.tfvars.
+$tag = "staging-$(Get-Date -Format 'yyyy-MM-dd')"
+docker build -t "emoji-app:$tag" `
   --build-arg VITE_COGNITO_DOMAIN="https://<prefix>.auth.ap-southeast-2.amazoncognito.com" `
-  --build-arg VITE_COGNITO_CLIENT_ID="<client-id>" `
+  --build-arg VITE_COGNITO_CLIENT_ID="7d0kjtsi0h8kjhk2fg1ee64h55" `
   --build-arg VITE_COGNITO_SCOPES="openid email profile" `
   .
 
 # 2. Log in to ECR (once per shell session)
-aws ecr get-login-password --region ap-southeast-2 | `
+aws ecr get-login-password --region ap-southeast-2 |
   docker login --username AWS --password-stdin `
   100641718971.dkr.ecr.ap-southeast-2.amazonaws.com
 
-# 3. Tag and push (use today's date or a git SHA)
-$tag = "staging-$(Get-Date -Format 'yyyy-MM-dd')"
-docker tag emoji-app:latest `
-  100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:$tag
-docker push `
-  100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:$tag
+# 3. Tag and push
+$registry = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com"
+docker tag "emoji-app:$tag" "$registry/emoji-app:$tag"
+docker push "$registry/emoji-app:$tag"
 
-# 4. Update image_uri in infra/terraform/envs/staging/terraform.tfvars
-#    then open a PR — CI will plan on the PR and apply on merge to main.
+# 4. Point Terraform at the new image
+#    Edit infra/terraform/envs/staging/terraform.tfvars:
+#    image_uri = "<registry>/emoji-app:<tag>"
+#    Commit and open a PR for CI apply, or apply locally (see below).
+
+# 5. Roll out on ECS
+cd infra/terraform/envs/staging
+terraform plan
+terraform apply
 ```
 
-See [**`infra/terraform/README.md`**](infra/terraform/README.md) for the full deploy loop.
+#### Verify the rollout
+
+The deployment takes roughly 3–5 minutes from terraform apply to prompt return. The health check math is the dominant factor (5 × 30s = 150s after the grace period).
+
+```powershell
+curl.exe -sS https://emoji-staging.kogs.link/api/version
+# expect {"version":"<your package.json version>"}
+
+curl.exe -sS -w "`nHTTP %{http_code}`n" https://emoji-staging.kogs.link/api/badges
+# expect HTTP 200
+```
+
+If infra was torn down, steps 1–4 are still required when you have **new code**; step 5 alone only recreates AWS resources and pulls the **existing** pinned image.
+
+### Wake staging infrastructure (no code changes)
+
+When staging was destroyed to save cost and you only need the **last deployed image** back online:
+
+```powershell
+cd infra/terraform/envs/staging
+terraform apply
+```
+
+ECR images and Secrets Manager values survive destroy; ECS/ALB are recreated. DNS **https://emoji-staging.kogs.link/** updates automatically.
 
 ### Staging cost management (personal / side-project use)
 
