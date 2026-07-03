@@ -8,6 +8,7 @@ import { GameFlowController } from './game-flow.controller';
 import { NfcCardsController } from './nfc-cards.controller';
 import { NfcCardService } from './nfc-card.service';
 import { VersionController } from './version.controller';
+import { PairBindingsController } from './pair-bindings.controller';
 
 @Module({
   controllers: [
@@ -16,6 +17,7 @@ import { VersionController } from './version.controller';
     GameFlowController,
     NfcCardsController,
     VersionController,
+    PairBindingsController,
   ],
   providers: [BadgeStateService, MongoService, GameDataRepository, NfcCardService],
   exports: [MongoService, GameDataRepository],

@@ -43,14 +43,16 @@ is not up.
 
 ```powershell
 # 1. Set the tag for today. If you already pushed one today, change the suffix (a, b, c...).
-$suffix = "e"   # <-- change this if you deploy more than once on the same day
+$suffix = "h"   # <-- change this if you deploy more than once on the same day
 $tag = "staging-$(Get-Date -Format 'yyyy-MM-dd')$suffix"
 $registry = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com"
 
 # 2. Log in to ECR (once per shell session).
-aws ecr get-login-password --region ap-southeast-2 |
-  docker login --username AWS --password-stdin `
-  $registry
+# Use the two-step form to avoid a pipe hang in PowerShell.
+$token = aws ecr get-login-password --region ap-southeast-2
+$token | docker login --username AWS --password-stdin $registry
+
+aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 100641718971.dkr.ecr.ap-southeast-2.amazonaws.com
 
 # 3. Build the production image (client + server in one container).
 #    VITE_COGNITO_DOMAIN is the value of VITE_COGNITO_DOMAIN in your .env file.
@@ -259,3 +261,100 @@ inside the task. See **`infra/terraform/README.md`** and module **`ecs-service`*
 
 Further reading: glossary-style terms (**ALB**, **ACM**, **Fargate**, etc.) in **`docs/terms.md`**.
 More breadth: **`docs/setup.md`**, **`docs/milestones.md`**.
+
+## Running locally
+
+To develop without AWS (even after using `terraform destroy` there are still costs) while
+still receiving live status updates from a Raspberry Pi Zero badge controller on the same
+LAN.
+
+1. .env changes to bind the server to 0.0.0.0 and disable Cognito auth
+2. Starting npm run dev
+3. Finding the laptop's LAN IP via ipconfig
+4. Adding the Windows Firewall rule for port 3000
+5. Updating SERVER_URL in emoji-os-zero.py on the Pi Zero
+6. MongoDB options (keep using Atlas or run it locally in Docker)
+7. A data-flow diagram showing the end-to-end path
+
+### 1. Configure the server to accept LAN connections
+
+By default `HOST=localhost` means the server only accepts connections from your own
+machine. Set it to `0.0.0.0` so the Pi Zero can reach it. Auth is also disabled because
+Cognito is an AWS resource that is unavailable when the stack is torn down.
+
+Add to your `.env` (copy `.env.example` if you haven't already):
+
+```env
+HOST=0.0.0.0
+DISABLE_AUTH=true
+VITE_DISABLE_AUTH=true
+```
+
+### 2. Start the dev servers
+
+```bash
+npm run dev   # client :5200, server :3000
+```
+
+### 3. Find your laptop's LAN IP
+
+```powershell
+ipconfig
+```
+
+Look for the **IPv4 Address** under your active network adapter (e.g. `192.168.1.xxx`).
+
+### 4. Allow inbound connections through Windows Firewall
+
+Run once in an elevated PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "Emoji App Dev Server" `
+  -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow
+```
+
+### 5. Point the Pi Zero at your laptop
+
+On the Pi Zero, edit `emoji-os-zero.py` and update `SERVER_URL`:
+
+```python
+SERVER_URL = "http://192.168.1.xxx:3000"   # replace with your laptop's LAN IP
+```
+
+Setting `SERVER_URL = ""` disables all server reporting (badge still works offline).
+
+### 6. MongoDB
+
+MongoDB Atlas is external to AWS and keeps running after `terraform destroy`. Confirm
+your `.env` has your Atlas URI:
+
+```env
+MONGODB_URI=mongodb+srv://...
+```
+
+Alternatively, run MongoDB locally with Docker:
+
+```bash
+docker run -d -p 27017:27017 mongo:7
+```
+
+Then set:
+
+```env
+MONGODB_URI=mongodb://localhost:27017/emoji-app
+```
+
+### How it fits together
+
+```text
+Pi Zero (emoji-os-zero.py)
+  │  BLE ↔ Pico badge
+  │  POST http://<laptop-ip>:3000/api/status  (on BLE state change + 40 s liveness)
+  │  POST http://<laptop-ip>:3000/api/emoji   (on emoji selection)
+  ▼
+Express server (localhost:3000)
+  │  BadgeStateService → in-memory state → WebSocket broadcast
+  ▼
+Dashboard browser (localhost:5200)
+  │  WebSocket ws://localhost:3000/ws
+```

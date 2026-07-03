@@ -2,6 +2,7 @@ import { Body, Controller, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { GameDataRepository } from './persistence/game-data.repository';
+import { BadgeStateService } from './badge-state.service';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 const slotLabelSchema = z.enum(['A', 'B', 'C', 'D', 'E']);
@@ -9,6 +10,7 @@ const playModeSchema = z.enum(['standard', 'cut-throat']);
 const participantRoleSchema = z.enum(['player', 'referee', 'spectator']);
 const questionModeSchema = z.enum(['standard', 'cut-throat', 'mixed']);
 const questionStateSchema = z.enum(['open', 'closed']);
+const gameLifecycleStateSchema = z.enum(['lobby', 'active', 'paused', 'completed', 'cancelled']);
 
 const createGameSchema = z.object({
   title: z.string().min(1),
@@ -72,10 +74,15 @@ const setQuestionStateSchema = z.object({
   state: questionStateSchema,
 });
 
+const setGameStateSchema = z.object({
+  state: gameLifecycleStateSchema,
+});
+
 const submitGuessSchema = z.object({
   gameId: objectIdSchema,
   questionId: objectIdSchema,
-  guesserUserId: objectIdSchema,
+  guesserUserId: objectIdSchema.optional(),
+  pairName: z.string().min(1).optional(),
   badgeId: objectIdSchema.optional(),
   cardUid: z.string().min(1),
 });
@@ -87,9 +94,20 @@ function getValidationErrors(error: ZodError): Array<{ path: string; message: st
   }));
 }
 
+/** Maps a new game state to the event name sent to bound controllers. */
+const controllerEventForState: Partial<Record<string, string>> = {
+  lobby: 'game.opened',
+  active: 'game.started',
+  completed: 'game.ended',
+  cancelled: 'game.ended',
+};
+
 @Controller('api')
 export class GameFlowController {
-  constructor(private readonly gameDataRepository: GameDataRepository) {}
+  constructor(
+    private readonly gameDataRepository: GameDataRepository,
+    private readonly badgeStateService: BadgeStateService,
+  ) {}
 
   @Post('games')
   async createGame(@Body() body: unknown, @Res() res: Response): Promise<void> {
@@ -104,6 +122,56 @@ export class GameFlowController {
       res.status(201).json({ gameId });
     } catch (error) {
       res.status(500).json({ error: 'Failed to create game', message: String(error) });
+    }
+  }
+
+  @Post('games/:gameId/state')
+  async setGameState(
+    @Param('gameId') gameId: string,
+    @Body() body: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    const payloadResult = setGameStateSchema.safeParse(body);
+    if (!gameIdResult.success || !payloadResult.success) {
+      const details = [
+        ...(!gameIdResult.success ? getValidationErrors(gameIdResult.error) : []),
+        ...(!payloadResult.success ? getValidationErrors(payloadResult.error) : []),
+      ];
+      res.status(400).json({ error: 'Validation failed', details });
+      return;
+    }
+
+    try {
+      const { state } = payloadResult.data;
+      await this.gameDataRepository.setGameState({ gameId, state });
+
+      const serverTime = new Date().toISOString();
+
+      // Notify dashboard of the state change
+      this.badgeStateService.broadcastDashboard({
+        type: 'game.state.changed',
+        gameId,
+        state,
+        serverTime,
+      });
+
+      // Notify bound controllers if there's a matching controller event
+      const controllerEvent = controllerEventForState[state];
+      if (controllerEvent) {
+        const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
+        if (pairNames.length > 0) {
+          this.badgeStateService.sendToPairNames(pairNames, {
+            type: controllerEvent,
+            gameId,
+            serverTime,
+          });
+        }
+      }
+
+      res.status(200).json({ ok: true, gameId, state });
+    } catch (error) {
+      res.status(400).json({ error: 'Failed to update game state', message: String(error) });
     }
   }
 
@@ -235,6 +303,19 @@ export class GameFlowController {
 
     try {
       const outcome = await this.gameDataRepository.submitGuess(result.data);
+
+      const { gameId, questionId, pairName, badgeId, cardUid } = result.data;
+      this.badgeStateService.broadcastDashboard({
+        type: 'nfc.tagged',
+        gameId,
+        questionId,
+        ...(pairName ? { pairName } : {}),
+        ...(badgeId ? { badgeId } : {}),
+        ...(cardUid ? { cardUid } : {}),
+        slotLabel: outcome.slotLabel ?? undefined,
+        serverTime: new Date().toISOString(),
+      });
+
       res.status(201).json(outcome);
     } catch (error) {
       res.status(400).json({ error: 'Failed to submit guess', message: String(error) });

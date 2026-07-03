@@ -17,6 +17,7 @@ import {
   BluetoothSearching,
   Circle,
   CircleHelp,
+  Cpu,
   Flame,
   Gamepad2,
   Heart,
@@ -89,32 +90,36 @@ type BadgeRecord = {
   emoji?: EmojiSentEvent;
 };
 
-/** Shown in dev when there is no server/WebSocket data so badge card layout can be exercised. */
-const devExampleBadgeRecord: BadgeRecord = (() => {
-  const controllerId = 'dev-local';
-  const badgeId = 'example-badge';
-  const key = `${controllerId}::${badgeId}`;
-  return {
-    key,
-    controllerId,
-    badgeId,
-    status: {
-      controllerId,
-      badgeId,
-      bleStatus: 'connected',
-      timestamp: '2026-04-05T10:00:00.000Z',
-    },
-    emoji: {
-      controllerId,
-      badgeId,
-      menu: 0,
-      pos: 2,
-      neg: 1,
-      label: 'happy_dev',
-      timestamp: '2026-04-05T10:05:30.000Z',
-    },
-  };
-})();
+// TODO: To re-enable the dummy badge for local layout development, uncomment the block below
+// and restore the `devExampleBadgeRecord` reference in the `badgeRecords` useMemo further down
+// (look for the comment "DEV DUMMY BADGE"). Do not commit with this re-enabled.
+//
+// /** Shown in dev when there is no server/WebSocket data so badge card layout can be exercised. */
+// const devExampleBadgeRecord: BadgeRecord = (() => {
+//   const controllerId = 'dev-local';
+//   const badgeId = 'example-badge';
+//   const key = `${controllerId}::${badgeId}`;
+//   return {
+//     key,
+//     controllerId,
+//     badgeId,
+//     status: {
+//       controllerId,
+//       badgeId,
+//       bleStatus: 'connected',
+//       timestamp: '2026-04-05T10:00:00.000Z',
+//     },
+//     emoji: {
+//       controllerId,
+//       badgeId,
+//       menu: 0,
+//       pos: 2,
+//       neg: 1,
+//       label: 'happy_dev',
+//       timestamp: '2026-04-05T10:05:30.000Z',
+//     },
+//   };
+// })();
 
 /** Maps common label strings to a Lucide icon; unknown labels fall back to a neutral icon. */
 const LABEL_ICON_MAP: Record<string, LucideIcon> = {
@@ -449,9 +454,9 @@ function BadgeCardHeader({ record }: { record: BadgeRecord }) {
               {controllerVersion}
             </span>
           )}
-          {picoVersion && (
+          {picoVersion && picoVersion !== 'unknown' && (
             <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground" title="Pico badge version">
-              <ClientBadgeIcon className="h-2.5 w-2.5" />
+              <Cpu className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
               {picoVersion}
             </span>
           )}
@@ -637,24 +642,22 @@ export const BadgesView = () => {
   const badgeRecords = useMemo(() => {
     const hasRealBadges = Object.keys(recordsByKey).length > 0;
 
-    // In dev mode, fall back to a static example record so the card layout can
-    // be exercised without a physical device. In production this branch never
-    // runs because import.meta.env.DEV is replaced with `false` at build time.
-    const source =
-      import.meta.env.DEV && !hasRealBadges
-        ? { [devExampleBadgeRecord.key]: devExampleBadgeRecord }
-        : recordsByKey;
+    // DEV DUMMY BADGE: to inject a static example badge for layout development without a physical
+    // device, uncomment the block below and uncomment devExampleBadgeRecord near the top of this
+    // file. Do not commit with this enabled.
+    //
+    // const source =
+    //   import.meta.env.DEV && !hasRealBadges
+    //     ? { [devExampleBadgeRecord.key]: devExampleBadgeRecord }
+    //     : recordsByKey;
+    const source = recordsByKey;
 
     let records = Object.values(source);
 
-    // In production, hide "pre-connection" placeholder entries: the Zero posts
-    // status events with bleStatus "startup" / "scanning" before the Pico BLE
-    // address is known, producing a badgeId of "unknown". These entries have no
-    // useful information for the dashboard and are filtered out in production.
-    // In dev mode they remain visible as a debugging aid.
-    if (!import.meta.env.DEV) {
-      records = records.filter((r) => r.badgeId !== 'unknown');
-    }
+    // Hide "pre-connection" entries: the Zero posts status events with bleStatus
+    // "startup" / "scanning" before the Pico BLE address is known, producing a
+    // badgeId of "unknown". These entries have no useful information for the dashboard.
+    records = records.filter((r) => r.badgeId !== 'unknown');
 
     return records.sort((a, b) => a.badgeId.localeCompare(b.badgeId));
   }, [recordsByKey]);

@@ -105,6 +105,7 @@ describe('GameDataRepository', () => {
     expect(result).toEqual({
       guessId: '507f1f77bcf86cd799439023',
       answerOptionId: '507f1f77bcf86cd799439022',
+      slotLabel: 'A',
     });
     expect((session.commitTransaction as jest.Mock)).toHaveBeenCalled();
   });

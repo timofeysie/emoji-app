@@ -1,6 +1,6 @@
 # Game realtime communication design
 
-Status: draft for review. No code yet.
+Status: Steps 0, 0.5, and 1 (server foundations) implemented. Steps 2–5 pending.
 
 This document designs the communication between the emoji-app server and the
 Raspberry Pi Zero controllers (each paired to a Pico badge), so that game state
@@ -58,14 +58,19 @@ Pico. The Zero scans for `Pico-Client-<PAIR_NAME>`, and BLE pairing only
 succeeds when the Pico receives `PAIR:<PAIR_NAME>` and replies `PAIR_OK`. It is
 therefore an identity the two halves of a station have already agreed on.
 
-Why it is the right system-wide identity:
+**`PAIR_NAME` identifies the controller, not an individual badge.**
+It is the Zero's logical name. Any Pico that shares the same `PAIR_NAME` is a
+badge "belonging to" that controller station. One Zero may connect to multiple
+Picos that all share its `PAIR_NAME` (see [Multi-badge topologies](#multi-badge-topologies) below).
 
-- **Stable** — unlike the MAC-derived `badgeId`, it does not change if the Pico
+Why it is the right system-wide controller identity:
+
+- **Stable** — unlike the MAC-derived `badgeId`, it does not change if a Pico
   reboots or hardware is swapped.
-- **Human-readable** — `white` / `red` read well on the dashboard and on the
+- **Human-readable** — `green` / `white` read well on the dashboard and on the
   device LCDs, far better than `badge-2c-cf-67-c3-76-6b`.
-- **Right granularity** — it names exactly one player station (one Zero + one
-  Pico), which is the unit that joins a game and tags NFC cards.
+- **Right granularity for the controller** — it names the team / station that
+  joins a game; individual badges within that station are identified by `badgeId`.
 
 How it flows through the system:
 
@@ -76,6 +81,74 @@ How it flows through the system:
   **Game** sections by pair.
 - `controllerId` and `badgeId` are still carried for continuity and diagnostics
   (the existing badge view keys on `controllerId::badgeId`).
+- `badgeId` is the **individual badge identifier** — unique per physical Pico
+  chip (MAC-derived). It must accompany `pairName` wherever a specific badge's
+  action needs to be attributed (NFC tag events, guesses).
+
+## Multi-badge topologies
+
+Two scenarios exist for games with more Pico badges than controllers:
+
+### Topology A — One controller, N same-named badges (team buzzer)
+
+All Picos share `PAIR_NAME = "green"` (deployed via the same `pair_config.py`).
+The single "green" Zero connects to all of them simultaneously.
+
+```
+Zero (green)  ──BLE──▶  Pico 1 (green, badgeId = badge-aa-bb...)
+              ──BLE──▶  Pico 2 (green, badgeId = badge-cc-dd...)
+              ──BLE──▶  Pico 3 (green, badgeId = badge-ee-ff...)
+```
+
+**Differentiating badges:** each Pico has a unique `badgeId` derived from its
+Bluetooth MAC address. Even when `PAIR_NAME` is the same, `badgeId` is unique
+per chip and already flows through every server event. The server key
+`controllerId::badgeId` is already unique per physical device.
+
+**NFC guess attribution:** `submitGuess` must carry `badgeId` alongside
+`pairName` so the server knows which specific badge scanned a card.
+
+**BLE feasibility:** Bleak on Linux supports multiple simultaneous BLE central
+connections (one `BleakClient` instance per device). Each Pico accepts one
+central connection at a time. The Zero's current single-connection scan loop
+would be replaced by a multi-connection loop — additive change, no architectural
+breakage.
+
+**Config burden:** very low — all Picos get the same `pair_config.py`.
+
+**Good for:** team-mode games ("the green team has 4 buzzers"), audience
+participation, or classroom sets where one station manages many physical devices.
+
+### Topology B — Each badge has its own unique name (individual player)
+
+Each Pico carries its own config (e.g. `PAIR_NAME = "player-1"`) and advertises
+as `Pico-Client-player-1`. The Zero can connect to specific badges by name, and
+a badge can potentially choose a different controller if hardware is swapped.
+
+**Differentiating badges:** by `picoId` / `PAIR_NAME` directly.
+
+**Config burden:** high — each Pico needs its own `pair_config.py`.
+
+**Discovery problem:** if badges can choose controllers, a referee-facing
+assignment UI is needed. Without it, the Zero must be told which badge names to
+seek at startup.
+
+**Good for:** long-running individual-player setups where badge identity is more
+important than station identity.
+
+### Recommendation for the current design
+
+Use **Topology A** as the multi-badge extension path:
+
+- `pairName` remains the **controller identity** (Zero's name).
+- `badgeId` becomes the **badge participant identity** (Pico's MAC).
+- `pairBindings` (`pairName → gameId`) is unchanged — it's the controller's binding.
+- Add `badgeId` to `submitGuess` (and to `nfc.tagged` events) so individual
+  badge activity is always attributable.
+- The WS room key stays `pairName`; game events fan out to all badges in the
+  room; NFC tag events carry `badgeId` for the dashboard to show per-badge activity.
+
+Topology B is noted as a future option but is not planned for the current demo.
 
 ## Software version reporting
 
@@ -239,11 +312,11 @@ target count is reached can come later.)
 | --- | --- |
 | Device to server | `POST /api/status`, `POST /api/emoji` (fire-and-forget REST) |
 | Server to browser | `/ws` broadcast (`status.changed`, `emoji.sent`) + `GET /api/badges` poll fallback |
-| Server to device | **does not exist** |
-| `/ws` addressing | **broadcast to all clients** (no rooms / no identity) |
-| Game lifecycle | `game.state` enum exists in Mongo, but **no endpoint transitions it** and nothing is broadcast |
-| Join / readiness | **does not exist** as an endpoint |
-| Pair to game link | **does not exist** |
+| Server to device | WS rooms per `pairName` — `game.*` and `question.*` events targeted to bound pairs ✅ |
+| `/ws` addressing | Registry with `dashboards` set + `pairRooms` map; `controller.hello` classifies each socket ✅ |
+| Game lifecycle | `POST /api/games/:gameId/state` transitions and broadcasts `game.state.changed` + controller events ✅ |
+| Join / readiness | `POST /api/games/:gameId/join` marks pair joined; broadcasts `controller.joined` ✅ |
+| Pair to game link | `pairBindings` collection; `POST /api/games/:gameId/pairs` and `GET /api/pairs/:pairName` ✅ |
 | Pair identity | `PAIR_NAME` now sent in every `POST /api/status` and `POST /api/emoji` as `pairName`; shown as primary label on badge cards ✅ |
 | Software versions | `controllerVersion` (Zero) and `picoVersion` (from `PAIR_OK:<version>` handshake) now in `POST /api/status`; shown on badge cards ✅ |
 | Battery level | Zero INA219 reading now in `POST /api/status` as `batteryLevel`; shown on badge cards ✅ |
@@ -429,12 +502,17 @@ across games (the row is upserted, never deleted on game end). Minimal shape:
 
 ```text
 pairBindings
-  pairName      string   (unique, e.g. "white")
+  pairName      string   (unique controller name, e.g. "green")
   gameId        ObjectId (ref Game, nullable)
-  controllerId  string   (last-seen Pi id, diagnostic)
+  controllerId  string   (last-seen Zero id, diagnostic)
   joined        boolean  (reset to false when gameId changes)
   updatedAt     Date
 ```
+
+Note: `pairBindings` tracks the **controller** (Zero), not individual badges.
+Individual Pico badges are identified by their `badgeId` which is carried on
+every event. A future `badgeRegistrations` collection can map `badgeId →
+pairName` if per-badge join state is needed (Topology A multi-badge support).
 
 Endpoints:
 
@@ -466,12 +544,15 @@ mirroring the existing `setQuestionState` pattern:
 
 Reuse the existing guess path. The Zero relays a tag forwarded from the Pico:
 
-- `POST /api/guesses` body `{ gameId, questionId, pairName, cardUid }` — existing
-  `submitGuess` resolves the active NFC card group, maps `cardUid` to a
+- `POST /api/guesses` body `{ gameId, questionId, pairName, badgeId, cardUid }` —
+  existing `submitGuess` resolves the active NFC card group, maps `cardUid` to a
   slot/answer option, records the guess, and now also emits `nfc.tagged`
-  (carrying `pairName`) to the dashboard. (`badgeId`/`guesserUserId` association
-  can be derived from the binding later; for the demo the cardUid + pairName is
-  enough to show activity.)
+  (carrying both `pairName` and `badgeId`) to the dashboard.
+
+`badgeId` is required alongside `pairName` so that in a multi-badge setup
+(Topology A) the dashboard can show which specific badge scanned the card. In
+the 1:1 case the Zero already knows the single connected badge's `badgeId` from
+the BLE connection and includes it automatically.
 
 ### 5. WebSocket gateway + registry
 
@@ -506,7 +587,7 @@ Server to **dashboard** (broadcast, in addition to existing badge events):
 ```json
 { "type": "game.state.changed", "gameId": "...", "state": "active", "serverTime": "..." }
 { "type": "controller.joined", "gameId": "...", "pairName": "white", "controllerId": "zero-1", "serverTime": "..." }
-{ "type": "nfc.tagged", "gameId": "...", "questionId": "...", "pairName": "white", "controllerId": "zero-1", "cardUid": "...", "slotLabel": "B", "serverTime": "..." }
+{ "type": "nfc.tagged", "gameId": "...", "questionId": "...", "pairName": "white", "controllerId": "zero-1", "badgeId": "badge-88-a2-...", "cardUid": "...", "slotLabel": "B", "serverTime": "..." }
 ```
 
 The existing `status.changed` event (and the `GET /api/badges` snapshot) now
@@ -609,20 +690,25 @@ Server time is canonical (consistent with the badge timestamp policy in
    - Dashboard badge cards display `pairName` (primary label), version badges,
      and a color-coded battery indicator.
 
-1. **Server foundations (no device impact)**
+1. **Server foundations ✅ done**
    - `pairBindings` model (keyed by `pairName`) + bind/get endpoints.
-   - Add `EXPECTED_CONTROLLER_VERSION` / `EXPECTED_PICO_VERSION` config and expose
-     the expected values (or a computed `outdated` flag).
-   - `POST /api/games/:gameId/state` (+ repository transition method) and
+   - `EXPECTED_CONTROLLER_VERSION` / `EXPECTED_PICO_VERSION` config exposed on
+     `GET /api/version`.
+   - `POST /api/games/:gameId/state` (+ `setGameState` repository method) and
      `POST /api/games/:gameId/join` (by `pairName`).
-   - Extend `submitGuess` to accept `pairName` and emit `nfc.tagged`.
-   - Refactor ws into a registry with `broadcastDashboard` +
-     `sendToPairsOfGame`; handle `controller.hello` (record `pairName`; accept but
-     do not validate `token`); emit controller and dashboard events.
-   - Unit tests mirroring existing `*.spec.ts` coverage.
+   - `submitGuess` extended to accept `pairName` (optional `guesserUserId`);
+     emits `nfc.tagged` to dashboard on success.
+   - WS refactored to a registry with `broadcastDashboard` +
+     `sendToPairNames`; handles `controller.hello` (records `pairName`,
+     sends `controller.welcome`; does not validate token); emits controller
+     and dashboard events.
+   - 27 unit tests passing across 5 suites.
 
-2. **Infra**
-   - ALB `idle_timeout`; confirm `wss://` upgrade through the ALB end to end.
+2. **Infra** (code done; staging deploy pending)
+   - `idle_timeout = 300` added to `aws_lb.app` via `var.alb_idle_timeout`.
+   - 30 s ping heartbeat added to `BadgeStateService.setWebSocketServer`.
+   - Vite dev proxy extended with `/ws` → `ws://localhost:3000` so local dev works.
+   - Staging verification: `terraform apply` + end-to-end `wss://` smoke test pending.
 
 3. **Zero**
    - WS client + hello/welcome (send the placeholder `token`) + reconnect/backoff
@@ -643,16 +729,20 @@ Server time is canonical (consistent with the badge timestamp policy in
 ## Open questions
 
 - **NFC identity**: `submitGuess` currently needs `questionId` and (per schema)
-  a `guesserUserId`. For the demo, do we relax the guess schema to accept a
-  `pairName` and derive the user from the binding, or introduce a lighter
-  `POST /api/nfc-tags` event that does not write a `guesses` row until identity
-  is wired up?
+  a `guesserUserId`. For the demo, do we relax the guess schema to accept
+  `pairName` + `badgeId` and derive the user from the binding, or introduce a
+  lighter `POST /api/nfc-tags` event that does not write a `guesses` row until
+  identity is wired up?
 - **"All joined" semantics**: keep it a manual referee decision (current plan),
   or track an expected player count for an auto-ready indicator?
 - **Multiple pairs per game**: supported by the room model; confirm the UX
   (several pair rooms in one game) and how the dashboard groups them.
-- **`pairName` uniqueness**: pair names (e.g. `white`) must be unique across
+- **`pairName` uniqueness**: pair names (e.g. `green`) must be unique across
   active stations. Is a flat global namespace fine for the demo, or do we
   eventually scope names per game/venue?
 - **Pico display semantics**: exact LCD behavior for `game started`,
   `question open`, and `game ended` — needs a quick visual spec.
+- **Multi-badge (Topology A) activation**: when the Zero connects to N Picos
+  simultaneously, does it run the same pair handshake N times in parallel, or
+  serially? How does the dashboard show N badge cards under one `pairName`?
+  (Not required for the current 1:1 demo; flagged for future planning.)

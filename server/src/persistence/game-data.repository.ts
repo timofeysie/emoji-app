@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { ClientSession } from 'mongoose';
+import { ClientSession, Types } from 'mongoose';
 import { MongoService } from './mongo.service';
-import { PlayMode, QuestionMode, SlotLabel } from './domain-types';
+import { GameState, PlayMode, QuestionMode, SlotLabel } from './domain-types';
 import { asObjectId } from './models';
 
 export type CreateGameInput = {
@@ -33,9 +33,25 @@ export type CreateQuestionInput = {
 export type SubmitGuessInput = {
   gameId: string;
   questionId: string;
-  guesserUserId: string;
+  guesserUserId?: string;
+  pairName?: string;
   badgeId?: string;
   cardUid: string;
+};
+
+export type BindPairInput = {
+  pairName: string;
+  gameId: string;
+  controllerId?: string;
+};
+
+export type PairBindingSnapshot = {
+  pairName: string;
+  controllerId: string | undefined;
+  gameId: string | null;
+  state: GameState | null;
+  joined: boolean;
+  openQuestionId: string | null;
 };
 
 export type CreateNfcCardGroupInput = {
@@ -165,7 +181,7 @@ export class GameDataRepository {
     });
   }
 
-  async submitGuess(input: SubmitGuessInput): Promise<{ guessId: string; answerOptionId: string }> {
+  async submitGuess(input: SubmitGuessInput): Promise<{ guessId: string; answerOptionId: string; slotLabel: string }> {
     const { Question, AnswerOption, Guess, GameNfcCardGroupAssignment, NfcCard } =
       this.mongoService.getModels();
 
@@ -215,7 +231,8 @@ export class GameDataRepository {
             gameId: asObjectId(input.gameId),
             questionId: asObjectId(input.questionId),
             answerOptionId: answerOption._id,
-            guesserUserId: asObjectId(input.guesserUserId),
+            ...(input.guesserUserId ? { guesserUserId: asObjectId(input.guesserUserId) } : {}),
+            ...(input.pairName ? { pairName: input.pairName } : {}),
             ...(input.badgeId ? { badgeId: asObjectId(input.badgeId) } : {}),
             cardUid: input.cardUid,
             slotLabel: nfcCard.slotLabel,
@@ -227,8 +244,101 @@ export class GameDataRepository {
       return {
         guessId: guess[0]._id.toString(),
         answerOptionId: answerOption._id.toString(),
+        slotLabel: nfcCard.slotLabel,
       };
     });
+  }
+
+  async setGameState(input: { gameId: string; state: GameState }): Promise<{ gameId: string; state: GameState }> {
+    const { Game } = this.mongoService.getModels();
+    const game = await Game.findById(asObjectId(input.gameId)).lean();
+    if (!game) {
+      throw new Error('Game not found.');
+    }
+
+    const allowedTransitions: Partial<Record<GameState, GameState[]>> = {
+      draft: ['lobby'],
+      lobby: ['active', 'cancelled'],
+      active: ['paused', 'completed', 'cancelled'],
+      paused: ['active', 'cancelled'],
+    };
+
+    const allowed = allowedTransitions[game.state as GameState] ?? [];
+    if (!allowed.includes(input.state)) {
+      throw new Error(`Cannot transition game from '${game.state}' to '${input.state}'.`);
+    }
+
+    const timestampFields: Partial<Record<GameState, string>> = {
+      active: 'startedAt',
+      completed: 'endedAt',
+      cancelled: 'endedAt',
+    };
+    const timestampField = timestampFields[input.state];
+
+    await Game.updateOne(
+      { _id: asObjectId(input.gameId) },
+      { $set: { state: input.state, ...(timestampField ? { [timestampField]: new Date() } : {}) } },
+    );
+
+    return { gameId: input.gameId, state: input.state };
+  }
+
+  async bindPair(input: BindPairInput): Promise<void> {
+    const { PairBinding } = this.mongoService.getModels();
+    await PairBinding.updateOne(
+      { pairName: input.pairName },
+      {
+        $set: {
+          gameId: new Types.ObjectId(input.gameId),
+          joined: false,
+          updatedAt: new Date(),
+          ...(input.controllerId ? { controllerId: input.controllerId } : {}),
+        },
+        $setOnInsert: { pairName: input.pairName },
+      },
+      { upsert: true },
+    );
+  }
+
+  async getBinding(pairName: string): Promise<PairBindingSnapshot | null> {
+    const { PairBinding, Game, Question } = this.mongoService.getModels();
+    const binding = await PairBinding.findOne({ pairName }).lean();
+    if (!binding) {
+      return null;
+    }
+
+    const gameId = binding.gameId ? (binding.gameId as Types.ObjectId).toString() : null;
+    let state: GameState | null = null;
+    let openQuestionId: string | null = null;
+
+    if (gameId) {
+      const game = await Game.findById(binding.gameId).lean();
+      if (game) {
+        state = game.state as GameState;
+        const openQuestion = await Question.findOne({ gameId: binding.gameId, state: 'open' }).lean();
+        openQuestionId = openQuestion ? (openQuestion._id as Types.ObjectId).toString() : null;
+      }
+    }
+
+    return {
+      pairName: binding.pairName,
+      controllerId: binding.controllerId ?? undefined,
+      gameId,
+      state,
+      joined: binding.joined,
+      openQuestionId,
+    };
+  }
+
+  async markJoined(pairName: string): Promise<void> {
+    const { PairBinding } = this.mongoService.getModels();
+    await PairBinding.updateOne({ pairName }, { $set: { joined: true, updatedAt: new Date() } });
+  }
+
+  async getBindingsByGameId(gameId: string): Promise<string[]> {
+    const { PairBinding } = this.mongoService.getModels();
+    const bindings = await PairBinding.find({ gameId: new Types.ObjectId(gameId) }, { pairName: 1 }).lean();
+    return bindings.map((b) => b.pairName);
   }
 
   private async withOptionalTransaction<T>(

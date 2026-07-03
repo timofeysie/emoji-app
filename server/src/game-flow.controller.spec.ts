@@ -1,6 +1,7 @@
 import type { Response } from 'express';
 import { GameFlowController } from './game-flow.controller';
 import { GameDataRepository } from './persistence/game-data.repository';
+import { BadgeStateService } from './badge-state.service';
 
 type ResponseMock = Pick<Response, 'status' | 'json'> & {
   status: jest.Mock;
@@ -22,11 +23,25 @@ describe('GameFlowController', () => {
     addParticipant: jest.fn(),
     createQuestionWithOptions: jest.fn(),
     setQuestionState: jest.fn(),
+    setGameState: jest.fn(),
     createNfcCardGroup: jest.fn(),
     assignNfcCardGroupToGame: jest.fn(),
     submitGuess: jest.fn(),
+    bindPair: jest.fn(),
+    getBinding: jest.fn(),
+    markJoined: jest.fn(),
+    getBindingsByGameId: jest.fn(),
   } as unknown as jest.Mocked<GameDataRepository>;
-  const controller = new GameFlowController(repository);
+
+  const badgeStateService: jest.Mocked<Pick<BadgeStateService, 'broadcastDashboard' | 'sendToPairNames'>> = {
+    broadcastDashboard: jest.fn(),
+    sendToPairNames: jest.fn(),
+  };
+
+  const controller = new GameFlowController(
+    repository,
+    badgeStateService as unknown as BadgeStateService,
+  );
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -111,5 +126,110 @@ describe('GameFlowController', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(repository.submitGuess).toHaveBeenCalled();
+  });
+
+  it('accepts submitGuess without guesserUserId when pairName is provided', async () => {
+    const res = createResponseMock();
+    repository.submitGuess.mockResolvedValue({
+      guessId: '507f1f77bcf86cd799439020',
+      answerOptionId: '507f1f77bcf86cd799439021',
+      slotLabel: 'A',
+    });
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'white',
+        cardUid: 'CARD-UID-A-001',
+      },
+      res as unknown as Response,
+    );
+
+    expect(repository.submitGuess).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'nfc.tagged', pairName: 'white' }),
+    );
+  });
+
+  describe('POST /api/games/:gameId/state', () => {
+    it('returns 400 when gameId is not a valid ObjectId', async () => {
+      const res = createResponseMock();
+
+      await controller.setGameState('bad-id', { state: 'lobby' }, res as unknown as Response);
+
+      expect(repository.setGameState).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    it('returns 400 when state is not a valid lifecycle state', async () => {
+      const res = createResponseMock();
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'draft' },
+        res as unknown as Response,
+      );
+
+      expect(repository.setGameState).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    it('transitions game to lobby and emits game.opened to controllers', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'lobby' });
+      repository.getBindingsByGameId.mockResolvedValue(['white', 'red']);
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'lobby' },
+        res as unknown as Response,
+      );
+
+      expect(repository.setGameState).toHaveBeenCalledWith({
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'lobby',
+      });
+      expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'game.state.changed', state: 'lobby' }),
+      );
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white', 'red'],
+        expect.objectContaining({ type: 'game.opened' }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('transitions game to active and emits game.started to controllers', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'active' });
+      repository.getBindingsByGameId.mockResolvedValue(['white']);
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'active' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white'],
+        expect.objectContaining({ type: 'game.started' }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('maps repository setGameState errors to 400', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockRejectedValue(new Error("Cannot transition game from 'lobby' to 'lobby'."));
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'lobby' },
+        res as unknown as Response,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
   });
 });
