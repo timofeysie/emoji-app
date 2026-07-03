@@ -41,3 +41,9 @@ variable "route53_zone_id" {
   type        = string
   default     = ""
 }
+
+variable "alb_idle_timeout" {
+  description = "ALB idle connection timeout in seconds. Must exceed the WebSocket ping interval (default 30 s) to prevent the ALB dropping quiet connections."
+  type        = number
+  default     = 300
+}

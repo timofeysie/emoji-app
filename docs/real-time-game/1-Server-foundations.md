@@ -8,7 +8,7 @@ controller + Zod + service on the server, and an HTTP fetch with offline
 fallback on the Zero) without touching game state. **Step 1** is the original
 foundations work from [`game-realtime-design.md`](./game-realtime-design.md).
 
-## Step 0 — NFC card mapping API (do this first)
+## Step 0 — NFC card mapping API ✅ implemented
 
 ### Goal
 
@@ -147,15 +147,38 @@ dashboard without touching game state.
     do not validate `token`); emit controller and dashboard events.
 - Unit tests mirroring existing `*.spec.ts` coverage.
 
-## Step 1 — Server foundations (no device impact)
+## Step 1 — Server foundations ✅ implemented
 
-- `pairBindings` model (keyed by `pairName`) + bind/get endpoints.
-- `EXPECTED_CONTROLLER_VERSION` / `EXPECTED_PICO_VERSION` config and expose
-    the expected values (or a computed `outdated` flag).
-- `POST /api/games/:gameId/state` (+ repository transition method) and
-    `POST /api/games/:gameId/join` (by `pairName`).
-- Extend `submitGuess` to accept `pairName` and emit `nfc.tagged`.
-- Refactor ws into a registry with `broadcastDashboard` +
-    `sendToPairsOfGame`; handle `controller.hello` (record `pairName`; accept but
-    do not validate `token`); emit controller and dashboard events.
-- Unit tests mirroring existing `*.spec.ts` coverage.
+### What was done
+
+- **`pairBindings` model** — `pairBindingSchema` added to `persistence/models.ts`
+  (`pairName`, `gameId`, `controllerId`, `joined`, `updatedAt`); registered in
+  `registerModels`. `GameDataRepository` gained `bindPair`, `getBinding`,
+  `markJoined`, and `getBindingsByGameId` methods.
+- **`pair-bindings.controller.ts`** (new) — exposes:
+  - `POST /api/games/:gameId/pairs` — bind a pair to a game (upsert, resets `joined`).
+  - `GET /api/pairs/:pairName` — snapshot: binding + resolved game state +
+    open question id (HTTP fallback for Zero when WS is down).
+  - `POST /api/games/:gameId/join` — marks pair as joined and broadcasts
+    `controller.joined` to the dashboard.
+- **Expected version constants** — `EXPECTED_CONTROLLER_VERSION` and
+  `EXPECTED_PICO_VERSION` added to `app-version.ts` (env-overridable); exposed on
+  `GET /api/version` so the frontend can compute the `outdated` flag client-side.
+- **`POST /api/games/:gameId/state`** — added to `game-flow.controller.ts` with a
+  `setGameState` repository method that validates allowed transitions and stamps
+  `startedAt`/`endedAt`. Emits `game.state.changed` to dashboards and
+  `game.opened` / `game.started` / `game.ended` to bound controller rooms.
+- **Extended `submitGuess`** — `guesserUserId` made optional; `pairName` added.
+  `guessSchema` unique index split into two partial indexes (user-based and
+  pair-based). After a successful guess the controller broadcasts `nfc.tagged`
+  (carrying `pairName`, `badgeId`, `cardUid`, `slotLabel`) to the dashboard.
+- **WS registry refactor** — `badge-state.service.ts` now maintains `dashboards`
+  (Set), `pairRooms` (Map) and `socketToPair` (reverse map). On `connection` each
+  socket is classified as dashboard until a `controller.hello` arrives, at which
+  point it moves into its `pairName` room and receives a `controller.welcome`
+  acknowledgement. `broadcastDashboard` replaces the old `emitEvent` broadcast;
+  `sendToPairNames` delivers targeted events to controller rooms. Socket `close`
+  cleans up all registries.
+- **Unit tests** — `pair-bindings.controller.spec.ts` (new, 7 tests);
+  `game-flow.controller.spec.ts` updated with 6 new cases (game state transitions,
+  `submitGuess` with `pairName`, `nfc.tagged` broadcast). All 27 tests pass.

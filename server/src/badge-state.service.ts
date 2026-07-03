@@ -105,6 +105,18 @@ export class BadgeStateService {
   setWebSocketServer(wsServer: WebSocketServer): void {
     this.wsServer = wsServer;
 
+    // Ping every 30 s so the ALB never sees a fully idle connection.
+    // Browsers and the `websockets` library on the Zero respond with pong automatically.
+    const heartbeat = setInterval(() => {
+      for (const client of wsServer.clients) {
+        if (client.readyState === client.OPEN) {
+          client.ping();
+        }
+      }
+    }, 30_000);
+
+    wsServer.on('close', () => clearInterval(heartbeat));
+
     wsServer.on('connection', (socket: WebSocket) => {
       // Classify as dashboard until a controller.hello arrives
       this.dashboards.add(socket);

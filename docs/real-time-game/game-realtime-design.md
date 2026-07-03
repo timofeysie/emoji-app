@@ -1,6 +1,6 @@
 # Game realtime communication design
 
-Status: draft for review. No code yet.
+Status: Steps 0, 0.5, and 1 (server foundations) implemented. Steps 2–5 pending.
 
 This document designs the communication between the emoji-app server and the
 Raspberry Pi Zero controllers (each paired to a Pico badge), so that game state
@@ -312,11 +312,11 @@ target count is reached can come later.)
 | --- | --- |
 | Device to server | `POST /api/status`, `POST /api/emoji` (fire-and-forget REST) |
 | Server to browser | `/ws` broadcast (`status.changed`, `emoji.sent`) + `GET /api/badges` poll fallback |
-| Server to device | **does not exist** |
-| `/ws` addressing | **broadcast to all clients** (no rooms / no identity) |
-| Game lifecycle | `game.state` enum exists in Mongo, but **no endpoint transitions it** and nothing is broadcast |
-| Join / readiness | **does not exist** as an endpoint |
-| Pair to game link | **does not exist** |
+| Server to device | WS rooms per `pairName` — `game.*` and `question.*` events targeted to bound pairs ✅ |
+| `/ws` addressing | Registry with `dashboards` set + `pairRooms` map; `controller.hello` classifies each socket ✅ |
+| Game lifecycle | `POST /api/games/:gameId/state` transitions and broadcasts `game.state.changed` + controller events ✅ |
+| Join / readiness | `POST /api/games/:gameId/join` marks pair joined; broadcasts `controller.joined` ✅ |
+| Pair to game link | `pairBindings` collection; `POST /api/games/:gameId/pairs` and `GET /api/pairs/:pairName` ✅ |
 | Pair identity | `PAIR_NAME` now sent in every `POST /api/status` and `POST /api/emoji` as `pairName`; shown as primary label on badge cards ✅ |
 | Software versions | `controllerVersion` (Zero) and `picoVersion` (from `PAIR_OK:<version>` handshake) now in `POST /api/status`; shown on badge cards ✅ |
 | Battery level | Zero INA219 reading now in `POST /api/status` as `batteryLevel`; shown on badge cards ✅ |
@@ -690,20 +690,25 @@ Server time is canonical (consistent with the badge timestamp policy in
    - Dashboard badge cards display `pairName` (primary label), version badges,
      and a color-coded battery indicator.
 
-1. **Server foundations (no device impact)**
+1. **Server foundations ✅ done**
    - `pairBindings` model (keyed by `pairName`) + bind/get endpoints.
-   - Add `EXPECTED_CONTROLLER_VERSION` / `EXPECTED_PICO_VERSION` config and expose
-     the expected values (or a computed `outdated` flag).
-   - `POST /api/games/:gameId/state` (+ repository transition method) and
+   - `EXPECTED_CONTROLLER_VERSION` / `EXPECTED_PICO_VERSION` config exposed on
+     `GET /api/version`.
+   - `POST /api/games/:gameId/state` (+ `setGameState` repository method) and
      `POST /api/games/:gameId/join` (by `pairName`).
-   - Extend `submitGuess` to accept `pairName` and emit `nfc.tagged`.
-   - Refactor ws into a registry with `broadcastDashboard` +
-     `sendToPairsOfGame`; handle `controller.hello` (record `pairName`; accept but
-     do not validate `token`); emit controller and dashboard events.
-   - Unit tests mirroring existing `*.spec.ts` coverage.
+   - `submitGuess` extended to accept `pairName` (optional `guesserUserId`);
+     emits `nfc.tagged` to dashboard on success.
+   - WS refactored to a registry with `broadcastDashboard` +
+     `sendToPairNames`; handles `controller.hello` (records `pairName`,
+     sends `controller.welcome`; does not validate token); emits controller
+     and dashboard events.
+   - 27 unit tests passing across 5 suites.
 
-2. **Infra**
-   - ALB `idle_timeout`; confirm `wss://` upgrade through the ALB end to end.
+2. **Infra** (code done; staging deploy pending)
+   - `idle_timeout = 300` added to `aws_lb.app` via `var.alb_idle_timeout`.
+   - 30 s ping heartbeat added to `BadgeStateService.setWebSocketServer`.
+   - Vite dev proxy extended with `/ws` → `ws://localhost:3000` so local dev works.
+   - Staging verification: `terraform apply` + end-to-end `wss://` smoke test pending.
 
 3. **Zero**
    - WS client + hello/welcome (send the placeholder `token`) + reconnect/backoff

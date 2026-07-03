@@ -43,14 +43,16 @@ is not up.
 
 ```powershell
 # 1. Set the tag for today. If you already pushed one today, change the suffix (a, b, c...).
-$suffix = "e"   # <-- change this if you deploy more than once on the same day
+$suffix = "h"   # <-- change this if you deploy more than once on the same day
 $tag = "staging-$(Get-Date -Format 'yyyy-MM-dd')$suffix"
 $registry = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com"
 
 # 2. Log in to ECR (once per shell session).
-aws ecr get-login-password --region ap-southeast-2 |
-  docker login --username AWS --password-stdin `
-  $registry
+# Use the two-step form to avoid a pipe hang in PowerShell.
+$token = aws ecr get-login-password --region ap-southeast-2
+$token | docker login --username AWS --password-stdin $registry
+
+aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 100641718971.dkr.ecr.ap-southeast-2.amazonaws.com
 
 # 3. Build the production image (client + server in one container).
 #    VITE_COGNITO_DOMAIN is the value of VITE_COGNITO_DOMAIN in your .env file.

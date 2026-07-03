@@ -5,6 +5,8 @@ resource "aws_lb" "app" {
   ip_address_type    = "ipv4"
   security_groups    = [var.alb_security_group_id]
   subnets            = var.subnet_ids
+
+  idle_timeout = var.alb_idle_timeout
 }
 
 resource "aws_lb_target_group" "tg" {
