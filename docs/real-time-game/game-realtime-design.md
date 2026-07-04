@@ -1,6 +1,6 @@
 # Game realtime communication design
 
-Status: Steps 0, 0.5, and 1 (server foundations) implemented. Steps 2–5 pending.
+Status: Steps 0, 0.5, 1, 2, and 3 implemented. Step 4 (Pico) in planning. Step 5 pending.
 
 This document designs the communication between the emoji-app server and the
 Raspberry Pi Zero controllers (each paired to a Pico badge), so that game state
@@ -704,19 +704,28 @@ Server time is canonical (consistent with the badge timestamp policy in
      and dashboard events.
    - 27 unit tests passing across 5 suites.
 
-2. **Infra** (code done; staging deploy pending)
+2. **Infra ✅ done**
    - `idle_timeout = 300` added to `aws_lb.app` via `var.alb_idle_timeout`.
    - 30 s ping heartbeat added to `BadgeStateService.setWebSocketServer`.
    - Vite dev proxy extended with `/ws` → `ws://localhost:3000` so local dev works.
-   - Staging verification: `terraform apply` + end-to-end `wss://` smoke test pending.
+   - Deployed and verified on staging (`wss://emoji-staging.kogs.link/ws` confirmed).
 
-3. **Zero**
+3. **Zero ✅ done** (see `3-zero.md`)
+   - `websockets` async client running in the existing `ble_event_loop`.
+   - `controller.hello` on connect; `controller.welcome` snapshot applied to display.
+   - Game mode entry via menu 3 · pos 4 (new 'G' glyph); status text shows
+     lobby/active/completed state.
+   - KEY2 in game mode sends `POST /api/games/:gameId/join`.
+   - `game.*` and `question.*` events update display and write `GAME:*` to Pico.
+   - `TAG:<cardUid>` from Pico → `POST /api/guesses`; legacy `NFC:` path unchanged.
+   - HTTP fallback polls `GET /api/pairs/:pairName` every 30 s when WS is down.
+   - Exponential backoff reconnect (2 s → 60 s cap).
    - WS client + hello/welcome (send the placeholder `token`) + reconnect/backoff
      + HTTP fallback.
    - Join prompt -> join POST; map game events to LCD updates and Pico BLE
      writes; subscribe to Pico `TAG:` notifications -> guess POST.
 
-4. **Pico**
+4. **Pico** (planning — see `4-pico.md`)
    - `GAME:*` command handling + display routines; `TAG:` notify on NFC read;
      reply `PAIR_OK:<VERSION>` in the handshake.
 
