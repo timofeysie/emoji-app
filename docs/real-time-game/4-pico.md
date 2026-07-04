@@ -1,6 +1,6 @@
 # Step 4 — Pico badge game commands
 
-Status: planning
+Status: implemented in `emoji-os-pico.py` v0.4.0
 
 This document covers all changes needed to the Pico badge script
 (`emoji-os-pico.py`) to participate in the real-time game flow. After this

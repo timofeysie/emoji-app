@@ -1,6 +1,6 @@
 # Game realtime communication design
 
-Status: Steps 0, 0.5, 1, 2, and 3 implemented. Step 4 (Pico) in planning. Step 5 pending.
+Status: Steps 0, 0.5, 1, 2, 3, and 4 implemented. Step 5 (Dashboard) pending.
 
 This document designs the communication between the emoji-app server and the
 Raspberry Pi Zero controllers (each paired to a Pico badge), so that game state
@@ -725,9 +725,12 @@ Server time is canonical (consistent with the badge timestamp policy in
    - Join prompt -> join POST; map game events to LCD updates and Pico BLE
      writes; subscribe to Pico `TAG:` notifications -> guess POST.
 
-4. **Pico** (planning — see `4-pico.md`)
-   - `GAME:*` command handling + display routines; `TAG:` notify on NFC read;
-     reply `PAIR_OK:<VERSION>` in the handshake.
+4. **Pico ✅ done** (see `4-pico.md`)
+   - `GAME:active/question_open/question_close/ended` dispatched in `handle_command`.
+   - Display routines: green square (active), question mark (open), white dot (closed), "DONE" scroll (ended).
+   - `TAG:<cardUid>` BLE notify when NFC card scanned during `question_open`; legacy `NFC:` path unchanged.
+   - NFC condition tightened to `neg == 4` only; game mode NFC gated on `_game_state`.
+   - `PAIR_OK:0.4.0` sent in handshake.
 
 5. **Dashboard**
    - Label the Badges and Game sections by `pairName`; show `controllerVersion` /
