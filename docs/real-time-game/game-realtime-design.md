@@ -1,6 +1,19 @@
 # Game realtime communication design
 
-Status: Steps 0, 0.5, 1, 2, 3, and 4 implemented. Step 5 (Dashboard) pending.
+## Steps and Status
+
+| Step | Title | Status | Doc |
+| --- | --- | --- | --- |
+| 0 | WebSocket server setup | ✅ done | — |
+| 0.5 | Pair identity, versions, battery reporting | ✅ done | `1-Server-foundations.md` |
+| 1 | Server foundations (WS gateway, game lifecycle, guesses) | ✅ done | `1-Server-foundations.md` |
+| 2 | Infrastructure (ALB timeout, heartbeat, dev proxy) | ✅ done | `2-infra.md` |
+| 3 | Zero WS client + game mode + NFC relay | ✅ done | `3-zero.md` |
+| 4 | Pico game commands + TAG notify | ✅ done | `4-pico.md` |
+| 5 | Games CRUD + server read endpoints + React Games view | 🔲 pending | `5-dashboard.md` |
+| 6 | Referee panel + live game dashboard (enhanced BadgesView) | 🔲 pending | *(planned)* |
+
+## Overview
 
 This document designs the communication between the emoji-app server and the
 Raspberry Pi Zero controllers (each paired to a Pico badge), so that game state
@@ -732,11 +745,28 @@ Server time is canonical (consistent with the badge timestamp policy in
    - NFC condition tightened to `neg == 4` only; game mode NFC gated on `_game_state`.
    - `PAIR_OK:0.4.0` sent in handshake.
 
-5. **Dashboard**
-   - Label the Badges and Game sections by `pairName`; show `controllerVersion` /
-     `picoVersion` with a current/outdated badge; show binding, join status,
-     game/question state, and NFC tag activity; add referee controls to
-     open/start/end a game and open/close questions.
+5. **Games CRUD + server read endpoints** (see `5-dashboard.md`)
+   - `GET /api/games` — list all games (newest first, with `questionCount`).
+   - `GET /api/games/:gameId` — full game detail: title, state, `questions[]`,
+     `boundPairs[]`.
+   - `GET /api/games/:gameId/questions` — question list refresh without full reload.
+   - Repository additions: `listGames`, `getGameDetail`, `getQuestionsByGameId`.
+   - React: `/games` route — `GamesView` (list + **+ New Game** dialog).
+   - React: `/games/:gameId` route — `GameDetailView` (questions in order, correct
+     answer marked, **+ Add Question** dialog).
+   - Navigation: **Games** link added to `AppHeader`.
+
+6. **Referee panel + live game dashboard**
+   - Extend `BadgesView` WebSocket handler to consume `game.state.changed`,
+     `controller.joined`, and `nfc.tagged` events alongside the existing
+     `status.changed` / `emoji.sent` events.
+   - Badge cards gain a game section: bound game title, join status, active
+     question indicator, last NFC tag event.
+   - `GameDetailView` gains a referee sidebar: bind/unbind a `pairName`,
+     game lifecycle buttons (Open for joining → Start → End), and per-question
+     Open / Close toggle (visible only while game is `active`).
+   - Version outdated badge: compare `controllerVersion` / `picoVersion` against
+     `GET /api/version` and show a warning chip on the badge card when stale.
 
 ## Open questions
 

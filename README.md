@@ -26,6 +26,9 @@ npm run docker:build   # build the production Docker image
 npm run docker:run     # run the image locally on port 3000
 ```
 
+Test the api is working locally by going to:
+`http://192.168.68.52:3000/api/version`
+
 ### Deploy application changes to staging
 
 > **Windows (PowerShell) instructions.** Commands below use PowerShell syntax — backtick `` ` ``
