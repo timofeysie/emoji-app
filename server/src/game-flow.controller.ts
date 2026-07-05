@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { GameDataRepository } from './persistence/game-data.repository';
@@ -108,6 +108,56 @@ export class GameFlowController {
     private readonly gameDataRepository: GameDataRepository,
     private readonly badgeStateService: BadgeStateService,
   ) {}
+
+  @Get('games')
+  async listGames(@Res() res: Response): Promise<void> {
+    try {
+      const games = await this.gameDataRepository.listGames();
+      res.status(200).json({ games });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to list games', message: String(error) });
+    }
+  }
+
+  @Get('games/:gameId')
+  async getGameDetail(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+    try {
+      const game = await this.gameDataRepository.getGameDetail(gameId);
+      if (!game) {
+        res.status(404).json({ error: 'Game not found' });
+        return;
+      }
+      res.status(200).json(game);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch game', message: String(error) });
+    }
+  }
+
+  @Get('games/:gameId/questions')
+  async getGameQuestions(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+    try {
+      const questions = await this.gameDataRepository.getQuestionsByGameId(gameId);
+      res.status(200).json({ questions });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch questions', message: String(error) });
+    }
+  }
 
   @Post('games')
   async createGame(@Body() body: unknown, @Res() res: Response): Promise<void> {

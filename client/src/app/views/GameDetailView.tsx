@@ -1,0 +1,515 @@
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { CheckCircle2, ChevronLeft, Circle, Loader2, Plus } from 'lucide-react';
+import { Button } from '../shared/button';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '../shared/dialog';
+import { Input } from '../shared/input';
+import { Label } from '../shared/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../shared/select';
+import { cn } from '../shared/utils';
+
+const DEMO_CREATOR_ID = '000000000000000000000001';
+const SLOT_LABELS = ['A', 'B', 'C', 'D', 'E'] as const;
+type SlotLabel = (typeof SLOT_LABELS)[number];
+type QuestionMode = 'standard' | 'cut-throat' | 'mixed';
+type GameState = 'draft' | 'lobby' | 'active' | 'paused' | 'completed' | 'cancelled';
+
+type AnswerOption = {
+  id: string;
+  slotLabel: SlotLabel;
+  text: string;
+  isCorrect: boolean;
+  sequence: number;
+};
+
+type Question = {
+  id: string;
+  text: string;
+  sequence: number;
+  mode: QuestionMode;
+  state: string;
+  answerOptions: AnswerOption[];
+};
+
+type BoundPair = {
+  pairName: string;
+  joined: boolean;
+  controllerId?: string;
+};
+
+type GameDetail = {
+  id: string;
+  title: string;
+  state: GameState;
+  createdAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  questions: Question[];
+  boundPairs: BoundPair[];
+};
+
+const STATE_STYLES: Record<GameState, string> = {
+  draft: 'bg-muted text-muted-foreground',
+  lobby: 'bg-amber-100 text-amber-800',
+  active: 'bg-green-100 text-green-800',
+  paused: 'bg-blue-100 text-blue-800',
+  completed: 'bg-slate-100 text-slate-600',
+  cancelled: 'bg-red-100 text-red-700',
+};
+
+function StateChip({ state }: { state: GameState }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize',
+        STATE_STYLES[state] ?? 'bg-muted text-muted-foreground',
+      )}
+    >
+      {state}
+    </span>
+  );
+}
+
+type OptionDraft = { text: string; slotLabel: SlotLabel; isCorrect: boolean };
+
+function AddQuestionDialog({
+  gameId,
+  nextSequence,
+  onCreated,
+}: {
+  gameId: string;
+  nextSequence: number;
+  onCreated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [questionText, setQuestionText] = useState('');
+  const [mode, setMode] = useState<QuestionMode>('standard');
+  const [options, setOptions] = useState<OptionDraft[]>([
+    { text: '', slotLabel: 'A', isCorrect: false },
+    { text: '', slotLabel: 'B', isCorrect: false },
+  ]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = () => {
+    setQuestionText('');
+    setMode('standard');
+    setOptions([
+      { text: '', slotLabel: 'A', isCorrect: false },
+      { text: '', slotLabel: 'B', isCorrect: false },
+    ]);
+    setError(null);
+  };
+
+  const addOption = () => {
+    if (options.length >= SLOT_LABELS.length) return;
+    const nextLabel = SLOT_LABELS[options.length];
+    setOptions((prev) => [...prev, { text: '', slotLabel: nextLabel, isCorrect: false }]);
+  };
+
+  const removeOption = (index: number) => {
+    if (options.length <= 2) return;
+    setOptions((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      return next.map((o, i) => ({ ...o, slotLabel: SLOT_LABELS[i] }));
+    });
+  };
+
+  const setCorrect = (index: number) => {
+    setOptions((prev) =>
+      prev.map((o, i) => ({ ...o, isCorrect: i === index })),
+    );
+  };
+
+  const handleSubmit = async () => {
+    if (!questionText.trim()) {
+      setError('Question text is required.');
+      return;
+    }
+    if (options.some((o) => !o.text.trim())) {
+      setError('All answer options must have text.');
+      return;
+    }
+    if (!options.some((o) => o.isCorrect)) {
+      setError('Select the correct answer.');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId,
+          createdByUserId: DEMO_CREATOR_ID,
+          text: questionText.trim(),
+          sequence: nextSequence,
+          mode,
+          answerOptions: options.map((o, i) => ({
+            text: o.text.trim(),
+            slotLabel: o.slotLabel,
+            isCorrect: o.isCorrect,
+            sequence: i + 1,
+          })),
+        }),
+        credentials: 'same-origin',
+      });
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string };
+        setError(body.error ?? 'Failed to create question.');
+        return;
+      }
+      setOpen(false);
+      reset();
+      onCreated();
+    } catch {
+      setError('Network error — could not create question.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) reset();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+          Add Question
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add Question</DialogTitle>
+          <DialogDescription>
+            Question {nextSequence} · NFC slot labels are auto-assigned (A–E).
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="q-text">Question</Label>
+            <Input
+              id="q-text"
+              placeholder="e.g. What colour is the sky?"
+              value={questionText}
+              onChange={(e) => setQuestionText(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="q-mode">Mode</Label>
+            <Select value={mode} onValueChange={(v) => setMode(v as QuestionMode)}>
+              <SelectTrigger id="q-mode" className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="standard">Standard</SelectItem>
+                <SelectItem value="cut-throat">Cut-throat</SelectItem>
+                <SelectItem value="mixed">Mixed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <Label>Answer Options</Label>
+              <span className="text-[11px] text-muted-foreground">
+                Click circle to mark correct
+              </span>
+            </div>
+            {options.map((opt, i) => (
+              <div key={opt.slotLabel} className="flex items-center gap-2">
+                <span className="w-5 shrink-0 text-center text-xs font-bold text-muted-foreground">
+                  {opt.slotLabel}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Mark option ${opt.slotLabel} as correct`}
+                  onClick={() => setCorrect(i)}
+                  className="shrink-0"
+                >
+                  {opt.isCorrect ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-600" aria-hidden />
+                  ) : (
+                    <Circle className="h-5 w-5 text-muted-foreground/50" aria-hidden />
+                  )}
+                </button>
+                <Input
+                  placeholder={`Option ${opt.slotLabel}`}
+                  value={opt.text}
+                  onChange={(e) =>
+                    setOptions((prev) =>
+                      prev.map((o, j) => (j === i ? { ...o, text: e.target.value } : o)),
+                    )
+                  }
+                  className="flex-1"
+                />
+                {options.length > 2 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                    aria-label={`Remove option ${opt.slotLabel}`}
+                    onClick={() => removeOption(i)}
+                  >
+                    ×
+                  </Button>
+                )}
+              </div>
+            ))}
+            {options.length < SLOT_LABELS.length && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="self-start text-xs"
+                onClick={addOption}
+              >
+                <Plus className="mr-1 h-3 w-3" aria-hidden /> Add option
+              </Button>
+            )}
+          </div>
+
+          {error && (
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button onClick={() => void handleSubmit()} disabled={saving}>
+            {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden />}
+            Add Question
+          </Button>
+          <DialogClose asChild>
+            <Button type="button" variant="secondary">
+              Cancel
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function QuestionCard({ question }: { question: Question }) {
+  const [expanded, setExpanded] = useState(true);
+
+  return (
+    <div className="rounded-lg border">
+      <button
+        type="button"
+        className="flex w-full items-start gap-3 px-4 py-3 text-left"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span className="mt-0.5 shrink-0 text-xs font-bold text-muted-foreground">
+          Q{question.sequence}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium leading-snug">{question.text}</p>
+          <div className="mt-0.5 flex gap-2 text-[11px] text-muted-foreground">
+            <span>{question.mode}</span>
+            <span>·</span>
+            <span className="capitalize">{question.state}</span>
+            <span>·</span>
+            <span>{question.answerOptions.length} options</span>
+          </div>
+        </div>
+        <span className="shrink-0 text-xs text-muted-foreground">{expanded ? '▲' : '▼'}</span>
+      </button>
+
+      {expanded && (
+        <div className="border-t px-4 py-3">
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {question.answerOptions.map((opt) => (
+              <div
+                key={opt.id}
+                className={cn(
+                  'flex items-start gap-2 rounded-md border px-2.5 py-2 text-sm',
+                  opt.isCorrect && 'border-green-400/60 bg-green-50',
+                )}
+              >
+                <span className="shrink-0 font-bold text-muted-foreground">{opt.slotLabel}</span>
+                <span className="flex-1 leading-snug">{opt.text}</span>
+                {opt.isCorrect && (
+                  <CheckCircle2
+                    className="mt-0.5 h-4 w-4 shrink-0 text-green-600"
+                    aria-label="Correct answer"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function GameDetailView() {
+  const { gameId } = useParams<{ gameId: string }>();
+  const navigate = useNavigate();
+  const [game, setGame] = useState<GameDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const loadGame = useCallback(async () => {
+    if (!gameId) return;
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const res = await fetch(`/api/games/${gameId}`, { credentials: 'same-origin' });
+      if (res.status === 404) {
+        setFetchError('Game not found.');
+        return;
+      }
+      if (!res.ok) {
+        setFetchError(`Server returned ${res.status}`);
+        return;
+      }
+      const data = (await res.json()) as GameDetail;
+      setGame(data);
+    } catch {
+      setFetchError('Could not reach server.');
+    } finally {
+      setLoading(false);
+    }
+  }, [gameId]);
+
+  const refreshQuestions = useCallback(async () => {
+    if (!gameId || !game) return;
+    try {
+      const res = await fetch(`/api/games/${gameId}/questions`, { credentials: 'same-origin' });
+      if (!res.ok) return;
+      const data = (await res.json()) as { questions: Question[] };
+      setGame((prev) => (prev ? { ...prev, questions: data.questions } : prev));
+    } catch {
+      // Silent refresh failure — user can reload manually
+    }
+  }, [gameId, game]);
+
+  useEffect(() => {
+    void loadGame();
+  }, [loadGame]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        Loading game…
+      </div>
+    );
+  }
+
+  if (fetchError || !game) {
+    return (
+      <div className="flex flex-col gap-4 py-4">
+        <Button variant="ghost" size="sm" className="self-start" onClick={() => navigate('/games')}>
+          <ChevronLeft className="mr-1 h-4 w-4" aria-hidden /> Games
+        </Button>
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {fetchError ?? 'Unknown error'}
+        </div>
+      </div>
+    );
+  }
+
+  const nextSequence = Math.max(0, ...game.questions.map((q) => q.sequence)) + 1;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Header */}
+      <div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2 mb-1"
+          onClick={() => navigate('/games')}
+        >
+          <ChevronLeft className="mr-1 h-4 w-4" aria-hidden /> Games
+        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-bold">{game.title}</h1>
+          <StateChip state={game.state} />
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Created {new Date(game.createdAt).toLocaleDateString()}
+          {game.startedAt && ` · Started ${new Date(game.startedAt).toLocaleDateString()}`}
+          {game.endedAt && ` · Ended ${new Date(game.endedAt).toLocaleDateString()}`}
+        </p>
+      </div>
+
+      {/* Bound pairs */}
+      {game.boundPairs.length > 0 && (
+        <div className="rounded-lg border px-4 py-3">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Bound Controllers
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {game.boundPairs.map((bp) => (
+              <span
+                key={bp.pairName}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs',
+                  bp.joined
+                    ? 'border-green-400/60 bg-green-50 text-green-800'
+                    : 'border-border bg-muted/50 text-muted-foreground',
+                )}
+              >
+                {bp.pairName}
+                {bp.joined && <CheckCircle2 className="h-3 w-3" aria-label="Joined" />}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Questions */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-sm font-semibold">
+            Questions{' '}
+            <span className="text-muted-foreground">({game.questions.length})</span>
+          </p>
+          <AddQuestionDialog
+            gameId={game.id}
+            nextSequence={nextSequence}
+            onCreated={() => void refreshQuestions()}
+          />
+        </div>
+
+        {game.questions.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            No questions yet. Click <strong>Add Question</strong> to get started.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {game.questions.map((q) => (
+              <QuestionCard key={q.id} question={q} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

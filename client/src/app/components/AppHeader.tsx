@@ -14,30 +14,22 @@ import {
 } from '../shared/navigation-menu';
 
 const NAV_LINKS = [
-  { to: '/lights', label: 'Lights' },
-  { to: '/scenes', label: 'Scenes' },
-  { to: '/scheduled-scenes', label: 'Scheduled Scenes' },
+  { to: '/games', label: 'Games' },
   { to: '/badges', label: 'Badges' },
+  { to: '/lights', label: 'Lights' },
   { to: '/profile', label: 'Profile' },
 ] as const;
 
 function viewTitleForPathname(pathname: string): string {
-  switch (pathname) {
-    case '/':
-      return 'Dashboard';
-    case '/lights':
-      return 'Lights';
-    case '/scenes':
-      return 'Scenes';
-    case '/scheduled-scenes':
-      return 'Scheduled Scenes';
-    case '/badges':
-      return 'Badges';
-    case '/profile':
-      return 'User Profile';
-    default:
-      return 'Emoji App';
-  }
+  if (pathname === '/') return 'Dashboard';
+  if (pathname === '/games') return 'Games';
+  if (pathname.startsWith('/games/')) return 'Game';
+  if (pathname === '/badges') return 'Badges';
+  if (pathname === '/lights') return 'Lights';
+  if (pathname === '/scenes') return 'Scenes';
+  if (pathname === '/scheduled-scenes') return 'Scheduled Scenes';
+  if (pathname === '/profile') return 'User Profile';
+  return 'Emoji App';
 }
 
 export function AppHeader() {

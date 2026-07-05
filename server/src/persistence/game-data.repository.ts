@@ -45,6 +45,50 @@ export type BindPairInput = {
   controllerId?: string;
 };
 
+export type GameSummary = {
+  id: string;
+  title: string;
+  state: GameState;
+  createdAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  questionCount: number;
+};
+
+export type AnswerOptionDetail = {
+  id: string;
+  slotLabel: SlotLabel;
+  text: string;
+  isCorrect: boolean;
+  sequence: number;
+};
+
+export type QuestionDetail = {
+  id: string;
+  text: string;
+  sequence: number;
+  mode: QuestionMode;
+  state: string;
+  answerOptions: AnswerOptionDetail[];
+};
+
+export type BoundPairSummary = {
+  pairName: string;
+  joined: boolean;
+  controllerId?: string;
+};
+
+export type GameDetail = {
+  id: string;
+  title: string;
+  state: GameState;
+  createdAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  questions: QuestionDetail[];
+  boundPairs: BoundPairSummary[];
+};
+
 export type PairBindingSnapshot = {
   pairName: string;
   controllerId: string | undefined;
@@ -339,6 +383,122 @@ export class GameDataRepository {
     const { PairBinding } = this.mongoService.getModels();
     const bindings = await PairBinding.find({ gameId: new Types.ObjectId(gameId) }, { pairName: 1 }).lean();
     return bindings.map((b) => b.pairName);
+  }
+
+  async listGames(): Promise<GameSummary[]> {
+    const { Game, Question } = this.mongoService.getModels();
+    const games = await Game.find({}).sort({ createdAt: -1 }).lean();
+    const gameIds = games.map((g) => g._id);
+
+    const counts = await Question.aggregate<{ _id: Types.ObjectId; count: number }>([
+      { $match: { gameId: { $in: gameIds } } },
+      { $group: { _id: '$gameId', count: { $sum: 1 } } },
+    ]);
+    const countMap = new Map(counts.map((c) => [c._id.toString(), c.count]));
+
+    return games.map((g) => ({
+      id: (g._id as Types.ObjectId).toString(),
+      title: g.title,
+      state: g.state as GameState,
+      createdAt: (g as unknown as { createdAt: Date }).createdAt.toISOString(),
+      startedAt: g.startedAt ? g.startedAt.toISOString() : null,
+      endedAt: g.endedAt ? g.endedAt.toISOString() : null,
+      questionCount: countMap.get((g._id as Types.ObjectId).toString()) ?? 0,
+    }));
+  }
+
+  async getGameDetail(gameId: string): Promise<GameDetail | null> {
+    const { Game, Question, AnswerOption, PairBinding } = this.mongoService.getModels();
+    const game = await Game.findById(asObjectId(gameId)).lean();
+    if (!game) {
+      return null;
+    }
+
+    const questions = await Question.find({ gameId: asObjectId(gameId) })
+      .sort({ sequence: 1 })
+      .lean();
+    const questionIds = questions.map((q) => q._id);
+    const allOptions = await AnswerOption.find({ questionId: { $in: questionIds } }).lean();
+
+    const optsByQuestion = new Map<string, typeof allOptions>();
+    for (const opt of allOptions) {
+      const key = (opt.questionId as Types.ObjectId).toString();
+      const arr = optsByQuestion.get(key) ?? [];
+      arr.push(opt);
+      optsByQuestion.set(key, arr);
+    }
+
+    const boundPairs = await PairBinding.find({ gameId: asObjectId(gameId) }).lean();
+
+    return {
+      id: (game._id as Types.ObjectId).toString(),
+      title: game.title,
+      state: game.state as GameState,
+      createdAt: (game as unknown as { createdAt: Date }).createdAt.toISOString(),
+      startedAt: game.startedAt ? game.startedAt.toISOString() : null,
+      endedAt: game.endedAt ? game.endedAt.toISOString() : null,
+      questions: questions.map((q) => {
+        const opts = (optsByQuestion.get((q._id as Types.ObjectId).toString()) ?? [])
+          .slice()
+          .sort((a, b) => a.sequence - b.sequence);
+        return {
+          id: (q._id as Types.ObjectId).toString(),
+          text: q.text,
+          sequence: q.sequence,
+          mode: q.mode as QuestionMode,
+          state: q.state,
+          answerOptions: opts.map((o) => ({
+            id: (o._id as Types.ObjectId).toString(),
+            slotLabel: o.slotLabel as SlotLabel,
+            text: o.text,
+            isCorrect: o.isCorrect,
+            sequence: o.sequence,
+          })),
+        };
+      }),
+      boundPairs: boundPairs.map((bp) => ({
+        pairName: bp.pairName,
+        joined: bp.joined,
+        controllerId: bp.controllerId ?? undefined,
+      })),
+    };
+  }
+
+  async getQuestionsByGameId(gameId: string): Promise<QuestionDetail[]> {
+    const { Question, AnswerOption } = this.mongoService.getModels();
+    const questions = await Question.find({ gameId: asObjectId(gameId) })
+      .sort({ sequence: 1 })
+      .lean();
+    const questionIds = questions.map((q) => q._id);
+    const allOptions = await AnswerOption.find({ questionId: { $in: questionIds } }).lean();
+
+    const optsByQuestion = new Map<string, typeof allOptions>();
+    for (const opt of allOptions) {
+      const key = (opt.questionId as Types.ObjectId).toString();
+      const arr = optsByQuestion.get(key) ?? [];
+      arr.push(opt);
+      optsByQuestion.set(key, arr);
+    }
+
+    return questions.map((q) => {
+      const opts = (optsByQuestion.get((q._id as Types.ObjectId).toString()) ?? [])
+        .slice()
+        .sort((a, b) => a.sequence - b.sequence);
+      return {
+        id: (q._id as Types.ObjectId).toString(),
+        text: q.text,
+        sequence: q.sequence,
+        mode: q.mode as QuestionMode,
+        state: q.state,
+        answerOptions: opts.map((o) => ({
+          id: (o._id as Types.ObjectId).toString(),
+          slotLabel: o.slotLabel as SlotLabel,
+          text: o.text,
+          isCorrect: o.isCorrect,
+          sequence: o.sequence,
+        })),
+      };
+    });
   }
 
   private async withOptionalTransaction<T>(

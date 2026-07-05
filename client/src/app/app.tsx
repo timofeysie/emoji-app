@@ -10,6 +10,8 @@ import { LightsView } from './views/LightsView';
 import { ScenesView } from './views/ScenesView';
 import { ScheduledScenesView } from './views/ScheduledScenesView';
 import { BadgesView } from './views/BadgesView';
+import { GamesView } from './views/GamesView';
+import { GameDetailView } from './views/GameDetailView';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { UserProfileView } from './views/UserProfileView';
 
@@ -27,13 +29,15 @@ function MainShell() {
           <AppHeader />
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <Routes>
+              <Route path="/games" element={<GamesView />} />
+              <Route path="/games/:gameId" element={<GameDetailView />} />
+              <Route path="/badges" element={<BadgesView />} />
               <Route path="/lights" element={<LightsView />} />
               <Route path="/scenes" element={<ScenesView />} />
               <Route
                 path="/scheduled-scenes"
                 element={<ScheduledScenesView />}
               />
-              <Route path="/badges" element={<BadgesView />} />
               <Route path="/profile" element={<UserProfileView />} />
               <Route path="/" element={<Dashboard />} />
             </Routes>
