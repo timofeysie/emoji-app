@@ -80,7 +80,20 @@ type EmojiSentEvent = {
 
 type WsEnvelope =
   | { type: 'status.changed'; payload: StatusChangedEvent }
-  | { type: 'emoji.sent'; payload: EmojiSentEvent };
+  | { type: 'emoji.sent'; payload: EmojiSentEvent }
+  | { type: 'game.state.changed'; gameId: string; state: string; serverTime: string }
+  | { type: 'controller.joined'; gameId: string; pairName: string; controllerId?: string; serverTime: string }
+  | {
+      type: 'nfc.tagged';
+      gameId: string;
+      questionId?: string;
+      pairName?: string;
+      controllerId?: string;
+      badgeId?: string;
+      cardUid?: string;
+      slotLabel?: string;
+      serverTime: string;
+    };
 
 type BadgeRecord = {
   key: string;
@@ -88,6 +101,35 @@ type BadgeRecord = {
   badgeId: string;
   status?: StatusChangedEvent;
   emoji?: EmojiSentEvent;
+};
+
+type GameEventState = {
+  gameId: string;
+  gameState: string;
+  serverTime: string;
+};
+
+type JoinEvent = {
+  gameId: string;
+  pairName: string;
+  controllerId?: string;
+  serverTime: string;
+};
+
+type NfcTagEvent = {
+  gameId: string;
+  pairName?: string;
+  controllerId?: string;
+  badgeId?: string;
+  cardUid?: string;
+  slotLabel?: string;
+  serverTime: string;
+};
+
+type VersionInfo = {
+  version: string;
+  expectedControllerVersion: string;
+  expectedPicoVersion: string;
 };
 
 // TODO: To re-enable the dummy badge for local layout development, uncomment the block below
@@ -427,11 +469,58 @@ function BatteryIcon({ level }: { level: number | null | undefined }) {
   );
 }
 
-function BadgeCardHeader({ record }: { record: BadgeRecord }) {
+/**
+ * Returns true if `actual` is strictly older than `expected` by semver rules.
+ * Handles "x" wildcard suffixes in expected (e.g. "0.5.x" → "0.5.0").
+ * If either value is empty / "unknown" we never flag as outdated.
+ */
+function isVersionOutdated(actual: string | undefined, expected: string): boolean {
+  if (!actual || actual === 'unknown' || !expected) return false;
+  const normalise = (v: string) =>
+    v
+      .replace(/^v/, '')
+      .replace(/\.x$/i, '.0')
+      .split('.')
+      .map((n) => parseInt(n, 10) || 0);
+  const a = normalise(actual);
+  const e = normalise(expected);
+  for (let i = 0; i < Math.max(a.length, e.length); i++) {
+    const av = a[i] ?? 0;
+    const ev = e[i] ?? 0;
+    if (av !== ev) return av < ev;
+  }
+  return false;
+}
+
+function OutdatedChip() {
+  return (
+    <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
+      ⚠ outdated
+    </span>
+  );
+}
+
+function BadgeCardHeader({
+  record,
+  versionInfo,
+}: {
+  record: BadgeRecord;
+  versionInfo: VersionInfo | null;
+}) {
   const pairName = record.status?.pairName;
   const controllerVersion = record.status?.controllerVersion;
   const picoVersion = record.status?.picoVersion;
   const batteryLevel = record.status?.batteryLevel;
+
+  const controllerOutdated =
+    versionInfo != null &&
+    controllerVersion != null &&
+    isVersionOutdated(controllerVersion, versionInfo.expectedControllerVersion);
+  const picoOutdated =
+    versionInfo != null &&
+    picoVersion != null &&
+    picoVersion !== 'unknown' &&
+    isVersionOutdated(picoVersion, versionInfo.expectedPicoVersion);
 
   return (
     <div className="flex flex-col gap-0.5 border-b bg-muted/40 px-1.5 py-1">
@@ -452,15 +541,60 @@ function BadgeCardHeader({ record }: { record: BadgeRecord }) {
             <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground" title="Zero controller version">
               <Gamepad2 className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
               {controllerVersion}
+              {controllerOutdated && <OutdatedChip />}
             </span>
           )}
           {picoVersion && picoVersion !== 'unknown' && (
             <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground" title="Pico badge version">
               <Cpu className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
               {picoVersion}
+              {picoOutdated && <OutdatedChip />}
             </span>
           )}
           <BatteryIcon level={batteryLevel} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatShortTime(ts?: string): string {
+  if (!ts) return '-';
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return ts;
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function BadgeCardGameSection({
+  pairName,
+  activeGame,
+  joinsByPair,
+  nfcByPair,
+}: {
+  pairName?: string;
+  activeGame: GameEventState | null;
+  joinsByPair: Record<string, JoinEvent>;
+  nfcByPair: Record<string, NfcTagEvent>;
+}) {
+  if (!pairName) return null;
+  const joinEvent = joinsByPair[pairName];
+  const nfcEvent = nfcByPair[pairName];
+  if (!joinEvent && !nfcEvent && !activeGame) return null;
+
+  return (
+    <div className="w-full rounded-md border bg-muted/10 px-1.5 py-1 text-[10px] text-muted-foreground">
+      {activeGame && (
+        <div className="flex items-center gap-1">
+          <span className="font-medium text-foreground capitalize">{activeGame.gameState}</span>
+          <span className="text-[9px]">· {formatShortTime(activeGame.serverTime)}</span>
+        </div>
+      )}
+      {joinEvent && (
+        <div>Joined at {formatShortTime(joinEvent.serverTime)}</div>
+      )}
+      {nfcEvent && (
+        <div>
+          NFC{nfcEvent.slotLabel ? `: ${nfcEvent.slotLabel}` : ''} · {formatShortTime(nfcEvent.serverTime)}
         </div>
       )}
     </div>
@@ -484,6 +618,12 @@ export const BadgesView = () => {
   );
   const socketStatusRef = useRef(socketStatus);
   socketStatusRef.current = socketStatus;
+
+  // Game event state
+  const [activeGame, setActiveGame] = useState<GameEventState | null>(null);
+  const [joinsByPair, setJoinsByPair] = useState<Record<string, JoinEvent>>({});
+  const [nfcByPair, setNfcByPair] = useState<Record<string, NfcTagEvent>>({});
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
 
   const refreshSnapshot = useCallback(async () => {
     try {
@@ -542,6 +682,23 @@ export const BadgesView = () => {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/version', { credentials: 'same-origin' });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as VersionInfo;
+        setVersionInfo(data);
+      } catch {
+        // Version info is optional; outdated chip will not show.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const id = window.setInterval(() => {
       bumpStaleCheck((n) => n + 1);
     }, 10_000);
@@ -590,6 +747,48 @@ export const BadgesView = () => {
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data) as WsEnvelope;
+
+        if (message.type === 'game.state.changed') {
+          setActiveGame({
+            gameId: message.gameId,
+            gameState: message.state,
+            serverTime: message.serverTime,
+          });
+          return;
+        }
+
+        if (message.type === 'controller.joined') {
+          setJoinsByPair((prev) => ({
+            ...prev,
+            [message.pairName]: {
+              gameId: message.gameId,
+              pairName: message.pairName,
+              controllerId: message.controllerId,
+              serverTime: message.serverTime,
+            },
+          }));
+          return;
+        }
+
+        if (message.type === 'nfc.tagged') {
+          const pairName = message.pairName;
+          if (pairName) {
+            setNfcByPair((prev) => ({
+              ...prev,
+              [pairName]: {
+                gameId: message.gameId,
+                pairName: message.pairName,
+                controllerId: message.controllerId,
+                badgeId: message.badgeId,
+                cardUid: message.cardUid,
+                slotLabel: message.slotLabel,
+                serverTime: message.serverTime,
+              },
+            }));
+          }
+          return;
+        }
+
         if (message.type !== 'status.changed' && message.type !== 'emoji.sent') {
           return;
         }
@@ -685,10 +884,16 @@ export const BadgesView = () => {
         <div className="-mx-2 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2">
           {badgeRecords.map((record) => (
             <div key={record.key} className="min-w-0 overflow-hidden rounded-lg border">
-              <BadgeCardHeader record={record} />
+              <BadgeCardHeader record={record} versionInfo={versionInfo} />
               <div className="flex flex-col items-center gap-1 p-1.5">
                 <BleConnectionRow status={record.status} />
                 <EmojiLabelBlock emoji={record.emoji} nfcCardMap={nfcCardMap} />
+                <BadgeCardGameSection
+                  pairName={record.status?.pairName}
+                  activeGame={activeGame}
+                  joinsByPair={joinsByPair}
+                  nfcByPair={nfcByPair}
+                />
               </div>
             </div>
           ))}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CheckCircle2, ChevronLeft, Circle, Loader2, Plus } from 'lucide-react';
 import { Button } from '../shared/button';
+import { GameRefereePanel } from './components/GameRefereePanel';
 import {
   Dialog,
   DialogClose,
@@ -312,8 +313,36 @@ function AddQuestionDialog({
   );
 }
 
-function QuestionCard({ question }: { question: Question }) {
+function QuestionCard({
+  question,
+  gameState,
+  hasOpenQuestion,
+  onToggleState,
+}: {
+  question: Question;
+  gameState: GameState;
+  hasOpenQuestion: boolean;
+  onToggleState: (questionId: string, newState: 'open' | 'closed') => Promise<void>;
+}) {
   const [expanded, setExpanded] = useState(true);
+  const [toggling, setToggling] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+
+  const isActive = gameState === 'active';
+  const isOpen = question.state === 'open';
+
+  const handleToggle = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setToggling(true);
+    setToggleError(null);
+    try {
+      await onToggleState(question.id, isOpen ? 'closed' : 'open');
+    } catch (err) {
+      setToggleError(err instanceof Error ? err.message : 'Failed to update question state.');
+    } finally {
+      setToggling(false);
+    }
+  };
 
   return (
     <div className="rounded-lg border">
@@ -335,8 +364,32 @@ function QuestionCard({ question }: { question: Question }) {
             <span>{question.answerOptions.length} options</span>
           </div>
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground">{expanded ? '▲' : '▼'}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          {isActive && (
+            <Button
+              size="sm"
+              variant={isOpen ? 'default' : 'outline'}
+              className="h-7 text-xs"
+              disabled={toggling || (!isOpen && hasOpenQuestion)}
+              title={!isOpen && hasOpenQuestion ? 'Another question is already open' : undefined}
+              onClick={handleToggle}
+            >
+              {toggling ? (
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              ) : isOpen ? (
+                'Close'
+              ) : (
+                'Open'
+              )}
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground">{expanded ? '▲' : '▼'}</span>
+        </div>
       </button>
+
+      {toggleError && (
+        <p className="border-t px-4 py-2 text-xs text-destructive">{toggleError}</p>
+      )}
 
       {expanded && (
         <div className="border-t px-4 py-3">
@@ -408,6 +461,24 @@ export function GameDetailView() {
     }
   }, [gameId, game]);
 
+  const toggleQuestionState = useCallback(
+    async (questionId: string, newState: 'open' | 'closed') => {
+      if (!gameId) return;
+      const res = await fetch(`/api/questions/${questionId}/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameId, state: newState }),
+        credentials: 'same-origin',
+      });
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string };
+        throw new Error(body.error ?? `Failed to set question state to ${newState}.`);
+      }
+      await refreshQuestions();
+    },
+    [gameId, refreshQuestions],
+  );
+
   useEffect(() => {
     void loadGame();
   }, [loadGame]);
@@ -435,6 +506,7 @@ export function GameDetailView() {
   }
 
   const nextSequence = Math.max(0, ...game.questions.map((q) => q.sequence)) + 1;
+  const hasOpenQuestion = game.questions.some((q) => q.state === 'open');
 
   return (
     <div className="flex flex-col gap-4">
@@ -459,56 +531,45 @@ export function GameDetailView() {
         </p>
       </div>
 
-      {/* Bound pairs */}
-      {game.boundPairs.length > 0 && (
-        <div className="rounded-lg border px-4 py-3">
-          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Bound Controllers
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {game.boundPairs.map((bp) => (
-              <span
-                key={bp.pairName}
-                className={cn(
-                  'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs',
-                  bp.joined
-                    ? 'border-green-400/60 bg-green-50 text-green-800'
-                    : 'border-border bg-muted/50 text-muted-foreground',
-                )}
-              >
-                {bp.pairName}
-                {bp.joined && <CheckCircle2 className="h-3 w-3" aria-label="Joined" />}
-              </span>
-            ))}
+      {/* Two-column layout: questions left, referee panel right */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
+        {/* Questions column */}
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold">
+              Questions{' '}
+              <span className="text-muted-foreground">({game.questions.length})</span>
+            </p>
+            <AddQuestionDialog
+              gameId={game.id}
+              nextSequence={nextSequence}
+              onCreated={() => void refreshQuestions()}
+            />
           </div>
-        </div>
-      )}
 
-      {/* Questions */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-sm font-semibold">
-            Questions{' '}
-            <span className="text-muted-foreground">({game.questions.length})</span>
-          </p>
-          <AddQuestionDialog
-            gameId={game.id}
-            nextSequence={nextSequence}
-            onCreated={() => void refreshQuestions()}
-          />
+          {game.questions.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              No questions yet. Click <strong>Add Question</strong> to get started.
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {game.questions.map((q) => (
+                <QuestionCard
+                  key={q.id}
+                  question={q}
+                  gameState={game.state}
+                  hasOpenQuestion={hasOpenQuestion}
+                  onToggleState={toggleQuestionState}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
-        {game.questions.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            No questions yet. Click <strong>Add Question</strong> to get started.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {game.questions.map((q) => (
-              <QuestionCard key={q.id} question={q} />
-            ))}
-          </div>
-        )}
+        {/* Referee sidebar */}
+        <div className="w-full shrink-0 lg:w-72">
+          <GameRefereePanel game={game} onRefresh={() => void loadGame()} />
+        </div>
       </div>
     </div>
   );

@@ -220,6 +220,155 @@ multi-badge coordination happens entirely on the Zero.
 
 ---
 
+## Game flow — Zero controller and React app
+
+This section describes the end-to-end operational flow for a single game
+session, combining the physical Zero/Pico station with the React web app.
+
+### Button map (Zero display HAT)
+
+The Waveshare 1.44" display HAT has a 5-way joystick and three side buttons.
+
+| Control | Action |
+| --- | --- |
+| **KEY2** | In `none` state → enter `start`; in `start` state → cycle menu (0→1→2→3→0); in `choosing` → confirm selection + animate; in game mode when `JOIN? KEY2` shown → POST join |
+| **Joystick CENTER** | In `start` state → enter `choosing` with pos=1; in `choosing` → redraw |
+| **Joystick UP** | In `choosing` → move pos up (cycles 1→2→3→4→1) |
+| **Joystick DOWN** | In `choosing` → move pos down |
+| **Joystick LEFT/RIGHT** | Navigate within choosing mode |
+| **KEY1** | Positive emoji selection (or toggle/replay last positive) |
+| **KEY3** | Negative emoji selection (or toggle/replay last negative) |
+
+### Navigating to game mode
+
+The game mode slot is at **menu 3 (Others), pos 4**.
+
+```
+Power on
+  → state = "none"
+
+Press KEY2
+  → state = "start", menu = 0 shown
+
+Press KEY2 (three more times)
+  → menu cycles: 0 → 1 → 2 → 3 ("Other" highlighted)
+
+Press CENTER
+  → state = "choosing", pos = 1 (Others menu, first item)
+
+Press Joystick UP (three times)
+  → pos = 4 (the 'G' game mode slot is now the main emoji)
+
+Press KEY2
+  → confirm selection → animation → apply_selection() runs
+  → game_mode_active = True
+  → state = "none", pos = 0, neg = 0
+  → display redraws with game status text
+```
+
+### Zero display states in game mode
+
+Once `game_mode_active` is True, the center of the display always shows the
+large 'G' glyph. The status text (y=57) changes with the WebSocket game state:
+
+| Zero shows | Meaning | What to do |
+| --- | --- | --- |
+| *(large 'G', no text)* | WS not connected, or pair not bound to any game | Check server connection; bind pair via API / Step 6 UI |
+| `JOIN? KEY2` | Pair is bound to a game in `lobby` state, not yet joined | Press **KEY2** to join |
+| `WAITING...` | Joined; waiting for referee to start the game | Wait |
+| `GAME ON` | Game is `active`, no question currently open | Wait for referee to open a question |
+| `SCAN NOW` | A question is open — NFC tag scan is ready | Player scans NFC card on Pico |
+| `GAME OVER` | Game is `completed` | Session finished |
+
+### Pico badge display states
+
+The Pico receives `GAME:*` BLE commands from the Zero and shows:
+
+| BLE command received | Pico display |
+| --- | --- |
+| `GAME:active` | Solid green 4×4 square in centre of matrix |
+| `GAME:question_open` | White '?' glyph (NFC ready — scan now) |
+| `GAME:question_close` | Small white 2×2 dot (between questions) |
+| `GAME:ended` | Scrolling "DONE" text, then matrix goes dark |
+
+### App (React) referee actions
+
+The referee drives the game lifecycle from the React app. After Step 6, all of
+these are available via the `GameDetailView` referee panel. Until Step 6 is
+built, use direct API calls.
+
+| Referee action | API call | Zero reacts | Pico reacts |
+| --- | --- | --- | --- |
+| Bind controller to game | `POST /api/games/:id/pairs { pairName }` | Next WS connect: receives `controller.welcome` with game snapshot | — |
+| Open for joining (lobby) | `POST /api/games/:id/state { state: "lobby" }` | Shows "JOIN? KEY2" | — |
+| Player presses KEY2 | Zero posts `POST /api/games/:id/join` | Shows "WAITING..." | — |
+| Start game | `POST /api/games/:id/state { state: "active" }` | Shows "GAME ON" | Green square |
+| Open question | `POST /api/questions/:qid/state { gameId, state: "open" }` | Shows "SCAN NOW" | '?' glyph |
+| Player scans NFC card | Pico notifies `TAG:<uid>` → Zero posts `POST /api/guesses` | Shows "SCAN NOW" until closed | — |
+| Close question | `POST /api/questions/:qid/state { gameId, state: "closed" }` | Shows "GAME ON" | White dot |
+| End game | `POST /api/games/:id/state { state: "completed" }` | Shows "GAME OVER" | Scrolls "DONE" |
+
+### End-to-end sequence diagram
+
+```
+Referee (app)              Server             Zero               Pico
+     │                       │                 │                  │
+     ├─ POST /games           │                 │                  │
+     │  (create game)         │                 │                  │
+     │                        │                 │                  │
+     ├─ POST /games/:id/pairs ─►               │                  │
+     │  { pairName }          │                 │                  │
+     │                        │                 │                  │
+     ├─ POST /games/:id/state ─►               │                  │
+     │  { state: lobby }      ├── WS game.opened ──►              │
+     │                        │                 │ "JOIN? KEY2"     │
+     │                        │                 │                  │
+     │         (user presses KEY2 on Zero)       │                  │
+     │                        ◄── POST /games/:id/join ──          │
+     │                        ├── WS controller.joined ─► BadgesView
+     │                        │                 │ "WAITING..."     │
+     │                        │                 │                  │
+     ├─ POST /games/:id/state ─►               │                  │
+     │  { state: active }     ├── WS game.started ──►             │
+     │                        │                 │ "GAME ON"       │
+     │                        │                 ├── BLE GAME:active ──►
+     │                        │                 │                  │ ■ green
+     │                        │                 │                  │   square
+     ├─ POST /questions/:q/state►              │                  │
+     │  { state: open }       ├── WS question.opened ──►          │
+     │                        │                 │ "SCAN NOW"      │
+     │                        │                 ├── BLE GAME:question_open►
+     │                        │                 │                  │ ? glyph
+     │                        │                 │                  │
+     │      (player scans NFC card on Pico)      │                  │
+     │                        │                 ◄── BLE TAG:uid ───
+     │                        ◄── POST /guesses ──                 │
+     │                        ├── WS nfc.tagged ──► BadgesView     │
+     │                        │                 │                  │
+     ├─ POST /questions/:q/state►              │                  │
+     │  { state: closed }     ├── WS question.closed ──►          │
+     │                        │                 │ "GAME ON"       │
+     │                        │                 ├── BLE GAME:question_close►
+     │                        │                 │                  │ · dot
+     ├─ POST /games/:id/state ─►               │                  │
+     │  { state: completed }  ├── WS game.ended ──►               │
+     │                        │                 │ "GAME OVER"     │
+     │                        │                 ├── BLE GAME:ended ──►
+     │                        │                 │                  │ DONE scroll
+```
+
+### Current limitations (pre-Step 6)
+
+- Pair binding and game state transitions require direct API calls (curl or
+  browser devtools). Step 6 adds referee buttons in `GameDetailView`.
+- `BadgesView` does not yet show live game state or NFC tag events. Step 6
+  extends it to consume `game.state.changed`, `controller.joined`, and
+  `nfc.tagged` WebSocket events.
+- Only one question can be meaningfully open at a time; the server does not
+  enforce this — the referee must close one question before opening another.
+
+---
+
 ## Comparison summary
 
 | Aspect | Mode 1 (current) | Mode 2 (planned) |
