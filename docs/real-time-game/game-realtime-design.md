@@ -10,8 +10,8 @@
 | 2 | Infrastructure (ALB timeout, heartbeat, dev proxy) | ✅ done | `2-infra.md` |
 | 3 | Zero WS client + game mode + NFC relay | ✅ done | `3-zero.md` |
 | 4 | Pico game commands + TAG notify | ✅ done | `4-pico.md` |
-| 5 | Games CRUD + server read endpoints + React Games view | 🔲 pending | `5-dashboard.md` |
-| 6 | Referee panel + live game dashboard (enhanced BadgesView) | 🔲 pending | `6-referee.md` |
+| 5 | Games CRUD + server read endpoints + React Games view | ✅ done | `5-dashboard.md` |
+| 6 | Referee panel + live game dashboard (enhanced BadgesView) | ✅ done | `6-referee.md` |
 
 ## Overview
 

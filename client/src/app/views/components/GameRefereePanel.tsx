@@ -39,8 +39,8 @@ const LIFECYCLE_BUTTONS: Record<GameState, LifecycleButton[]> = {
     { label: 'Resume', targetState: 'active' },
     { label: 'Cancel', targetState: 'cancelled', variant: 'outline' },
   ],
-  completed: [],
-  cancelled: [],
+  completed: [{ label: 'Play Again', targetState: 'draft' }],
+  cancelled: [{ label: 'Restart',    targetState: 'draft' }],
 };
 
 export function GameRefereePanel({

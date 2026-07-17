@@ -301,15 +301,38 @@ export class GameDataRepository {
     }
 
     const allowedTransitions: Partial<Record<GameState, GameState[]>> = {
-      draft: ['lobby'],
-      lobby: ['active', 'cancelled'],
-      active: ['paused', 'completed', 'cancelled'],
-      paused: ['active', 'cancelled'],
+      draft:     ['lobby'],
+      lobby:     ['active', 'cancelled'],
+      active:    ['paused', 'completed', 'cancelled'],
+      paused:    ['active', 'cancelled'],
+      completed: ['draft'],
+      cancelled: ['draft'],
     };
 
     const allowed = allowedTransitions[game.state as GameState] ?? [];
     if (!allowed.includes(input.state)) {
       throw new Error(`Cannot transition game from '${game.state}' to '${input.state}'.`);
+    }
+
+    if (input.state === 'draft' && (game.state === 'completed' || game.state === 'cancelled')) {
+      const { Question, PairBinding } = this.mongoService.getModels();
+
+      await Game.updateOne(
+        { _id: asObjectId(input.gameId) },
+        { $set: { state: 'draft' }, $unset: { startedAt: '', endedAt: '' } },
+      );
+
+      await Question.updateMany(
+        { gameId: asObjectId(input.gameId) },
+        { $set: { state: 'closed' }, $unset: { openedAt: '', closedAt: '' } },
+      );
+
+      await PairBinding.updateMany(
+        { gameId: asObjectId(input.gameId) },
+        { $set: { joined: false, updatedAt: new Date() } },
+      );
+
+      return { gameId: input.gameId, state: input.state };
     }
 
     const timestampFields: Partial<Record<GameState, string>> = {
