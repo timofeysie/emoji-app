@@ -873,7 +873,7 @@ export const BadgesView = () => {
             gameState: message.state,
             serverTime: message.serverTime,
           });
-          if (message.state === 'ready') {
+          if (message.state === 'draft' || message.state === 'ready') {
             setQuestionPhase('none');
             setResultsByPair({});
             setNfcByPair({});

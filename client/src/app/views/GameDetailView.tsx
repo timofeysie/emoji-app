@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CheckCircle2, ChevronLeft, Circle, Loader2, Plus, Star } from 'lucide-react';
 import { Button } from '../shared/button';
@@ -30,7 +30,14 @@ const DEMO_CREATOR_ID = '000000000000000000000001';
 const SLOT_LABELS = ['A', 'B', 'C', 'D', 'E'] as const;
 type SlotLabel = (typeof SLOT_LABELS)[number];
 type QuestionMode = 'standard' | 'cut-throat' | 'mixed';
-type GameState = 'ready' | 'lobby' | 'active' | 'paused' | 'completed' | 'cancelled';
+type GameState =
+  | 'draft'
+  | 'ready'
+  | 'lobby'
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'cancelled';
 
 type AnswerOption = {
   id: string;
@@ -67,7 +74,8 @@ type GameDetail = {
 };
 
 const STATE_STYLES: Record<GameState, string> = {
-  ready: 'bg-muted text-muted-foreground',
+  draft: 'bg-muted text-muted-foreground',
+  ready: 'bg-emerald-50 text-emerald-800',
   lobby: 'bg-amber-100 text-amber-800',
   active: 'bg-green-100 text-green-800',
   paused: 'bg-blue-100 text-blue-800',
@@ -583,6 +591,41 @@ export function GameDetailView() {
   useEffect(() => {
     void loadGame();
   }, [loadGame]);
+
+  // Opening the game detail page promotes draft → ready (setup → standby for controllers).
+  const promotingDraftRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!gameId || !game || game.state !== 'draft') {
+      return;
+    }
+    if (promotingDraftRef.current === gameId) {
+      return;
+    }
+    promotingDraftRef.current = gameId;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/games/${gameId}/state`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state: 'ready' }),
+          credentials: 'same-origin',
+        });
+        if (cancelled) return;
+        if (!res.ok) {
+          promotingDraftRef.current = null;
+          return;
+        }
+        logGameState('ready', `referee opened game detail — draft → ready gameId=${gameId}`);
+        setGame((prev) => (prev ? { ...prev, state: 'ready' } : prev));
+      } catch {
+        promotingDraftRef.current = null;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [game, gameId]);
 
   useEffect(() => {
     void loadScores();

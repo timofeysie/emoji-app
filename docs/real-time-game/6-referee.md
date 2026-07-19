@@ -82,6 +82,7 @@ the current game appear as clickable dashed chips for one-click binding:
 
 | Current state | Buttons shown |
 | --- | --- |
+| `draft` | *(auto → `ready` when detail page opens)* |
 | `ready` | **Open for Joining** |
 | `lobby` | **Start Game** · **Cancel** |
 | `active` | **End Game** · **Pause** |
@@ -97,6 +98,7 @@ without losing the current view.
 Transition map (mirrors server-side `allowedTransitions`):
 
 ```
+draft      → ready      (open game detail page)
 ready      → lobby      (Open for Joining)
 lobby      → active     (Start Game)
 lobby      → cancelled  (Cancel)

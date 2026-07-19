@@ -4,14 +4,6 @@ import { MongoService } from './mongo.service';
 import { GameState, PlayMode, QuestionMode, SlotLabel } from './domain-types';
 import { asObjectId } from './models';
 
-/** Normalize legacy `draft` game documents to `ready`. Question state is unchanged. */
-function normalizeGameState(state: string): GameState {
-  if (state === 'draft') {
-    return 'ready';
-  }
-  return state as GameState;
-}
-
 export type CreateGameInput = {
   title: string;
   createdByUserId: string;
@@ -138,7 +130,7 @@ export class GameDataRepository {
     const created = await Game.create({
       title: input.title,
       createdByUserId: asObjectId(input.createdByUserId),
-      state: 'ready',
+      state: 'draft',
     });
     return created._id.toString();
   }
@@ -454,6 +446,7 @@ export class GameDataRepository {
     }
 
     const allowedTransitions: Partial<Record<GameState, GameState[]>> = {
+      draft:     ['ready'],
       ready:     ['lobby'],
       lobby:     ['active', 'cancelled'],
       active:    ['paused', 'completed', 'cancelled'],
@@ -462,7 +455,7 @@ export class GameDataRepository {
       cancelled: ['ready'],
     };
 
-    const currentState = normalizeGameState(String(game.state));
+    const currentState = game.state as GameState;
     const allowed = allowedTransitions[currentState] ?? [];
     if (!allowed.includes(input.state)) {
       throw new Error(`Cannot transition game from '${currentState}' to '${input.state}'.`);
@@ -535,7 +528,7 @@ export class GameDataRepository {
     if (gameId) {
       const game = await Game.findById(binding.gameId).lean();
       if (game) {
-        state = normalizeGameState(String(game.state));
+        state = game.state as GameState;
         const openQuestion = await Question.findOne({ gameId: binding.gameId, state: 'open' }).lean();
         openQuestionId = openQuestion ? (openQuestion._id as Types.ObjectId).toString() : null;
       }
@@ -692,7 +685,7 @@ export class GameDataRepository {
     return games.map((g) => ({
       id: (g._id as Types.ObjectId).toString(),
       title: g.title,
-      state: normalizeGameState(String(g.state)),
+      state: g.state as GameState,
       createdAt: (g as unknown as { createdAt: Date }).createdAt.toISOString(),
       startedAt: g.startedAt ? g.startedAt.toISOString() : null,
       endedAt: g.endedAt ? g.endedAt.toISOString() : null,
@@ -726,7 +719,7 @@ export class GameDataRepository {
     return {
       id: (game._id as Types.ObjectId).toString(),
       title: game.title,
-      state: normalizeGameState(String(game.state)),
+      state: game.state as GameState,
       createdAt: (game as unknown as { createdAt: Date }).createdAt.toISOString(),
       startedAt: game.startedAt ? game.startedAt.toISOString() : null,
       endedAt: game.endedAt ? game.endedAt.toISOString() : null,

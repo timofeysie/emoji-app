@@ -19,7 +19,14 @@ import { cn } from '../shared/utils';
 /** Placeholder creator ID used when no auth is wired. Must be a 24-char hex ObjectId. */
 const DEMO_CREATOR_ID = '000000000000000000000001';
 
-type GameState = 'ready' | 'lobby' | 'active' | 'paused' | 'completed' | 'cancelled';
+type GameState =
+  | 'draft'
+  | 'ready'
+  | 'lobby'
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'cancelled';
 
 type GameSummary = {
   id: string;
@@ -32,7 +39,8 @@ type GameSummary = {
 };
 
 const STATE_STYLES: Record<GameState, string> = {
-  ready: 'bg-muted text-muted-foreground',
+  draft: 'bg-muted text-muted-foreground',
+  ready: 'bg-emerald-50 text-emerald-800',
   lobby: 'bg-amber-100 text-amber-800',
   active: 'bg-green-100 text-green-800',
   paused: 'bg-blue-100 text-blue-800',

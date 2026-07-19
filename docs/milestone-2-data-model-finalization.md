@@ -41,7 +41,7 @@ implementing Mongoose models.
 - **Required:** `_id`, `title`, `state`, `createdByUserId`, `createdAt`,
   `updatedAt`
 - **Optional:** `startedAt`, `endedAt`
-- **Enum:** `state` = `ready | lobby | active | paused | completed | cancelled`
+- **Enum:** `state` = `draft | ready | lobby | active | paused | completed | cancelled`
 - **Immutable:** `_id`, `createdByUserId`, `createdAt`
 
 ### `gameParticipants`

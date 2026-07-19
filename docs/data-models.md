@@ -43,7 +43,7 @@ This gives us a stable contract before choosing MongoDB or SQL.
 
 - `id`
 - `title`
-- `state` (ready, lobby, active, paused, completed, cancelled)
+- `state` (draft, ready, lobby, active, paused, completed, cancelled)
 - `createdByUserId`
 - `startedAt`
 - `endedAt`

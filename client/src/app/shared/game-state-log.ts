@@ -6,6 +6,7 @@
  */
 
 export const GAME_STATE_LABELS = {
+  draft: 'Draft — setup',
   ready: 'Ready — standby (G)',
   lobby: 'Lobby — not yet joined',
   lobby_joined: 'Lobby — joined, waiting',
@@ -42,6 +43,7 @@ export function logFromServerGameState(
   detail?: string,
 ): void {
   const map: Record<string, GameVisualStateId> = {
+    draft: 'draft',
     ready: 'ready',
     lobby: 'lobby',
     active: 'active',

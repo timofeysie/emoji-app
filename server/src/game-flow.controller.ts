@@ -12,7 +12,15 @@ const playModeSchema = z.enum(['standard', 'cut-throat']);
 const participantRoleSchema = z.enum(['player', 'referee', 'spectator']);
 const questionModeSchema = z.enum(['standard', 'cut-throat', 'mixed']);
 const questionStateSchema = z.enum(['open', 'closed']);
-const gameLifecycleStateSchema = z.enum(['ready', 'lobby', 'active', 'paused', 'completed', 'cancelled']);
+const gameLifecycleStateSchema = z.enum([
+  'draft',
+  'ready',
+  'lobby',
+  'active',
+  'paused',
+  'completed',
+  'cancelled',
+]);
 
 const createGameSchema = z.object({
   title: z.string().min(1),

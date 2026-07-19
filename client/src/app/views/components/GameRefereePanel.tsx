@@ -1,11 +1,25 @@
-import { useEffect, useState } from 'react';
-import { CheckCircle2, CreditCard, Loader2, Plus } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, CreditCard, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '../../shared/button';
 import { Input } from '../../shared/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../shared/select';
 import { cn } from '../../shared/utils';
 import { logFromServerGameState, logGameState } from '../../shared/game-state-log';
 
-type GameState = 'ready' | 'lobby' | 'active' | 'paused' | 'completed' | 'cancelled';
+type GameState =
+  | 'draft'
+  | 'ready'
+  | 'lobby'
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'cancelled';
 
 type BoundPair = {
   pairName: string;
@@ -27,6 +41,8 @@ type LifecycleButton = {
 };
 
 const LIFECYCLE_BUTTONS: Record<GameState, LifecycleButton[]> = {
+  // draft → ready happens automatically when GameDetailView opens
+  draft: [],
   ready: [{ label: 'Open for Joining', targetState: 'lobby' }],
   lobby: [
     { label: 'Start Game', targetState: 'active' },
@@ -52,33 +68,47 @@ export function GameRefereePanel({
   onRefresh: () => void;
 }) {
   const [pairName, setPairName] = useState('');
+  const [selectedInvite, setSelectedInvite] = useState<string>('');
   const [bindLoading, setBindLoading] = useState(false);
   const [bindError, setBindError] = useState<string | null>(null);
   const [lifecycleLoading, setLifecycleLoading] = useState<string | null>(null);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
 
-  // Known pair names from /api/badges (for one-click bind suggestions)
+  // Live pairs from GET /api/badges (Zeros that have posted status with pairName).
   const [knownPairs, setKnownPairs] = useState<string[]>([]);
+  const [badgesLoading, setBadgesLoading] = useState(true);
+
+  const loadKnownPairs = useCallback(async () => {
+    setBadgesLoading(true);
+    try {
+      const res = await fetch('/api/badges', { credentials: 'same-origin' });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        badges: Array<{ status?: { pairName?: string } | null }>;
+      };
+      const names = new Set<string>();
+      for (const b of data.badges) {
+        const name = b.status?.pairName;
+        if (name) names.add(name);
+      }
+      setKnownPairs([...names].sort());
+    } catch {
+      // suggestions are optional
+    } finally {
+      setBadgesLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const res = await fetch('/api/badges', { credentials: 'same-origin' });
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          badges: Array<{ status?: { pairName?: string } | null }>;
-        };
-        const names = new Set<string>();
-        for (const b of data.badges) {
-          const name = b.status?.pairName;
-          if (name) names.add(name);
-        }
-        setKnownPairs([...names].sort());
-      } catch {
-        // suggestions are optional
-      }
-    })();
-  }, []);
+    void loadKnownPairs();
+    const id = window.setInterval(() => void loadKnownPairs(), 10_000);
+    return () => window.clearInterval(id);
+  }, [loadKnownPairs]);
+
+  const unboundPairs = useMemo(
+    () => knownPairs.filter((n) => !game.boundPairs.some((bp) => bp.pairName === n)),
+    [knownPairs, game.boundPairs],
+  );
 
   // NFC card group assignment
   type CardGroupInfo = { groupId: string; name: string; cardCount: number } | null;
@@ -149,7 +179,9 @@ export function GameRefereePanel({
         return;
       }
       setPairName('');
+      setSelectedInvite('');
       onRefresh();
+      void loadKnownPairs();
     } catch {
       setBindError('Network error — could not bind pair.');
     } finally {
@@ -197,9 +229,27 @@ export function GameRefereePanel({
         Referee Controls
       </p>
 
-      {/* Bound pairs */}
+      {/* Bound pairs + invite */}
       <div className="flex flex-col gap-2">
-        <p className="text-xs font-medium text-foreground">Bound pairs</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium text-foreground">Bound pairs</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-[11px] text-muted-foreground"
+            onClick={() => void loadKnownPairs()}
+            disabled={badgesLoading}
+            title="Refresh available pairs from Badges"
+          >
+            <RefreshCw
+              className={cn('mr-1 h-3 w-3', badgesLoading && 'animate-spin')}
+              aria-hidden
+            />
+            Refresh
+          </Button>
+        </div>
+
         {game.boundPairs.length === 0 ? (
           <p className="text-xs text-muted-foreground italic">None bound yet.</p>
         ) : (
@@ -226,31 +276,57 @@ export function GameRefereePanel({
           </div>
         )}
 
-        {/* Known-pair quick-bind chips */}
-        {knownPairs.length > 0 && (
-          <div className="flex flex-wrap gap-1 pt-0.5">
-            {knownPairs
-              .filter((n) => !game.boundPairs.some((bp) => bp.pairName === n))
-              .map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className="inline-flex items-center rounded-full border border-dashed px-2 py-0.5 text-[11px] text-muted-foreground hover:border-primary hover:text-primary disabled:opacity-50"
-                  disabled={bindLoading}
-                  onClick={() => void bindPair(n)}
-                  title={`Bind "${n}"`}
-                >
-                  <Plus className="mr-0.5 h-2.5 w-2.5" aria-hidden />
-                  {n}
-                </button>
-              ))}
+        <p className="pt-1 text-xs font-medium text-foreground">Invite a pair</p>
+        {badgesLoading && knownPairs.length === 0 ? (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+            Looking for live badges…
+          </p>
+        ) : unboundPairs.length > 0 ? (
+          <div className="flex items-center gap-1.5">
+            <Select
+              value={selectedInvite || undefined}
+              onValueChange={setSelectedInvite}
+              disabled={bindLoading}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Select a live pair…" />
+              </SelectTrigger>
+              <SelectContent>
+                {unboundPairs.map((n) => (
+                  <SelectItem key={n} value={n}>
+                    {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void bindPair(selectedInvite)}
+              disabled={bindLoading || !selectedInvite}
+              className="h-8 shrink-0"
+            >
+              {bindLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+              )}
+              Bind
+            </Button>
           </div>
+        ) : (
+          <p className="rounded-md border border-dashed px-2.5 py-2 text-xs text-muted-foreground">
+            No live pairs to invite. Power on a Zero (with{' '}
+            <code className="text-[11px]">pairName</code> in status) and check the Badges
+            page, then hit Refresh.
+          </p>
         )}
 
-        {/* Manual bind input */}
-        <div className="flex items-center gap-1.5 pt-1">
+        {/* Manual bind fallback */}
+        <div className="flex items-center gap-1.5 pt-0.5">
           <Input
-            placeholder="pair name (e.g. green)"
+            placeholder="Or type pair name (e.g. green)"
             value={pairName}
             onChange={(e) => setPairName(e.target.value)}
             onKeyDown={(e) => {
@@ -328,7 +404,7 @@ export function GameRefereePanel({
               game.state === 'active' && 'bg-green-500',
               game.state === 'lobby' && 'bg-amber-400',
               game.state === 'paused' && 'bg-blue-400',
-              game.state === 'ready' && 'bg-muted-foreground/40',
+              (game.state === 'draft' || game.state === 'ready') && 'bg-muted-foreground/40',
               (game.state === 'completed' || game.state === 'cancelled') && 'bg-slate-400',
             )}
             aria-hidden

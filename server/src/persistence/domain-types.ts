@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 
 export const gameStateValues = [
+  'draft',
   'ready',
   'lobby',
   'active',

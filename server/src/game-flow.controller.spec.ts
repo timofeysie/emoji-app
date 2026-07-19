@@ -336,6 +336,27 @@ describe('GameFlowController', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
+    it('emits game.ready to controllers when draft is opened to ready', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'ready',
+      });
+      repository.getBindingsByGameId.mockResolvedValue(['green']);
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'ready' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['green'],
+        expect.objectContaining({ type: 'game.ready' }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     it('emits game.ready to controllers on Play Again', async () => {
       const res = createResponseMock();
       repository.setGameState.mockResolvedValue({
