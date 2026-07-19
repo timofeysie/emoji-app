@@ -22,7 +22,7 @@ All acceptance criteria from `6-referee.md` are implemented.
 Outstanding items to verify with physical hardware:
 
 - [ ] After "Open for Joining", a Zero in game mode receives `game.opened`
-      and shows "JOIN? KEY2" on its display.
+      and shows "JOIN? KEY1" on its display.
 - [ ] After "Start Game", the Zero shows "GAME ON" and the Pico shows the
       green square (`GAME:active`).
 - [ ] After "Open question", the Zero shows "SCAN NOW" and the Pico shows

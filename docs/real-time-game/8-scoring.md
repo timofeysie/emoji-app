@@ -64,7 +64,7 @@ Copy of the target table. Implement every row on all three platforms.
 
 | State | Pico today | Zero today | React today |
 | --- | --- | --- | --- |
-| Lobby not joined | *(no lobby command)* | Text `JOIN? KEY2` + `G` glyph | Text `lobby` only |
+| Lobby not joined | *(no lobby command)* | Text `JOIN? KEY1` + yellow 4×4 | Text `lobby` only |
 | Lobby joined | *(none)* | Text `WAITING...` + `G` glyph | Join time text |
 | Active | ✅ green 4×4 fill | Text `GAME ON` + `G` glyph | Text `active` |
 | Question open | ✅ `?` | Text `SCAN NOW` + `G` glyph | *(none / game state)* |

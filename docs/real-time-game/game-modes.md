@@ -231,12 +231,12 @@ The Waveshare 1.44" display HAT has a 5-way joystick and three side buttons.
 
 | Control | Action |
 | --- | --- |
-| **KEY2** | In `none` state → enter `start`; in `start` state → cycle menu (0→1→2→3→0); in `choosing` → confirm selection + animate; in game mode when `JOIN? KEY2` shown → POST join |
+| **KEY2** | In `none` state → enter `start`; in `start` state → cycle menu (0→1→2→3→0); in `choosing` → confirm selection + animate; in game mode → no join (menu/confirm only) |
 | **Joystick CENTER** | In `start` state → enter `choosing` with pos=1; in `choosing` → redraw |
 | **Joystick UP** | In `choosing` → move pos up (cycles 1→2→3→4→1) |
 | **Joystick DOWN** | In `choosing` → move pos down |
 | **Joystick LEFT/RIGHT** | Navigate within choosing mode |
-| **KEY1** | Positive emoji selection (or toggle/replay last positive) |
+| **KEY1** | Positive emoji selection (or toggle/replay last positive); in game mode when `JOIN? KEY1` shown → POST join |
 | **KEY3** | Negative emoji selection (or toggle/replay last negative) |
 
 ### Navigating to game mode
@@ -274,7 +274,7 @@ large 'G' glyph. The status text (y=57) changes with the WebSocket game state:
 | Zero shows | Meaning | What to do |
 | --- | --- | --- |
 | *(large 'G', no text)* | WS not connected, or pair not bound to any game | Check server connection; bind pair via API / Step 6 UI |
-| `JOIN? KEY2` | Pair is bound to a game in `lobby` state, not yet joined | Press **KEY2** to join |
+| `JOIN? KEY1` | Pair is bound to a game in `lobby` state, not yet joined | Press **KEY1** to join |
 | `WAITING...` | Joined; waiting for referee to start the game | Wait |
 | `GAME ON` | Game is `active`, no question currently open | Wait for referee to open a question |
 | `SCAN NOW` | A question is open — NFC tag scan is ready | Player scans NFC card on Pico |
@@ -300,8 +300,8 @@ built, use direct API calls.
 | Referee action | API call | Zero reacts | Pico reacts |
 | --- | --- | --- | --- |
 | Bind controller to game | `POST /api/games/:id/pairs { pairName }` | Next WS connect: receives `controller.welcome` with game snapshot | — |
-| Open for joining (lobby) | `POST /api/games/:id/state { state: "lobby" }` | Shows "JOIN? KEY2" | — |
-| Player presses KEY2 | Zero posts `POST /api/games/:id/join` | Shows "WAITING..." | — |
+| Open for joining (lobby) | `POST /api/games/:id/state { state: "lobby" }` | Shows "JOIN? KEY1" | — |
+| Player presses KEY1 | Zero posts `POST /api/games/:id/join` | Shows "WAITING..." | — |
 | Start game | `POST /api/games/:id/state { state: "active" }` | Shows "GAME ON" | Green square |
 | Open question | `POST /api/questions/:qid/state { gameId, state: "open" }` | Shows "SCAN NOW" | '?' glyph |
 | Player scans NFC card | Pico notifies `TAG:<uid>` → Zero posts `POST /api/guesses` | Shows "SCAN NOW" until closed | — |
@@ -321,9 +321,9 @@ Referee (app)              Server             Zero               Pico
      │                        │                 │                  │
      ├─ POST /games/:id/state ─►               │                  │
      │  { state: lobby }      ├── WS game.opened ──►              │
-     │                        │                 │ "JOIN? KEY2"     │
+     │                        │                 │ "JOIN? KEY1"     │
      │                        │                 │                  │
-     │         (user presses KEY2 on Zero)       │                  │
+     │         (user presses KEY1 on Zero)       │                  │
      │                        ◄── POST /games/:id/join ──          │
      │                        ├── WS controller.joined ─► BadgesView
      │                        │                 │ "WAITING..."     │

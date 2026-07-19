@@ -730,7 +730,7 @@ Server time is canonical (consistent with the badge timestamp policy in
    - `controller.hello` on connect; `controller.welcome` snapshot applied to display.
    - Game mode entry via menu 3 · pos 4 (new 'G' glyph); status text shows
      lobby/active/completed state.
-   - KEY2 in game mode sends `POST /api/games/:gameId/join`.
+   - KEY1 in game mode sends `POST /api/games/:gameId/join`.
    - `game.*` and `question.*` events update display and write `GAME:*` to Pico.
    - `TAG:<cardUid>` from Pico → `POST /api/guesses`; legacy `NFC:` path unchanged.
    - HTTP fallback polls `GET /api/pairs/:pairName` every 30 s when WS is down.

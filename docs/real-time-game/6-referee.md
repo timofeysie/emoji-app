@@ -421,7 +421,7 @@ and the button set resets to **Open for Joining**.
 
 None. After a restart the game lifecycle follows the same path as a new
 game: `draft → lobby` (referee clicks Open for Joining) → Zero receives
-`game.opened` → Zero shows "JOIN? KEY2" → player joins → referee starts →
+`game.opened` → Zero shows "JOIN? KEY1" → player joins → referee starts →
 etc. The `controller.welcome` snapshot on any WS reconnect reflects the
 reset `draft` state automatically.
 
@@ -474,7 +474,7 @@ reset `draft` state automatically.
 These items are implemented but need confirmation with a live Zero + Pico:
 
 - [ ] After "Open for Joining", a Zero in game mode receives `game.opened`
-      and shows "JOIN? KEY2" on the Zero display.
+      and shows "JOIN? KEY1" on the Zero display.
 - [ ] After "Start Game", the Zero shows "GAME ON" and the Pico shows the
       green square (`GAME:active` command received).
 - [ ] After "Open question", the Zero shows "SCAN NOW" and the Pico shows

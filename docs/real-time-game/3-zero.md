@@ -74,7 +74,7 @@ _ws_question_id   = None   # str | None (currently open question)
 _ws_joined        = False  # True once join POST has been sent this session
 
 # Set to True when a game.opened event arrives and the join prompt is shown.
-# The main button loop polls this and issues the join POST on KEY2 press.
+# The main button loop polls this and issues the join POST on KEY1 press.
 _join_pending     = False
 
 # Set by _ws_connect_loop while the socket is open. Checked by the HTTP
@@ -401,7 +401,7 @@ While `game_mode_active` is True, `get_main_emoji()` returns `game_mode_matrix`
 
 | State | Main emoji | Status text (y≈57) | Text colour |
 | --- | --- | --- | --- |
-| `lobby`, not joined | 'G' glyph | `JOIN? KEY2` | yellow |
+| `lobby`, not joined | 'G' glyph | `JOIN? KEY1` | yellow |
 | `lobby`, joined | 'G' glyph | `WAITING...` | white |
 | `active`, no open question | 'G' glyph | `GAME ON` | green |
 | `active`, question open | 'G' glyph | `SCAN NOW` | amber |
@@ -414,7 +414,7 @@ Add to `draw_display()`, inside the existing
 ```python
 if game_mode_active:
     if _ws_game_state == "lobby" and not _ws_joined:
-        draw_centered_text(draw, "JOIN? KEY2", 57, font, disp.width, "yellow")
+        draw_centered_text(draw, "JOIN? KEY1", 57, font, disp.width, "yellow")
     elif _ws_game_state == "lobby":
         draw_centered_text(draw, "WAITING...", 57, font, disp.width, "white")
     elif _ws_game_state == "active" and _ws_question_id:
@@ -438,31 +438,29 @@ def _apply_game_state_to_display():
 
 ---
 
-## Join flow: KEY2 inside game mode
+## Join flow: KEY1 inside game mode
 
-The join POST fires from the existing KEY2 handler, but **only when
-`game_mode_active` is True**. Add a short branch inside the `key2_pressed`
-block, after the existing `if state != "choosing": reset_prev()` guard:
+The join POST fires from the **KEY1** (positive) handler when
+`game_mode_active` is True and a lobby is waiting. KEY2 remains
+menu/confirm only and does not join.
 
 ```python
-# === Handle KEY2 button (Menu/Confirm) ===
-if key2_pressed and not button_states['key2']:
-    if state != "choosing":
-        reset_prev()
-
-    # --- NEW: join game while in game mode ---
-    if game_mode_active and _join_pending and _ws_game_id:
-        _join_pending = False
-        _ws_joined    = True
-        post_to_server(
-            f"/api/games/{_ws_game_id}/join",
-            {"pairName": PAIR_NAME, "controllerId": CONTROLLER_ID},
-        )
-        draw_display()   # redraws with "WAITING..." text
+# === Handle KEY1 button (Positive) ===
+if key1_pressed and not button_states['key1']:
+    if game_mode_active:
+        if _join_pending and _ws_game_id:
+            _join_pending = False
+            _ws_joined    = True
+            post_to_server(
+                f"/api/games/{_ws_game_id}/join",
+                {"pairName": PAIR_NAME, "controllerId": CONTROLLER_ID},
+            )
+            draw_display()
+            # … BLE GAME:lobby_joined …
         time.sleep(0.2)
-        button_states['key2'] = key2_pressed
+        button_states['key1'] = key1_pressed
         continue
-    # --- existing logic continues unchanged ---
+    # --- existing positive-selection logic continues unchanged ---
     ...
 ```
 
@@ -621,8 +619,8 @@ websockets
   emoji area shows the 'G' glyph and status text reflects the current game
   state from `controller.welcome`.
 - When the referee posts `game.opened`, the Zero display (if in game mode)
-  updates to "JOIN? KEY2".
-- Pressing KEY2 while in game mode and `_join_pending` sends
+  updates to "JOIN? KEY1".
+- Pressing KEY1 while in game mode and `_join_pending` sends
   `POST /api/games/:gameId/join`; dashboard shows `controller.joined`; display
   updates to "WAITING...".
 - Pressing any navigation button exits game mode; emoji picker resumes
