@@ -17,6 +17,7 @@ import { Input } from '../shared/input';
 import { Label } from '../shared/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../shared/select';
 import { cn } from '../shared/utils';
+import { logGameState } from '../shared/game-state-log';
 
 const DEMO_CREATOR_ID = '000000000000000000000001';
 const SLOT_LABELS = ['A', 'B', 'C', 'D', 'E'] as const;
@@ -473,6 +474,17 @@ export function GameDetailView() {
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
         throw new Error(body.error ?? `Failed to set question state to ${newState}.`);
+      }
+      if (newState === 'open') {
+        logGameState(
+          'question_open',
+          `referee Open questionId=${questionId} icon=message-circle-question-mark`,
+        );
+      } else {
+        logGameState(
+          'question_closed',
+          `referee Close questionId=${questionId} icon=book-alert`,
+        );
       }
       await refreshQuestions();
     },

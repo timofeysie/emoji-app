@@ -29,4 +29,4 @@ export const EXPECTED_CONTROLLER_VERSION =
 
 /** Minimum Pico badge script version considered current. */
 export const EXPECTED_PICO_VERSION =
-  process.env['EXPECTED_PICO_VERSION'] ?? '0.4.1';
+  process.env['EXPECTED_PICO_VERSION'] ?? '0.5.0';

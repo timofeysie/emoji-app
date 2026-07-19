@@ -3,6 +3,7 @@ import { CheckCircle2, CreditCard, Loader2, Plus } from 'lucide-react';
 import { Button } from '../../shared/button';
 import { Input } from '../../shared/input';
 import { cn } from '../../shared/utils';
+import { logFromServerGameState, logGameState } from '../../shared/game-state-log';
 
 type GameState = 'draft' | 'lobby' | 'active' | 'paused' | 'completed' | 'cancelled';
 
@@ -183,6 +184,15 @@ export function GameRefereePanel({
         const body = (await res.json()) as { error?: string };
         setLifecycleError(body.error ?? `Failed to transition to ${targetState}.`);
         return;
+      }
+      if (targetState === 'lobby') {
+        logGameState('lobby', `referee Open for Joining gameId=${game.id} icon=door-open`);
+      } else if (targetState === 'active') {
+        logGameState('active', `referee Start Game gameId=${game.id} icon=turntable`);
+      } else if (targetState === 'completed') {
+        logGameState('game_ended', `referee End Game gameId=${game.id} icon=sparkles`);
+      } else {
+        logFromServerGameState(targetState, `referee → ${targetState} gameId=${game.id}`);
       }
       onRefresh();
     } catch {

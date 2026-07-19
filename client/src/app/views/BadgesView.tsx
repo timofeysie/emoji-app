@@ -35,6 +35,10 @@ import {
   Zap,
 } from 'lucide-react';
 import { cn } from '../shared/utils';
+import {
+  logFromServerGameState,
+  logGameState,
+} from '../shared/game-state-log';
 
 /** Values accepted by `POST /api/status` (device-reported). */
 type DeviceBleStatus =
@@ -754,6 +758,10 @@ export const BadgesView = () => {
             gameState: message.state,
             serverTime: message.serverTime,
           });
+          logFromServerGameState(
+            message.state,
+            `WS game.state.changed gameId=${message.gameId}`,
+          );
           return;
         }
 
@@ -767,6 +775,10 @@ export const BadgesView = () => {
               serverTime: message.serverTime,
             },
           }));
+          logGameState(
+            'lobby_joined',
+            `WS controller.joined pair=${message.pairName} icon=hand-platter`,
+          );
           return;
         }
 
@@ -785,6 +797,20 @@ export const BadgesView = () => {
                 serverTime: message.serverTime,
               },
             }));
+          }
+          const pair = pairName ?? '?';
+          const slot = message.slotLabel ?? '?';
+          logGameState(
+            'card_scanned',
+            `WS nfc.tagged pair=${pair} slot=${slot} cardUid=${message.cardUid ?? '?'}`,
+          );
+          // Step 8: when isCorrect lands on the payload, also log correct/wrong.
+          const tagged = message as { isCorrect?: boolean };
+          if (typeof tagged.isCorrect === 'boolean') {
+            logGameState(
+              tagged.isCorrect ? 'correct' : 'wrong',
+              `pair=${pair} slot=${slot} icon=${tagged.isCorrect ? 'circle' : 'x'}`,
+            );
           }
           return;
         }

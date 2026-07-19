@@ -13,6 +13,11 @@ on the Pico, Zero, and React app.
 in `multiplayer-mode.md`. Where older notes in `next-steps.md` (e.g. scroll
 `YES` / `WIN`) disagree with that table, the Platform icon table wins.
 
+**Shared logging:** every Platform icon state transition logs one line on the
+platform that reached it — see
+[Shared game-state logging](../../../rainbow-connection/python/emoji-os/project/multiplayer-mode.md#shared-game-state-logging).
+Format: `[GAME] <pico|zero|react> | <state_id> | <label> | <detail>`.
+
 Related:
 
 - `next-steps.md` — Step 8 overview (scoring events + leaderboard)
