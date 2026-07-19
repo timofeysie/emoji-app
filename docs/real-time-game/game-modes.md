@@ -231,7 +231,7 @@ The Waveshare 1.44" display HAT has a 5-way joystick and three side buttons.
 
 | Control | Action |
 | --- | --- |
-| **KEY2** | In `none` state → enter `start`; in `start` state → cycle menu (0→1→2→3→0); in `choosing` → confirm selection + animate; in game mode → no join (menu/confirm only) |
+| **KEY2** | In `none` state → enter `start`; in `start` state → cycle menu (0→1→2→3→0); in `choosing` → confirm selection + animate; in game/fullscreen mode → exit to menu select (does not join) |
 | **Joystick CENTER** | In `start` state → enter `choosing` with pos=1; in `choosing` → redraw |
 | **Joystick UP** | In `choosing` → move pos up (cycles 1→2→3→4→1) |
 | **Joystick DOWN** | In `choosing` → move pos down |

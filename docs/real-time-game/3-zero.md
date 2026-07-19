@@ -441,8 +441,9 @@ def _apply_game_state_to_display():
 ## Join flow: KEY1 inside game mode
 
 The join POST fires from the **KEY1** (positive) handler when
-`game_mode_active` is True and a lobby is waiting. KEY2 remains
-menu/confirm only and does not join.
+`game_mode_active` is True and a lobby is waiting. **KEY2** exits game
+mode to menu select (it does not join). Re-entering game mode syncs the
+current server snapshot to Zero + Pico via `_apply_game_state_to_display`.
 
 ```python
 # === Handle KEY1 button (Positive) ===
