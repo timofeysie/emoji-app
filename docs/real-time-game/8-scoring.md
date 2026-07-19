@@ -132,6 +132,15 @@ or temporarily substitute the nearest icon and note it in the PR.
 
 ## 8a — Server: guess response + question results + scores
 
+Status: **✅ done**
+
+- `POST /api/guesses` returns `isCorrect`; `nfc.tagged` includes it
+- Closing a question emits `question.opened`/`question.closed` (also fixed —
+  these were previously missing) plus `question.result` to dashboards and pairs
+- `GET /api/games/:gameId/scores` — correct/total per pair, scoped to `startedAt`
+- Completing a game sends per-pair enriched `game.ended` (`isWinner`, `rank`,
+  `score`); ties for first all get `isWinner: true`
+
 ### 8a-i — Return `isCorrect` from `POST /api/guesses`
 
 `submitGuess` already resolves an `AnswerOption`. Extend the return value
@@ -222,6 +231,10 @@ document in the PR).
 
 ## 8b — Zero: displays + event handlers
 
+Status: **✅ done** in `emoji-os-zero.py` v0.7.0 (glyphs, lobby BLE, immediate
+correct/wrong, question.result skip, winner/loser fireworks/rain). Winner/loser
+still need the server to emit enriched `game.ended` (8a-iv).
+
 ### 8b-i — Game-mode matrix glyphs (replace text-primary states)
 
 Introduce shared 8×8 matrices (or draw helpers) used as the **main**
@@ -253,22 +266,12 @@ BLE sync mapping (extend `_apply_game_state_to_display` / event handlers):
 
 ### 8b-ii — Immediate correct/wrong after guess POST
 
-In the TAG → `/api/guesses` path:
+Status: **✅ done** (Zero v0.7.0 + server `isCorrect` on guess response)
 
-```python
-# After successful POST:
-is_correct = response_json.get("isCorrect")
-if is_correct:
-    # show blue circle on Zero LCD
-    await _ble_write_game_cmd("GAME:correct")
-else:
-    # show red X on Zero LCD
-    await _ble_write_game_cmd("GAME:wrong")
-```
-
-Hold the result display until `question.closed` (or a short timeout, then
-stay on result until close — prefer stay until close so players can see
-their answer).
+In the TAG → `/api/guesses` path the Zero posts synchronously in a worker
+thread, reads `isCorrect` from the 201 body, then updates its LCD and sends
+`GAME:correct` / `GAME:wrong`. Hold until `question.closed` (white 2×2).
+A late `question.result` is skipped if this pair already answered.
 
 ### 8b-iii — `question.result` handler
 

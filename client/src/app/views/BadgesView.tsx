@@ -96,6 +96,7 @@ type WsEnvelope =
       badgeId?: string;
       cardUid?: string;
       slotLabel?: string;
+      isCorrect?: boolean;
       serverTime: string;
     };
 
@@ -804,12 +805,10 @@ export const BadgesView = () => {
             'card_scanned',
             `WS nfc.tagged pair=${pair} slot=${slot} cardUid=${message.cardUid ?? '?'}`,
           );
-          // Step 8: when isCorrect lands on the payload, also log correct/wrong.
-          const tagged = message as { isCorrect?: boolean };
-          if (typeof tagged.isCorrect === 'boolean') {
+          if (typeof message.isCorrect === 'boolean') {
             logGameState(
-              tagged.isCorrect ? 'correct' : 'wrong',
-              `pair=${pair} slot=${slot} icon=${tagged.isCorrect ? 'circle' : 'x'}`,
+              message.isCorrect ? 'correct' : 'wrong',
+              `pair=${pair} slot=${slot} icon=${message.isCorrect ? 'circle' : 'x'}`,
             );
           }
           return;

@@ -79,6 +79,18 @@ export type BoundPairSummary = {
   controllerId?: string;
 };
 
+export type QuestionResultPayload = {
+  gameId: string;
+  questionId: string;
+  correctSlotLabel: string;
+  results: Array<{ pairName: string; slotLabel: string | null; isCorrect: boolean }>;
+};
+
+export type GameScoresPayload = {
+  gameId: string;
+  scores: Array<{ pairName: string; correct: number; total: number }>;
+};
+
 export type GameDetail = {
   id: string;
   title: string;
@@ -248,7 +260,9 @@ export class GameDataRepository {
     return { groupId: assignment.groupId.toString(), name: group.name, cardCount };
   }
 
-  async submitGuess(input: SubmitGuessInput): Promise<{ guessId: string; answerOptionId: string; slotLabel: string }> {
+  async submitGuess(
+    input: SubmitGuessInput,
+  ): Promise<{ guessId: string; answerOptionId: string; slotLabel: string; isCorrect: boolean }> {
     const { Question, AnswerOption, Guess, GameNfcCardGroupAssignment, NfcCard } =
       this.mongoService.getModels();
 
@@ -324,6 +338,7 @@ export class GameDataRepository {
         guessId: guess[0]._id.toString(),
         answerOptionId: answerOption._id.toString(),
         slotLabel: resolvedSlotLabel,
+        isCorrect: Boolean(answerOption.isCorrect),
       };
     });
   }
@@ -441,6 +456,122 @@ export class GameDataRepository {
     const { PairBinding } = this.mongoService.getModels();
     const bindings = await PairBinding.find({ gameId: new Types.ObjectId(gameId) }, { pairName: 1 }).lean();
     return bindings.map((b) => b.pairName);
+  }
+
+  /**
+   * Build per-pair correct/wrong outcomes for a closed question.
+   * Includes every bound pair; `slotLabel: null` means no guess was submitted.
+   */
+  async computeQuestionResult(gameId: string, questionId: string): Promise<QuestionResultPayload> {
+    const { AnswerOption, Guess, PairBinding } = this.mongoService.getModels();
+
+    const correct = await AnswerOption.findOne({
+      questionId: asObjectId(questionId),
+      isCorrect: true,
+    }).lean();
+    if (!correct) {
+      throw new Error('No correct answer option for question.');
+    }
+
+    const guesses = await Guess.find({
+      gameId: asObjectId(gameId),
+      questionId: asObjectId(questionId),
+    }).lean();
+
+    const guessByPair = new Map<string, string | null>();
+    for (const guess of guesses) {
+      if (!guess.pairName) continue;
+      guessByPair.set(guess.pairName, (guess.slotLabel as string | undefined) ?? null);
+    }
+
+    const bindings = await PairBinding.find(
+      { gameId: asObjectId(gameId) },
+      { pairName: 1 },
+    ).lean();
+
+    const correctSlotLabel = correct.slotLabel as string;
+    const results = bindings.map((binding) => {
+      const slotLabel = guessByPair.has(binding.pairName)
+        ? guessByPair.get(binding.pairName) ?? null
+        : null;
+      return {
+        pairName: binding.pairName,
+        slotLabel,
+        isCorrect: slotLabel === correctSlotLabel,
+      };
+    });
+
+    return {
+      gameId,
+      questionId,
+      correctSlotLabel,
+      results,
+    };
+  }
+
+  /**
+   * Cumulative correct-guess counts per bound pair.
+   * Guesses are scoped to `game.startedAt` when present so Play Again does not
+   * inflate scores with prior runs.
+   */
+  async getGameScores(gameId: string): Promise<GameScoresPayload> {
+    const { Game, Question, Guess, AnswerOption, PairBinding } = this.mongoService.getModels();
+
+    const game = await Game.findById(asObjectId(gameId)).lean();
+    if (!game) {
+      throw new Error('Game not found.');
+    }
+
+    const total = await Question.countDocuments({ gameId: asObjectId(gameId) });
+
+    const guessFilter: Record<string, unknown> = { gameId: asObjectId(gameId) };
+    if (game.startedAt) {
+      guessFilter['createdAt'] = { $gte: game.startedAt };
+    }
+
+    const guesses = await Guess.find(guessFilter).lean();
+    const optionIds = [
+      ...new Set(
+        guesses
+          .map((g) => g.answerOptionId)
+          .filter((id): id is Types.ObjectId => id != null)
+          .map((id) => id.toString()),
+      ),
+    ];
+
+    const options =
+      optionIds.length > 0
+        ? await AnswerOption.find({ _id: { $in: optionIds.map((id) => asObjectId(id)) } }).lean()
+        : [];
+    const correctOptionIds = new Set(
+      options.filter((o) => o.isCorrect).map((o) => (o._id as Types.ObjectId).toString()),
+    );
+
+    const correctByPair = new Map<string, number>();
+    for (const guess of guesses) {
+      if (!guess.pairName) continue;
+      const optionId = guess.answerOptionId?.toString();
+      if (!optionId || !correctOptionIds.has(optionId)) continue;
+      correctByPair.set(guess.pairName, (correctByPair.get(guess.pairName) ?? 0) + 1);
+    }
+
+    const bindings = await PairBinding.find(
+      { gameId: asObjectId(gameId) },
+      { pairName: 1 },
+    ).lean();
+
+    const scores = bindings
+      .map((binding) => ({
+        pairName: binding.pairName,
+        correct: correctByPair.get(binding.pairName) ?? 0,
+        total,
+      }))
+      .sort(
+        (a, b) =>
+          b.correct - a.correct || a.pairName.localeCompare(b.pairName),
+      );
+
+    return { gameId, scores };
   }
 
   async listGames(): Promise<GameSummary[]> {

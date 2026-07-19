@@ -178,6 +178,29 @@ export class GameFlowController {
     }
   }
 
+  @Get('games/:gameId/scores')
+  async getGameScores(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+    try {
+      const scores = await this.gameDataRepository.getGameScores(gameId);
+      res.status(200).json(scores);
+    } catch (error) {
+      const message = String(error);
+      if (message.includes('Game not found')) {
+        res.status(404).json({ error: 'Game not found', message });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to fetch scores', message });
+    }
+  }
+
   @Post('games')
   async createGame(@Body() body: unknown, @Res() res: Response): Promise<void> {
     const result = createGameSchema.safeParse(body);
@@ -225,11 +248,34 @@ export class GameFlowController {
         serverTime,
       });
 
-      // Notify bound controllers if there's a matching controller event
-      const controllerEvent = controllerEventForState[state];
-      if (controllerEvent) {
-        const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
-        if (pairNames.length > 0) {
+      const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
+
+      if (state === 'completed' && pairNames.length > 0) {
+        // Enriched per-pair game.ended (rank / score / isWinner). Ties for
+        // first place all get isWinner: true.
+        const { scores } = await this.gameDataRepository.getGameScores(gameId);
+        const topScore = scores.reduce((max, row) => Math.max(max, row.correct), 0);
+        for (const row of scores) {
+          const rank = scores.filter((other) => other.correct > row.correct).length + 1;
+          const isWinner = row.correct === topScore;
+          console.log(
+            `[GAME] server | ${isWinner ? 'winner' : 'loser'} | ${
+              isWinner ? 'Game winner' : 'Game loser'
+            } | pair=${row.pairName} rank=${rank} score=${row.correct}`,
+          );
+          this.badgeStateService.sendToPairNames([row.pairName], {
+            type: 'game.ended',
+            gameId,
+            pairName: row.pairName,
+            isWinner,
+            rank,
+            score: row.correct,
+            serverTime,
+          });
+        }
+      } else {
+        const controllerEvent = controllerEventForState[state];
+        if (controllerEvent && pairNames.length > 0) {
           this.badgeStateService.sendToPairNames(pairNames, {
             type: controllerEvent,
             gameId,
@@ -351,11 +397,50 @@ export class GameFlowController {
     }
 
     try {
+      const { gameId, state } = payloadResult.data;
       await this.gameDataRepository.setQuestionState({
-        gameId: payloadResult.data.gameId,
+        gameId,
         questionId,
-        state: payloadResult.data.state,
+        state,
       });
+
+      const serverTime = new Date().toISOString();
+      const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
+      const questionEventType = state === 'open' ? 'question.opened' : 'question.closed';
+      const questionEvent = {
+        type: questionEventType,
+        gameId,
+        questionId,
+        serverTime,
+      };
+
+      console.log(
+        `[GAME] server | ${
+          state === 'open' ? 'question_open' : 'question_closed'
+        } | ${state === 'open' ? 'Question open' : 'Question closed'} | questionId=${questionId}`,
+      );
+
+      this.badgeStateService.broadcastDashboard(questionEvent);
+      if (pairNames.length > 0) {
+        this.badgeStateService.sendToPairNames(pairNames, questionEvent);
+      }
+
+      if (state === 'closed') {
+        const result = await this.gameDataRepository.computeQuestionResult(gameId, questionId);
+        const resultEvent = {
+          type: 'question.result' as const,
+          ...result,
+          serverTime,
+        };
+        console.log(
+          `[GAME] server | question_closed | Question closed | question.result pairs=${result.results.length} correctSlot=${result.correctSlotLabel}`,
+        );
+        this.badgeStateService.broadcastDashboard(resultEvent);
+        if (pairNames.length > 0) {
+          this.badgeStateService.sendToPairNames(pairNames, resultEvent);
+        }
+      }
+
       res.status(200).json({ ok: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to update question state', message: String(error) });
@@ -382,6 +467,7 @@ export class GameFlowController {
         ...(badgeId ? { badgeId } : {}),
         ...(cardUid ? { cardUid } : {}),
         slotLabel: outcome.slotLabel ?? undefined,
+        isCorrect: outcome.isCorrect,
         serverTime: new Date().toISOString(),
       });
 

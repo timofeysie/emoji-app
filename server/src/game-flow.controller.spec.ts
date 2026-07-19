@@ -31,6 +31,8 @@ describe('GameFlowController', () => {
     getBinding: jest.fn(),
     markJoined: jest.fn(),
     getBindingsByGameId: jest.fn(),
+    computeQuestionResult: jest.fn(),
+    getGameScores: jest.fn(),
   } as unknown as jest.Mocked<GameDataRepository>;
 
   const badgeStateService: jest.Mocked<Pick<BadgeStateService, 'broadcastDashboard' | 'sendToPairNames'>> = {
@@ -89,8 +91,9 @@ describe('GameFlowController', () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
-  it('returns 200 for valid question state update', async () => {
+  it('returns 200 for valid question state update and emits question.opened', async () => {
     const res = createResponseMock();
+    repository.getBindingsByGameId.mockResolvedValue(['green']);
 
     await controller.setQuestionState(
       '507f1f77bcf86cd799439015',
@@ -106,8 +109,57 @@ describe('GameFlowController', () => {
       questionId: '507f1f77bcf86cd799439015',
       state: 'open',
     });
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'question.opened',
+        questionId: '507f1f77bcf86cd799439015',
+      }),
+    );
+    expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+      ['green'],
+      expect.objectContaining({ type: 'question.opened' }),
+    );
+    expect(repository.computeQuestionResult).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it('emits question.closed and question.result when a question is closed', async () => {
+    const res = createResponseMock();
+    repository.getBindingsByGameId.mockResolvedValue(['green', 'white']);
+    repository.computeQuestionResult.mockResolvedValue({
+      gameId: '507f1f77bcf86cd799439016',
+      questionId: '507f1f77bcf86cd799439015',
+      correctSlotLabel: 'B',
+      results: [
+        { pairName: 'green', slotLabel: 'B', isCorrect: true },
+        { pairName: 'white', slotLabel: null, isCorrect: false },
+      ],
+    });
+
+    await controller.setQuestionState(
+      '507f1f77bcf86cd799439015',
+      {
+        gameId: '507f1f77bcf86cd799439016',
+        state: 'closed',
+      },
+      res as unknown as Response,
+    );
+
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'question.closed' }),
+    );
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'question.result',
+        correctSlotLabel: 'B',
+      }),
+    );
+    expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+      ['green', 'white'],
+      expect.objectContaining({ type: 'question.result' }),
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 
   it('maps repository submitGuess errors to 400', async () => {
@@ -134,6 +186,7 @@ describe('GameFlowController', () => {
       guessId: '507f1f77bcf86cd799439020',
       answerOptionId: '507f1f77bcf86cd799439021',
       slotLabel: 'A',
+      isCorrect: true,
     });
 
     await controller.submitGuess(
@@ -149,7 +202,11 @@ describe('GameFlowController', () => {
     expect(repository.submitGuess).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
     expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'nfc.tagged', pairName: 'white' }),
+      expect.objectContaining({
+        type: 'nfc.tagged',
+        pairName: 'white',
+        isCorrect: true,
+      }),
     );
   });
 
@@ -168,7 +225,7 @@ describe('GameFlowController', () => {
 
       await controller.setGameState(
         '507f1f77bcf86cd799439011',
-        { state: 'draft' },
+        { state: 'bogus' },
         res as unknown as Response,
       );
 
@@ -215,6 +272,50 @@ describe('GameFlowController', () => {
       expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
         ['white'],
         expect.objectContaining({ type: 'game.started' }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('emits enriched per-pair game.ended when game completes', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'completed',
+      });
+      repository.getBindingsByGameId.mockResolvedValue(['green', 'white']);
+      repository.getGameScores.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        scores: [
+          { pairName: 'green', correct: 3, total: 4 },
+          { pairName: 'white', correct: 1, total: 4 },
+        ],
+      });
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'completed' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['green'],
+        expect.objectContaining({
+          type: 'game.ended',
+          pairName: 'green',
+          isWinner: true,
+          rank: 1,
+          score: 3,
+        }),
+      );
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white'],
+        expect.objectContaining({
+          type: 'game.ended',
+          pairName: 'white',
+          isWinner: false,
+          rank: 2,
+          score: 1,
+        }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
     });

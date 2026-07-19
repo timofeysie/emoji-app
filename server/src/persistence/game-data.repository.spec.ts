@@ -24,6 +24,7 @@ describe('GameDataRepository', () => {
   const models = {
     Game: {
       create: jest.fn(),
+      findById: jest.fn(),
       db: {
         startSession: jest.fn().mockResolvedValue(session),
       },
@@ -34,13 +35,19 @@ describe('GameDataRepository', () => {
     Question: {
       create: jest.fn(),
       findOne: jest.fn(),
+      countDocuments: jest.fn(),
     },
     AnswerOption: {
       insertMany: jest.fn(),
       findOne: jest.fn(),
+      find: jest.fn(),
     },
     Guess: {
       create: jest.fn(),
+      find: jest.fn(),
+    },
+    PairBinding: {
+      find: jest.fn(),
     },
     GameNfcCardGroupAssignment: {
       findOne: jest.fn(),
@@ -89,7 +96,11 @@ describe('GameDataRepository', () => {
       createLeanQuery({ _id: 'c1', slotLabel: 'A', status: 'active' }),
     );
     models.AnswerOption.findOne.mockReturnValue(
-      createLeanQuery({ _id: { toString: () => '507f1f77bcf86cd799439022' }, slotLabel: 'A' }),
+      createLeanQuery({
+        _id: { toString: () => '507f1f77bcf86cd799439022' },
+        slotLabel: 'A',
+        isCorrect: true,
+      }),
     );
     models.Guess.create.mockResolvedValue([
       { _id: { toString: () => '507f1f77bcf86cd799439023' } },
@@ -106,6 +117,7 @@ describe('GameDataRepository', () => {
       guessId: '507f1f77bcf86cd799439023',
       answerOptionId: '507f1f77bcf86cd799439022',
       slotLabel: 'A',
+      isCorrect: true,
     });
     expect((session.commitTransaction as jest.Mock)).toHaveBeenCalled();
   });
@@ -127,7 +139,7 @@ describe('GameDataRepository', () => {
     expect((session.abortTransaction as jest.Mock)).toHaveBeenCalled();
   });
 
-  it('throws when active NFC card group assignment is missing', async () => {
+  it('throws when active NFC card group assignment is missing and no slotLabel', async () => {
     models.Question.findOne.mockReturnValue(
       createLeanQuery({ _id: 'q1', state: 'open', gameId: 'g1' }),
     );
@@ -140,6 +152,81 @@ describe('GameDataRepository', () => {
         guesserUserId: '507f1f77bcf86cd799439026',
         cardUid: 'CARD-UID-A-001',
       }),
-    ).rejects.toThrow('No active NFC card group is assigned to this game.');
+    ).rejects.toThrow(
+      'No active NFC card group is assigned to this game and no slotLabel was provided.',
+    );
+  });
+
+  it('computes question results for every bound pair', async () => {
+    models.AnswerOption.findOne.mockReturnValue(
+      createLeanQuery({ slotLabel: 'B', isCorrect: true }),
+    );
+    models.Guess.find.mockReturnValue(
+      createLeanQuery([
+        { pairName: 'green', slotLabel: 'B' },
+        { pairName: 'white', slotLabel: 'A' },
+      ]),
+    );
+    models.PairBinding.find.mockReturnValue(
+      createLeanQuery([{ pairName: 'green' }, { pairName: 'white' }, { pairName: 'red' }]),
+    );
+
+    const result = await repository.computeQuestionResult(
+      '507f1f77bcf86cd799439024',
+      '507f1f77bcf86cd799439025',
+    );
+
+    expect(result).toEqual({
+      gameId: '507f1f77bcf86cd799439024',
+      questionId: '507f1f77bcf86cd799439025',
+      correctSlotLabel: 'B',
+      results: [
+        { pairName: 'green', slotLabel: 'B', isCorrect: true },
+        { pairName: 'white', slotLabel: 'A', isCorrect: false },
+        { pairName: 'red', slotLabel: null, isCorrect: false },
+      ],
+    });
+  });
+
+  it('returns game scores scoped to startedAt', async () => {
+    const startedAt = new Date('2026-07-19T00:00:00.000Z');
+    models.Game.findById.mockReturnValue(createLeanQuery({ startedAt }));
+    models.Question.countDocuments.mockResolvedValue(4);
+    models.Guess.find.mockReturnValue(
+      createLeanQuery([
+        {
+          pairName: 'green',
+          answerOptionId: { toString: () => '507f1f77bcf86cd799439030' },
+        },
+        {
+          pairName: 'white',
+          answerOptionId: { toString: () => '507f1f77bcf86cd799439031' },
+        },
+      ]),
+    );
+    models.AnswerOption.find.mockReturnValue(
+      createLeanQuery([
+        { _id: { toString: () => '507f1f77bcf86cd799439030' }, isCorrect: true },
+        { _id: { toString: () => '507f1f77bcf86cd799439031' }, isCorrect: false },
+      ]),
+    );
+    models.PairBinding.find.mockReturnValue(
+      createLeanQuery([{ pairName: 'green' }, { pairName: 'white' }]),
+    );
+
+    const result = await repository.getGameScores('507f1f77bcf86cd799439024');
+
+    expect(models.Guess.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        createdAt: { $gte: startedAt },
+      }),
+    );
+    expect(result).toEqual({
+      gameId: '507f1f77bcf86cd799439024',
+      scores: [
+        { pairName: 'green', correct: 1, total: 4 },
+        { pairName: 'white', correct: 0, total: 4 },
+      ],
+    });
   });
 });
