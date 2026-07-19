@@ -9,8 +9,8 @@
 | 4 | Pico game commands + TAG notify | ✅ done |
 | 5 | Games CRUD + React Games view + GameDetailView | ✅ done |
 | 6 | Referee panel + live game dashboard | ✅ done |
-| 7 | NFC card → answer mapping (demo-ready) | 🔲 **next** |
-| 8 | Scoring + question results + winner/loser announcements | 🔲 **next** |
+| 7 | NFC card → answer mapping (demo-ready) | ✅ done |
+| 8 | Scoring + results + platform icons | 🔲 **next** — see `8-scoring.md` |
 | 9 | NFC card group management UI | 🔲 planned |
 | 10 | Multi-badge (Mode 2) | 🔲 planned |
 
@@ -187,6 +187,14 @@ UI (Step 9).
 
 ## Step 8 — Scoring + question results + winner/loser announcements
 
+Detailed plan: [`8-scoring.md`](./8-scoring.md).
+
+Visuals follow the **Platform icon / display reference** in
+`rainbow-connection/python/emoji-os/project/multiplayer-mode.md` (blue
+circle / red X, fireworks / rain, Lucide icons on all three platforms).
+That table supersedes the older YES/WIN scroll sketches below where they
+disagree.
+
 ### Overview
 
 After each question closes and at game end, the system must:
@@ -197,6 +205,8 @@ After each question closes and at game end, the system must:
 3. **Update badge displays**: the winning Pico shows a celebration animation;
    losing or non-answering Picos show a consolation animation.
 4. **Show a leaderboard** in the React app throughout the game.
+5. **Align icons** on Pico, Zero, and React for every game state in the
+   Platform icon table (including lobby / joined / immediate correct-wrong).
 
 ### 8a — Server: compute and broadcast question results
 

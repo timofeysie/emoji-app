@@ -12,6 +12,8 @@
 | 4 | Pico game commands + TAG notify | ✅ done | `4-pico.md` |
 | 5 | Games CRUD + server read endpoints + React Games view | ✅ done | `5-dashboard.md` |
 | 6 | Referee panel + live game dashboard (enhanced BadgesView) | ✅ done | `6-referee.md` |
+| 7 | NFC card → answer mapping (demo-ready) | ✅ done | `next-steps.md` |
+| 8 | Scoring, results, and platform icons | 🔲 next | `8-scoring.md` |
 
 ## Overview
 
@@ -782,8 +784,10 @@ Server time is canonical (consistent with the badge timestamp policy in
 - **`pairName` uniqueness**: pair names (e.g. `green`) must be unique across
   active stations. Is a flat global namespace fine for the demo, or do we
   eventually scope names per game/venue?
-- **Pico display semantics**: exact LCD behavior for `game started`,
-  `question open`, and `game ended` — needs a quick visual spec.
+- **Pico / Zero / React display semantics**: resolved for Step 8 by the
+  Platform icon / display reference in
+  `rainbow-connection/python/emoji-os/project/multiplayer-mode.md`;
+  implementation plan in `8-scoring.md`.
 - **Multi-badge (Topology A) activation**: when the Zero connects to N Picos
   simultaneously, does it run the same pair handshake N times in parallel, or
   serially? How does the dashboard show N badge cards under one `pairName`?

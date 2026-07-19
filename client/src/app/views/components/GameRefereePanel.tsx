@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Loader2, Plus } from 'lucide-react';
+import { CheckCircle2, CreditCard, Loader2, Plus } from 'lucide-react';
 import { Button } from '../../shared/button';
 import { Input } from '../../shared/input';
 import { cn } from '../../shared/utils';
@@ -78,6 +78,70 @@ export function GameRefereePanel({
       }
     })();
   }, []);
+
+  // NFC card group assignment
+  type CardGroupInfo = { groupId: string; name: string; cardCount: number } | null;
+  const [cardGroup, setCardGroup] = useState<CardGroupInfo>(undefined as unknown as CardGroupInfo);
+  const [cardGroupLoading, setCardGroupLoading] = useState(true);
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+
+  const loadCardGroup = async () => {
+    try {
+      const res = await fetch(`/api/games/${game.id}/nfc-card-group`, { credentials: 'same-origin' });
+      if (!res.ok) return;
+      const data = (await res.json()) as { group: CardGroupInfo };
+      setCardGroup(data.group);
+    } catch {
+      // non-critical
+    } finally {
+      setCardGroupLoading(false);
+    }
+  };
+
+  useEffect(() => { void loadCardGroup(); }, [game.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const assignDemoGroup = async () => {
+    setAssignLoading(true);
+    setAssignError(null);
+    try {
+      const createRes = await fetch('/api/games/nfc-card-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Demo Set',
+          cards: [
+            { cardUid: '5B:6F:B8:08', slotLabel: 'A', displayName: 'R12 - Monkey' },
+            { cardUid: 'DB:93:B7:08', slotLabel: 'B', displayName: 'W3 - Clown' },
+          ],
+        }),
+        credentials: 'same-origin',
+      });
+      if (!createRes.ok) {
+        const body = (await createRes.json()) as { error?: string };
+        setAssignError(body.error ?? `Server error ${createRes.status}`);
+        return;
+      }
+      const { groupId } = (await createRes.json()) as { groupId: string };
+
+      const attachRes = await fetch(`/api/games/${game.id}/nfc-card-groups/${groupId}/attach`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+        credentials: 'same-origin',
+      });
+      if (!attachRes.ok) {
+        const body = (await attachRes.json()) as { error?: string };
+        setAssignError(body.error ?? `Server error ${attachRes.status}`);
+        return;
+      }
+      await loadCardGroup();
+    } catch {
+      setAssignError('Network error — could not assign card group.');
+    } finally {
+      setAssignLoading(false);
+    }
+  };
 
   const bindPair = async (name?: string) => {
     const target = (name ?? pairName).trim();
@@ -216,6 +280,43 @@ export function GameRefereePanel({
         {bindError && (
           <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
             {bindError}
+          </p>
+        )}
+      </div>
+
+      {/* NFC card group */}
+      <div className="flex flex-col gap-2">
+        <p className="text-xs font-medium text-foreground">NFC card group</p>
+        {cardGroupLoading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden />
+        ) : cardGroup ? (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <CreditCard className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>
+              <span className="font-medium text-foreground">{cardGroup.name}</span>
+              {' '}({cardGroup.cardCount} card{cardGroup.cardCount !== 1 ? 's' : ''})
+            </span>
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">No group assigned.</p>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void assignDemoGroup()}
+          disabled={assignLoading}
+          className="h-8 w-fit text-xs"
+        >
+          {assignLoading ? (
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden />
+          ) : (
+            <CreditCard className="mr-1 h-3 w-3" aria-hidden />
+          )}
+          {cardGroup ? 'Reassign demo group' : 'Assign demo group'}
+        </Button>
+        {assignError && (
+          <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+            {assignError}
           </p>
         )}
       </div>

@@ -48,7 +48,7 @@ const createNfcCardGroupSchema = z.object({
 });
 
 const attachNfcCardGroupSchema = z.object({
-  assignedByUserId: objectIdSchema,
+  assignedByUserId: objectIdSchema.optional(),
 });
 
 const createQuestionSchema = z.object({
@@ -85,6 +85,7 @@ const submitGuessSchema = z.object({
   pairName: z.string().min(1).optional(),
   badgeId: objectIdSchema.optional(),
   cardUid: z.string().min(1),
+  slotLabel: slotLabelSchema.optional(),
 });
 
 function getValidationErrors(error: ZodError): Array<{ path: string; message: string }> {
@@ -138,6 +139,24 @@ export class GameFlowController {
       res.status(200).json(game);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch game', message: String(error) });
+    }
+  }
+
+  @Get('games/:gameId/nfc-card-group')
+  async getActiveNfcCardGroup(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+    try {
+      const group = await this.gameDataRepository.getActiveNfcCardGroupForGame(gameId);
+      res.status(200).json({ group });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch NFC card group', message: String(error) });
     }
   }
 

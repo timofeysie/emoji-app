@@ -37,6 +37,7 @@ export type SubmitGuessInput = {
   pairName?: string;
   badgeId?: string;
   cardUid: string;
+  slotLabel?: SlotLabel;
 };
 
 export type BindPairInput = {
@@ -209,7 +210,7 @@ export class GameDataRepository {
   async assignNfcCardGroupToGame(input: {
     gameId: string;
     groupId: string;
-    assignedByUserId: string;
+    assignedByUserId?: string;
   }): Promise<void> {
     const { GameNfcCardGroupAssignment } = this.mongoService.getModels();
     await GameNfcCardGroupAssignment.updateMany(
@@ -219,10 +220,32 @@ export class GameDataRepository {
     await GameNfcCardGroupAssignment.create({
       gameId: asObjectId(input.gameId),
       groupId: asObjectId(input.groupId),
-      assignedByUserId: asObjectId(input.assignedByUserId),
+      assignedByUserId: asObjectId(input.assignedByUserId ?? '000000000000000000000000'),
       status: 'active',
       assignedAt: new Date(),
     });
+  }
+
+  async getActiveNfcCardGroupForGame(
+    gameId: string,
+  ): Promise<{ groupId: string; name: string; cardCount: number } | null> {
+    const { GameNfcCardGroupAssignment, NfcCardGroup, NfcCard } = this.mongoService.getModels();
+
+    const assignment = await GameNfcCardGroupAssignment.findOne({
+      gameId: asObjectId(gameId),
+      status: 'active',
+    }).lean();
+    if (!assignment) return null;
+
+    const group = await NfcCardGroup.findById(assignment.groupId).lean();
+    if (!group) return null;
+
+    const cardCount = await NfcCard.countDocuments({
+      groupId: assignment.groupId,
+      status: 'active',
+    });
+
+    return { groupId: assignment.groupId.toString(), name: group.name, cardCount };
   }
 
   async submitGuess(input: SubmitGuessInput): Promise<{ guessId: string; answerOptionId: string; slotLabel: string }> {
@@ -244,23 +267,35 @@ export class GameDataRepository {
         undefined,
         { session },
       ).lean();
-      if (!assignment) {
-        throw new Error('No active NFC card group is assigned to this game.');
-      }
 
-      const nfcCard = await NfcCard.findOne(
-        { groupId: assignment.groupId, cardUid: input.cardUid, status: 'active' },
-        undefined,
-        { session },
-      ).lean();
-      if (!nfcCard) {
-        throw new Error('Scanned card does not exist in active game card group.');
+      let resolvedSlotLabel: SlotLabel;
+
+      if (assignment) {
+        // MongoDB path — card group assigned; resolve slot via NfcCard document.
+        const nfcCard = await NfcCard.findOne(
+          { groupId: assignment.groupId, cardUid: input.cardUid, status: 'active' },
+          undefined,
+          { session },
+        ).lean();
+        if (!nfcCard) {
+          throw new Error('Scanned card does not exist in active game card group.');
+        }
+        resolvedSlotLabel = nfcCard.slotLabel as SlotLabel;
+      } else if (input.slotLabel) {
+        // Fallback path — no card group assigned; trust the slotLabel supplied
+        // by the Zero (resolved from its local NFC_CARD_MAP). The MongoDB card
+        // group path is bypassed entirely for the demo.
+        resolvedSlotLabel = input.slotLabel;
+      } else {
+        throw new Error(
+          'No active NFC card group is assigned to this game and no slotLabel was provided.',
+        );
       }
 
       const answerOption = await AnswerOption.findOne(
         {
           questionId: asObjectId(input.questionId),
-          slotLabel: nfcCard.slotLabel,
+          slotLabel: resolvedSlotLabel,
         },
         undefined,
         { session },
@@ -279,7 +314,7 @@ export class GameDataRepository {
             ...(input.pairName ? { pairName: input.pairName } : {}),
             ...(input.badgeId ? { badgeId: asObjectId(input.badgeId) } : {}),
             cardUid: input.cardUid,
-            slotLabel: nfcCard.slotLabel,
+            slotLabel: resolvedSlotLabel,
           },
         ],
         { session },
@@ -288,7 +323,7 @@ export class GameDataRepository {
       return {
         guessId: guess[0]._id.toString(),
         answerOptionId: answerOption._id.toString(),
-        slotLabel: nfcCard.slotLabel,
+        slotLabel: resolvedSlotLabel,
       };
     });
   }

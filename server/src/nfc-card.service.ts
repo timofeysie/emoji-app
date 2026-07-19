@@ -5,6 +5,7 @@ export const nfcCardSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   display: z.string().min(1),
+  slotLabel: z.enum(['A', 'B', 'C', 'D', 'E']).optional(),
 });
 
 export type NfcCard = z.infer<typeof nfcCardSchema>;
@@ -13,10 +14,12 @@ export type NfcCard = z.infer<typeof nfcCardSchema>;
 // making it dynamically editable (Mongo-backed / admin-authored) is a later
 // step. Mirrors the two entries the Zero previously hardcoded in
 // emoji-os-zero.py (NFC_CARD_MAP). `display` is the icon key the Pico badge
-// understands (currently "circle" or "x").
+// understands (currently "circle" or "x"). `slotLabel` maps the card to an
+// answer slot (A–E) so the Zero can resolve guesses without a MongoDB card
+// group assignment.
 const SEED_NFC_CARDS: NfcCard[] = [
-  { id: '5B:6F:B8:08', name: 'R12 - Monkey', display: 'circle' },
-  { id: 'DB:93:B7:08', name: 'W3 - Clown', display: 'x' },
+  { id: '5B:6F:B8:08', name: 'R12 - Monkey', display: 'circle', slotLabel: 'A' },
+  { id: 'DB:93:B7:08', name: 'W3 - Clown',   display: 'x',      slotLabel: 'B' },
 ];
 
 @Injectable()
