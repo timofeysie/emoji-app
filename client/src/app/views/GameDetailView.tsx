@@ -30,7 +30,7 @@ const DEMO_CREATOR_ID = '000000000000000000000001';
 const SLOT_LABELS = ['A', 'B', 'C', 'D', 'E'] as const;
 type SlotLabel = (typeof SLOT_LABELS)[number];
 type QuestionMode = 'standard' | 'cut-throat' | 'mixed';
-type GameState = 'draft' | 'lobby' | 'active' | 'paused' | 'completed' | 'cancelled';
+type GameState = 'ready' | 'lobby' | 'active' | 'paused' | 'completed' | 'cancelled';
 
 type AnswerOption = {
   id: string;
@@ -67,7 +67,7 @@ type GameDetail = {
 };
 
 const STATE_STYLES: Record<GameState, string> = {
-  draft: 'bg-muted text-muted-foreground',
+  ready: 'bg-muted text-muted-foreground',
   lobby: 'bg-amber-100 text-amber-800',
   active: 'bg-green-100 text-green-800',
   paused: 'bg-blue-100 text-blue-800',

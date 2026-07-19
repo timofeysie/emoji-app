@@ -45,7 +45,8 @@ badgeSchema.index({ externalBadgeId: 1 }, { unique: true });
 const gameSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
-    state: { type: String, required: true, enum: gameStateValues, default: 'draft' },
+    // 'draft' kept in enum for legacy documents; application layer normalizes to 'ready'.
+    state: { type: String, required: true, enum: [...gameStateValues, 'draft'], default: 'ready' },
     createdByUserId: { type: objectId, ref: 'User', required: true, immutable: true },
     startedAt: { type: Date },
     endedAt: { type: Date },

@@ -12,7 +12,7 @@ const playModeSchema = z.enum(['standard', 'cut-throat']);
 const participantRoleSchema = z.enum(['player', 'referee', 'spectator']);
 const questionModeSchema = z.enum(['standard', 'cut-throat', 'mixed']);
 const questionStateSchema = z.enum(['open', 'closed']);
-const gameLifecycleStateSchema = z.enum(['draft', 'lobby', 'active', 'paused', 'completed', 'cancelled']);
+const gameLifecycleStateSchema = z.enum(['ready', 'lobby', 'active', 'paused', 'completed', 'cancelled']);
 
 const createGameSchema = z.object({
   title: z.string().min(1),
@@ -99,6 +99,7 @@ function getValidationErrors(error: ZodError): Array<{ path: string; message: st
 
 /** Maps a new game state to the event name sent to bound controllers. */
 const controllerEventForState: Partial<Record<string, string>> = {
+  ready: 'game.ready',
   lobby: 'game.opened',
   active: 'game.started',
   completed: 'game.ended',

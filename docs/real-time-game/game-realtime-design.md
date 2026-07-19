@@ -309,7 +309,7 @@ transition it and to emit on each transition.
 
 | Step | `game.state` | Controller event | What the player sees |
 | --- | --- | --- | --- |
-| Game chosen (not open) | `draft` | — | nothing |
+| Game chosen (not open) | `ready` | — | standby `G` when in game mode |
 | Referee opens for joining | `lobby` | `game.opened` | "Game available — join?" on Zero |
 | Player joins | `lobby` (unchanged) | — (dashboard gets `controller.joined`) | "Joined, waiting" |
 | Referee starts | `active` | `game.started` | indicator on Zero + Pico shows game |
@@ -463,12 +463,13 @@ flowchart TB
 
 ```mermaid
 stateDiagram-v2
-  [*] --> draft: game chosen
-  draft --> lobby: referee opens (emits game.opened)
+  [*] --> ready: game chosen
+  ready --> lobby: referee opens (emits game.opened)
   lobby --> lobby: player joins (emits controller.joined)
   lobby --> active: referee starts (emits game.started)
   active --> active: question open/close (emits question.*)
   active --> completed: referee ends (emits game.ended)
+  completed --> ready: Play Again (emits game.ready)
   completed --> [*]
 ```
 
@@ -538,7 +539,7 @@ Endpoints:
 
 ### 2. Game lifecycle transitions
 
-`game.state` already exists (`draft | lobby | active | paused | completed |
+`game.state` already exists (`ready | lobby | active | paused | completed |
 cancelled`) with `startedAt` / `endedAt`. Add a repository method and endpoint
 mirroring the existing `setQuestionState` pattern:
 

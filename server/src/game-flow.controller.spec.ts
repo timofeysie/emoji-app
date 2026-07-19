@@ -336,6 +336,30 @@ describe('GameFlowController', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
+    it('emits game.ready to controllers on Play Again', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'ready',
+      });
+      repository.getBindingsByGameId.mockResolvedValue(['green']);
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'ready' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'game.state.changed', state: 'ready' }),
+      );
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['green'],
+        expect.objectContaining({ type: 'game.ready' }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     it('maps repository setGameState errors to 400', async () => {
       const res = createResponseMock();
       repository.setGameState.mockRejectedValue(new Error("Cannot transition game from 'lobby' to 'lobby'."));

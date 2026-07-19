@@ -82,11 +82,12 @@ the current game appear as clickable dashed chips for one-click binding:
 
 | Current state | Buttons shown |
 | --- | --- |
-| `draft` | **Open for Joining** |
+| `ready` | **Open for Joining** |
 | `lobby` | **Start Game** · **Cancel** |
 | `active` | **End Game** · **Pause** |
 | `paused` | **Resume** · **Cancel** |
-| `completed` / `cancelled` | *(none — read-only)* |
+| `completed` | **Play Again** |
+| `cancelled` | **Restart** |
 
 Each button calls `POST /api/games/:gameId/state` with the target state.
 On success, `onRefresh()` re-fetches the full game so the state chip and
@@ -96,13 +97,15 @@ without losing the current view.
 Transition map (mirrors server-side `allowedTransitions`):
 
 ```
-draft      → lobby      (Open for Joining)
+ready      → lobby      (Open for Joining)
 lobby      → active     (Start Game)
 lobby      → cancelled  (Cancel)
 active     → completed  (End Game)
 active     → paused     (Pause)
 paused     → active     (Resume)
 paused     → cancelled  (Cancel)
+completed  → ready      (Play Again)
+cancelled  → ready      (Restart)
 ```
 
 ### 6a-iii — Question open/close toggles (as built)
@@ -318,14 +321,14 @@ and re-enter all the questions.
 
 The goal is to let the referee click **Play Again** (on a `completed` game)
 or **Restart** (on a `cancelled` game) and have the game reset cleanly to
-`draft`, preserving the title and questions, so it can be opened, joined,
+`ready`, preserving the title and questions, so it can be opened, joined,
 and played through again from the beginning.
 
 ### What a restart resets
 
 | Field / collection | Reset to | Reason |
 | --- | --- | --- |
-| `game.state` | `'draft'` | Start the lifecycle over |
+| `game.state` | `'ready'` | Start the lifecycle over |
 | `game.startedAt` | cleared (`$unset`) | Fresh timestamp on next Start |
 | `game.endedAt` | cleared (`$unset`) | Remove the old end marker |
 | `question.state` (all for this game) | `'closed'` | Ensure no question is left open from the previous run |
@@ -348,28 +351,28 @@ If a clean-slate restart is later required, a separate
 
 ```ts
 const allowedTransitions: Partial<Record<GameState, GameState[]>> = {
-  draft:     ['lobby'],
+  ready:     ['lobby'],
   lobby:     ['active', 'cancelled'],
   active:    ['paused', 'completed', 'cancelled'],
   paused:    ['active', 'cancelled'],
-  completed: ['draft'],   // NEW — Play Again
-  cancelled: ['draft'],   // NEW — Restart
+  completed: ['ready'],   // Play Again
+  cancelled: ['ready'],   // Restart
 };
 ```
 
-#### 2. Reset side effects on `draft` entry from a terminal state
+#### 2. Reset side effects on `ready` entry from a terminal state
 
 Add a branch in `setGameState` (or a dedicated `resetGameForReplay`
 repository method called from the controller) that fires when the
-**incoming** state is `draft` **and** the current state is `completed` or
+**incoming** state is `ready` **and** the current state is `completed` or
 `cancelled`:
 
 ```ts
-if (input.state === 'draft' && ['completed', 'cancelled'].includes(game.state)) {
+if (input.state === 'ready' && ['completed', 'cancelled'].includes(game.state)) {
   // Clear timestamps on the game document
   await Game.updateOne(
     { _id: asObjectId(input.gameId) },
-    { $set: { state: 'draft' }, $unset: { startedAt: '', endedAt: '' } },
+    { $set: { state: 'ready' }, $unset: { startedAt: '', endedAt: '' } },
   );
 
   // Reset all questions for this game back to closed
@@ -387,15 +390,16 @@ if (input.state === 'draft' && ['completed', 'cancelled'].includes(game.state)) 
 ```
 
 This replaces the normal timestamp-stamp path (the `timestampFields` map
-does not apply when transitioning to `draft`).
+does not apply when transitioning to `ready`).
 
 #### 3. WS event
 
-No new event type is needed. The existing `game.state.changed` broadcast
-(emitted after every `setGameState` call) carries the new `state: 'draft'`
-to the dashboard. Bound Zero controllers receive `game.opened` when the
-referee subsequently transitions to `lobby`, which is the same flow as a
-first-time game open.
+The existing `game.state.changed` broadcast (emitted after every
+`setGameState` call) carries the new `state: 'ready'` to the dashboard.
+Bound Zero controllers also receive `game.ready`, which clears any
+winner/loser sticky UI (fireworks / rain) and returns both Zero and Pico
+to the standby `G` glyph. Controllers then receive `game.opened` when the
+referee subsequently transitions to `lobby`.
 
 ### React UI changes
 
@@ -406,33 +410,33 @@ Extend the `LIFECYCLE_BUTTONS` map with entries for the two terminal states:
 ```ts
 const LIFECYCLE_BUTTONS: Record<GameState, LifecycleButton[]> = {
   // ... existing entries ...
-  completed: [{ label: 'Play Again', targetState: 'draft' }],
-  cancelled: [{ label: 'Restart',    targetState: 'draft' }],
+  completed: [{ label: 'Play Again', targetState: 'ready' }],
+  cancelled: [{ label: 'Restart',    targetState: 'ready' }],
 };
 ```
 
 No other UI change is required. The existing `transitionState` handler
 already calls `POST /api/games/:id/state` and then `onRefresh()`, which
 re-fetches the full game detail. After the refresh, the state chip shows
-`draft`, the Open/Close question buttons disappear (game no longer `active`),
+`ready`, the Open/Close question buttons disappear (game no longer `active`),
 and the button set resets to **Open for Joining**.
 
 ### Zero / Pico changes
 
-None. After a restart the game lifecycle follows the same path as a new
-game: `draft → lobby` (referee clicks Open for Joining) → Zero receives
-`game.opened` → Zero shows "JOIN? KEY1" → player joins → referee starts →
-etc. The `controller.welcome` snapshot on any WS reconnect reflects the
-reset `draft` state automatically.
+On `game.ready`, the Zero clears `_game_end_outcome`, stops any outcome
+animation, redraws the standby `G` glyph, and BLE-writes `GAME:mode` to the
+Pico. After that the lifecycle follows the same path as a new game:
+`ready → lobby` (Open for Joining) → `game.opened` → "JOIN? KEY1" → …
 
 ### Acceptance criteria — 6d
 
 - [x] **Play Again** button appears in `GameRefereePanel` when
       `game.state === 'completed'`; **Restart** appears when `cancelled`.
-- [x] Clicking either button calls `POST /api/games/:id/state { state: 'draft' }`.
-- [x] After the call: `game.state` is `'draft'`; `startedAt` and `endedAt`
+- [x] Clicking either button calls `POST /api/games/:id/state { state: 'ready' }`.
+- [x] After the call: `game.state` is `'ready'`; `startedAt` and `endedAt`
       are cleared; all questions are `'closed'`; all bound pairs have
       `joined: false`.
+- [x] Controllers receive `game.ready` and show standby `G` (not fireworks).
 - [x] The state chip and lifecycle button set in `GameDetailView` update
       immediately (on `onRefresh()`).
 - [x] The question Open/Close buttons no longer appear (game is not `active`).
@@ -440,7 +444,7 @@ reset `draft` state automatically.
 - [x] Guesses from the previous run are retained in the database.
 - [x] Bound pairs are retained — referee does not need to re-bind controllers.
 - [x] The game can then be opened, joined, and played through again from
-      the `draft` state, exactly as a first run.
+      the `ready` state, exactly as a first run.
 
 ---
 

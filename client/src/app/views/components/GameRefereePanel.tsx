@@ -5,7 +5,7 @@ import { Input } from '../../shared/input';
 import { cn } from '../../shared/utils';
 import { logFromServerGameState, logGameState } from '../../shared/game-state-log';
 
-type GameState = 'draft' | 'lobby' | 'active' | 'paused' | 'completed' | 'cancelled';
+type GameState = 'ready' | 'lobby' | 'active' | 'paused' | 'completed' | 'cancelled';
 
 type BoundPair = {
   pairName: string;
@@ -27,7 +27,7 @@ type LifecycleButton = {
 };
 
 const LIFECYCLE_BUTTONS: Record<GameState, LifecycleButton[]> = {
-  draft: [{ label: 'Open for Joining', targetState: 'lobby' }],
+  ready: [{ label: 'Open for Joining', targetState: 'lobby' }],
   lobby: [
     { label: 'Start Game', targetState: 'active' },
     { label: 'Cancel', targetState: 'cancelled', variant: 'outline' },
@@ -40,8 +40,8 @@ const LIFECYCLE_BUTTONS: Record<GameState, LifecycleButton[]> = {
     { label: 'Resume', targetState: 'active' },
     { label: 'Cancel', targetState: 'cancelled', variant: 'outline' },
   ],
-  completed: [{ label: 'Play Again', targetState: 'draft' }],
-  cancelled: [{ label: 'Restart',    targetState: 'draft' }],
+  completed: [{ label: 'Play Again', targetState: 'ready' }],
+  cancelled: [{ label: 'Restart',    targetState: 'ready' }],
 };
 
 export function GameRefereePanel({
@@ -328,7 +328,7 @@ export function GameRefereePanel({
               game.state === 'active' && 'bg-green-500',
               game.state === 'lobby' && 'bg-amber-400',
               game.state === 'paused' && 'bg-blue-400',
-              game.state === 'draft' && 'bg-muted-foreground/40',
+              game.state === 'ready' && 'bg-muted-foreground/40',
               (game.state === 'completed' || game.state === 'cancelled') && 'bg-slate-400',
             )}
             aria-hidden

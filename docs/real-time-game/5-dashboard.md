@@ -53,7 +53,7 @@ Returns a list of all games, newest first.
   games: Array<{
     id: string;
     title: string;
-    state: 'draft' | 'lobby' | 'active' | 'paused' | 'completed' | 'cancelled';
+    state: 'ready' | 'lobby' | 'active' | 'paused' | 'completed' | 'cancelled';
     createdByUserId: string;
     createdAt: string;          // ISO
     startedAt?: string | null;
@@ -127,12 +127,12 @@ Badges, Lights, Scenes.
 │ Games                              [+ New Game]     │
 ├────────────────────────────────────────────────────┤
 │ ○ My Quiz Night     lobby    2 questions   [Open →] │
-│ ○ Round 2 Draft     draft    4 questions   [Open →] │
+│ ○ Round 2 Ready     ready    4 questions   [Open →] │
 │ ● Completed Game    completed 3 questions  [Open →] │
 └────────────────────────────────────────────────────┘
 ```
 
-- State chip: colour-coded pill (`draft` = grey, `lobby` = amber, `active` = green,
+- State chip: colour-coded pill (`ready` = grey, `lobby` = amber, `active` = green,
   `completed` = muted).
 - **[+ New Game]** opens a dialog with `title` and `createdByUserId` fields (userId
   is pre-filled from the profile store or entered as a string for the demo).

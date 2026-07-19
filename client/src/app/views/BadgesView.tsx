@@ -873,7 +873,13 @@ export const BadgesView = () => {
             gameState: message.state,
             serverTime: message.serverTime,
           });
-          if (message.state === 'lobby') {
+          if (message.state === 'ready') {
+            setQuestionPhase('none');
+            setResultsByPair({});
+            setNfcByPair({});
+            setWinnerPairNames(null);
+            setJoinsByPair({});
+          } else if (message.state === 'lobby') {
             setQuestionPhase('none');
             setResultsByPair({});
             setNfcByPair({});

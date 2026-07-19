@@ -69,7 +69,7 @@ _WS_URL = ""          # derived from SERVER_URL at startup
 
 # Current game snapshot (updated from controller.welcome and game events).
 _ws_game_id       = None   # str | None
-_ws_game_state    = None   # "draft"|"lobby"|"active"|"completed"|None
+_ws_game_state    = None   # "ready"|"lobby"|"active"|"completed"|None
 _ws_question_id   = None   # str | None (currently open question)
 _ws_joined        = False  # True once join POST has been sent this session
 
@@ -406,7 +406,7 @@ While `game_mode_active` is True, `get_main_emoji()` returns `game_mode_matrix`
 | `active`, no open question | 'G' glyph | `GAME ON` | green |
 | `active`, question open | 'G' glyph | `SCAN NOW` | amber |
 | `completed` | 'G' glyph | `GAME OVER` | red |
-| `None` / `draft` | 'G' glyph | *(empty)* | — |
+| `None` / `ready` | 'G' glyph | *(empty)* | — |
 
 Add to `draw_display()`, inside the existing
 `if nfc_mode_active and nfc_last_card_name:` block, a parallel block:

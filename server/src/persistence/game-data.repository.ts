@@ -4,6 +4,14 @@ import { MongoService } from './mongo.service';
 import { GameState, PlayMode, QuestionMode, SlotLabel } from './domain-types';
 import { asObjectId } from './models';
 
+/** Normalize legacy `draft` game documents to `ready`. Question state is unchanged. */
+function normalizeGameState(state: string): GameState {
+  if (state === 'draft') {
+    return 'ready';
+  }
+  return state as GameState;
+}
+
 export type CreateGameInput = {
   title: string;
   createdByUserId: string;
@@ -130,7 +138,7 @@ export class GameDataRepository {
     const created = await Game.create({
       title: input.title,
       createdByUserId: asObjectId(input.createdByUserId),
-      state: 'draft',
+      state: 'ready',
     });
     return created._id.toString();
   }
@@ -446,25 +454,26 @@ export class GameDataRepository {
     }
 
     const allowedTransitions: Partial<Record<GameState, GameState[]>> = {
-      draft:     ['lobby'],
+      ready:     ['lobby'],
       lobby:     ['active', 'cancelled'],
       active:    ['paused', 'completed', 'cancelled'],
       paused:    ['active', 'cancelled'],
-      completed: ['draft'],
-      cancelled: ['draft'],
+      completed: ['ready'],
+      cancelled: ['ready'],
     };
 
-    const allowed = allowedTransitions[game.state as GameState] ?? [];
+    const currentState = normalizeGameState(String(game.state));
+    const allowed = allowedTransitions[currentState] ?? [];
     if (!allowed.includes(input.state)) {
-      throw new Error(`Cannot transition game from '${game.state}' to '${input.state}'.`);
+      throw new Error(`Cannot transition game from '${currentState}' to '${input.state}'.`);
     }
 
-    if (input.state === 'draft' && (game.state === 'completed' || game.state === 'cancelled')) {
+    if (input.state === 'ready' && (currentState === 'completed' || currentState === 'cancelled')) {
       const { Question, PairBinding } = this.mongoService.getModels();
 
       await Game.updateOne(
         { _id: asObjectId(input.gameId) },
-        { $set: { state: 'draft' }, $unset: { startedAt: '', endedAt: '' } },
+        { $set: { state: 'ready' }, $unset: { startedAt: '', endedAt: '' } },
       );
 
       await Question.updateMany(
@@ -526,7 +535,7 @@ export class GameDataRepository {
     if (gameId) {
       const game = await Game.findById(binding.gameId).lean();
       if (game) {
-        state = game.state as GameState;
+        state = normalizeGameState(String(game.state));
         const openQuestion = await Question.findOne({ gameId: binding.gameId, state: 'open' }).lean();
         openQuestionId = openQuestion ? (openQuestion._id as Types.ObjectId).toString() : null;
       }
@@ -683,7 +692,7 @@ export class GameDataRepository {
     return games.map((g) => ({
       id: (g._id as Types.ObjectId).toString(),
       title: g.title,
-      state: g.state as GameState,
+      state: normalizeGameState(String(g.state)),
       createdAt: (g as unknown as { createdAt: Date }).createdAt.toISOString(),
       startedAt: g.startedAt ? g.startedAt.toISOString() : null,
       endedAt: g.endedAt ? g.endedAt.toISOString() : null,
@@ -717,7 +726,7 @@ export class GameDataRepository {
     return {
       id: (game._id as Types.ObjectId).toString(),
       title: game.title,
-      state: game.state as GameState,
+      state: normalizeGameState(String(game.state)),
       createdAt: (game as unknown as { createdAt: Date }).createdAt.toISOString(),
       startedAt: game.startedAt ? game.startedAt.toISOString() : null,
       endedAt: game.endedAt ? game.endedAt.toISOString() : null,
