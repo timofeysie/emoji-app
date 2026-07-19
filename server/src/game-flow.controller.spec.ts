@@ -2,6 +2,7 @@ import type { Response } from 'express';
 import { GameFlowController } from './game-flow.controller';
 import { GameDataRepository } from './persistence/game-data.repository';
 import { BadgeStateService } from './badge-state.service';
+import { NfcCardService } from './nfc-card.service';
 
 type ResponseMock = Pick<Response, 'status' | 'json'> & {
   status: jest.Mock;
@@ -25,7 +26,10 @@ describe('GameFlowController', () => {
     setQuestionState: jest.fn(),
     setGameState: jest.fn(),
     createNfcCardGroup: jest.fn(),
+    ensureNfcCardGroup: jest.fn(),
     assignNfcCardGroupToGame: jest.fn(),
+    getActiveNfcCardGroupForGame: jest.fn(),
+    openNextQuestionForGame: jest.fn(),
     submitGuess: jest.fn(),
     bindPair: jest.fn(),
     getBinding: jest.fn(),
@@ -40,9 +44,12 @@ describe('GameFlowController', () => {
     sendToPairNames: jest.fn(),
   };
 
+  const nfcCardService = new NfcCardService();
+
   const controller = new GameFlowController(
     repository,
     badgeStateService as unknown as BadgeStateService,
+    nfcCardService,
   );
 
   beforeEach(() => {
@@ -262,6 +269,7 @@ describe('GameFlowController', () => {
       const res = createResponseMock();
       repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'active' });
       repository.getBindingsByGameId.mockResolvedValue(['white']);
+      repository.openNextQuestionForGame.mockResolvedValue('507f1f77bcf86cd799439015');
 
       await controller.setGameState(
         '507f1f77bcf86cd799439011',
@@ -272,6 +280,14 @@ describe('GameFlowController', () => {
       expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
         ['white'],
         expect.objectContaining({ type: 'game.started' }),
+      );
+      expect(repository.openNextQuestionForGame).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white'],
+        expect.objectContaining({
+          type: 'question.opened',
+          questionId: '507f1f77bcf86cd799439015',
+        }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
     });

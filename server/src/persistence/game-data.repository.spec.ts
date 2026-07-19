@@ -139,22 +139,25 @@ describe('GameDataRepository', () => {
     expect((session.abortTransaction as jest.Mock)).toHaveBeenCalled();
   });
 
-  it('throws when active NFC card group assignment is missing and no slotLabel', async () => {
+  it('returns isCorrect false when no card group and no slotLabel (unknown card)', async () => {
     models.Question.findOne.mockReturnValue(
       createLeanQuery({ _id: 'q1', state: 'open', gameId: 'g1' }),
     );
     models.GameNfcCardGroupAssignment.findOne.mockReturnValue(createLeanQuery(null));
 
-    await expect(
-      repository.submitGuess({
-        gameId: '507f1f77bcf86cd799439024',
-        questionId: '507f1f77bcf86cd799439025',
-        guesserUserId: '507f1f77bcf86cd799439026',
-        cardUid: 'CARD-UID-A-001',
-      }),
-    ).rejects.toThrow(
-      'No active NFC card group is assigned to this game and no slotLabel was provided.',
-    );
+    const result = await repository.submitGuess({
+      gameId: '507f1f77bcf86cd799439024',
+      questionId: '507f1f77bcf86cd799439025',
+      guesserUserId: '507f1f77bcf86cd799439026',
+      cardUid: 'CARD-UID-A-001',
+    });
+
+    expect(result).toEqual({
+      guessId: '',
+      answerOptionId: '',
+      slotLabel: '?',
+      isCorrect: false,
+    });
   });
 
   it('computes question results for every bound pair', async () => {

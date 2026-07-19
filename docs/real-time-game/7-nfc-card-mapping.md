@@ -229,11 +229,10 @@ and the Game state section:
 - Fetches `GET /api/games/:id/nfc-card-group` on mount and after any
   assignment action.
 - **Assign demo group** / **Reassign demo group** button:
-  1. `POST /api/games/nfc-card-groups` with the two seed cards → receives
-     `{ groupId }`.
-  2. `POST /api/games/:id/nfc-card-groups/:groupId/attach` with `{}` (no
-     `assignedByUserId` required).
-  3. Re-fetches the assignment and updates the display.
+  1. `POST /api/games/:id/nfc-card-groups/demo` — ensures the hardcoded
+     Demo Set seed (`NfcCardService`) exists (idempotent; does not 500 when
+     card UIDs already exist) and attaches it to the game.
+  2. Response includes `{ group }` so the panel updates immediately.
 - Inline `Loader2` spinner while in-flight; inline error on failure.
 - Uses `CreditCard` Lucide icon.
 

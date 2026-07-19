@@ -192,6 +192,32 @@ export class GameDataRepository {
     );
   }
 
+  /**
+   * Open the next closed question (lowest sequence) if none is already open.
+   * Used when the referee starts the game so badges get GAME:question_open /
+   * NFC scan without a separate Open click.
+   */
+  async openNextQuestionForGame(gameId: string): Promise<string | null> {
+    const { Question } = this.mongoService.getModels();
+    const gid = asObjectId(gameId);
+
+    const alreadyOpen = await Question.findOne({ gameId: gid, state: 'open' }).lean();
+    if (alreadyOpen) {
+      return null;
+    }
+
+    const next = await Question.findOne({ gameId: gid, state: 'closed' })
+      .sort({ sequence: 1 })
+      .lean();
+    if (!next) {
+      return null;
+    }
+
+    const questionId = (next._id as Types.ObjectId).toString();
+    await this.setQuestionState({ gameId, questionId, state: 'open' });
+    return questionId;
+  }
+
   async createNfcCardGroup(input: CreateNfcCardGroupInput): Promise<string> {
     const { NfcCardGroup, NfcCard } = this.mongoService.getModels();
     return this.withOptionalTransaction(async (session) => {
@@ -217,6 +243,51 @@ export class GameDataRepository {
       );
       return group[0]._id.toString();
     });
+  }
+
+  /**
+   * Idempotent demo/seed group helper. Re-assigning the same card UIDs must not
+   * 500 on the unique `cardUid` index — return the existing group instead.
+   */
+  async ensureNfcCardGroup(input: CreateNfcCardGroupInput): Promise<string> {
+    const { NfcCardGroup, NfcCard } = this.mongoService.getModels();
+    const uids = input.cards.map((card) => card.cardUid);
+
+    const existingCard = await NfcCard.findOne({ cardUid: { $in: uids } }).lean();
+    if (existingCard?.groupId) {
+      return existingCard.groupId.toString();
+    }
+
+    const existingGroup = await NfcCardGroup.findOne({
+      name: input.name,
+      status: 'active',
+    }).lean();
+    if (existingGroup) {
+      const cardCount = await NfcCard.countDocuments({ groupId: existingGroup._id });
+      if (cardCount === 0) {
+        await NfcCard.insertMany(
+          input.cards.map((card) => ({
+            groupId: existingGroup._id,
+            cardUid: card.cardUid,
+            slotLabel: card.slotLabel,
+            displayName: card.displayName,
+            status: 'active',
+          })),
+        );
+      }
+      return existingGroup._id.toString();
+    }
+
+    try {
+      return await this.createNfcCardGroup(input);
+    } catch (error) {
+      // Race / leftover unique index: resolve via card UID again.
+      const raced = await NfcCard.findOne({ cardUid: { $in: uids } }).lean();
+      if (raced?.groupId) {
+        return raced.groupId.toString();
+      }
+      throw error;
+    }
   }
 
   async assignNfcCardGroupToGame(input: {
@@ -292,18 +363,37 @@ export class GameDataRepository {
           { session },
         ).lean();
         if (!nfcCard) {
-          throw new Error('Scanned card does not exist in active game card group.');
+          // Unknown card in an assigned group → wrong (red X), not a hard error.
+          const wrongOption = await AnswerOption.findOne(
+            { questionId: asObjectId(input.questionId), isCorrect: false },
+            undefined,
+            { session },
+          ).lean();
+          if (!wrongOption) {
+            return {
+              guessId: '',
+              answerOptionId: '',
+              slotLabel: input.slotLabel ?? '?',
+              isCorrect: false,
+            };
+          }
+          resolvedSlotLabel = wrongOption.slotLabel as SlotLabel;
+        } else {
+          resolvedSlotLabel = nfcCard.slotLabel as SlotLabel;
         }
-        resolvedSlotLabel = nfcCard.slotLabel as SlotLabel;
       } else if (input.slotLabel) {
         // Fallback path — no card group assigned; trust the slotLabel supplied
-        // by the Zero (resolved from its local NFC_CARD_MAP). The MongoDB card
-        // group path is bypassed entirely for the demo.
+        // by the Zero (resolved from its local NFC_CARD_MAP). Demo seed:
+        // R12 Monkey 5B:6F:B8:08 → A, W3 Clown DB:93:B7:08 → B.
         resolvedSlotLabel = input.slotLabel;
       } else {
-        throw new Error(
-          'No active NFC card group is assigned to this game and no slotLabel was provided.',
-        );
+        // No map and no group — still return wrong so the badge can show red X.
+        return {
+          guessId: '',
+          answerOptionId: '',
+          slotLabel: '?',
+          isCorrect: false,
+        };
       }
 
       const answerOption = await AnswerOption.findOne(
@@ -315,7 +405,12 @@ export class GameDataRepository {
         { session },
       ).lean();
       if (!answerOption) {
-        throw new Error('No answer option is mapped to scanned slot label for this question.');
+        return {
+          guessId: '',
+          answerOptionId: '',
+          slotLabel: resolvedSlotLabel,
+          isCorrect: false,
+        };
       }
 
       const guess = await Guess.create(

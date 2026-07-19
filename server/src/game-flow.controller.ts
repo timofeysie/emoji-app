@@ -3,6 +3,8 @@ import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { GameDataRepository } from './persistence/game-data.repository';
 import { BadgeStateService } from './badge-state.service';
+import { NfcCardService } from './nfc-card.service';
+import type { SlotLabel } from './persistence/domain-types';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 const slotLabelSchema = z.enum(['A', 'B', 'C', 'D', 'E']);
@@ -108,6 +110,7 @@ export class GameFlowController {
   constructor(
     private readonly gameDataRepository: GameDataRepository,
     private readonly badgeStateService: BadgeStateService,
+    private readonly nfcCardService: NfcCardService,
   ) {}
 
   @Get('games')
@@ -284,7 +287,34 @@ export class GameFlowController {
         }
       }
 
-      res.status(200).json({ ok: true, gameId, state });
+      // Start Game → arm NFC: open the next closed question and notify controllers.
+      // Without this, devices stay on green "active" and never poll for cards.
+      let openedQuestionId: string | null = null;
+      if (state === 'active') {
+        openedQuestionId = await this.gameDataRepository.openNextQuestionForGame(gameId);
+        if (openedQuestionId) {
+          const questionEvent = {
+            type: 'question.opened' as const,
+            gameId,
+            questionId: openedQuestionId,
+            serverTime: new Date().toISOString(),
+          };
+          console.log(
+            `[GAME] server | question_open | Question open | auto on Start Game questionId=${openedQuestionId}`,
+          );
+          this.badgeStateService.broadcastDashboard(questionEvent);
+          if (pairNames.length > 0) {
+            this.badgeStateService.sendToPairNames(pairNames, questionEvent);
+          }
+        }
+      }
+
+      res.status(200).json({
+        ok: true,
+        gameId,
+        state,
+        ...(openedQuestionId ? { openedQuestionId } : {}),
+      });
     } catch (error) {
       res.status(400).json({ error: 'Failed to update game state', message: String(error) });
     }
@@ -324,10 +354,56 @@ export class GameFlowController {
     }
 
     try {
-      const groupId = await this.gameDataRepository.createNfcCardGroup(result.data);
+      // Idempotent: re-posting demo seed cards must not 500 on unique cardUid.
+      const groupId = await this.gameDataRepository.ensureNfcCardGroup(result.data);
       res.status(201).json({ groupId });
     } catch (error) {
       res.status(500).json({ error: 'Failed to create NFC card group', message: String(error) });
+    }
+  }
+
+  /**
+   * Ensure the hardcoded Demo Set (from NfcCardService seed) exists and attach
+   * it to the game. Preferred referee path — avoids create-then-attach races.
+   */
+  @Post('games/:gameId/nfc-card-groups/demo')
+  async assignDemoNfcCardGroup(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+
+    const seedCards = this.nfcCardService.getCards();
+    const cards = seedCards
+      .filter((card): card is typeof card & { slotLabel: SlotLabel } => Boolean(card.slotLabel))
+      .map((card) => ({
+        cardUid: card.id,
+        slotLabel: card.slotLabel,
+        displayName: card.name,
+      }));
+    if (cards.length === 0) {
+      res.status(500).json({ error: 'Demo NFC seed has no cards with slotLabel' });
+      return;
+    }
+
+    try {
+      const groupId = await this.gameDataRepository.ensureNfcCardGroup({
+        name: 'Demo Set',
+        description: 'Hardcoded demo NFC cards (seed)',
+        cards,
+      });
+      await this.gameDataRepository.assignNfcCardGroupToGame({ gameId, groupId });
+      const group = await this.gameDataRepository.getActiveNfcCardGroupForGame(gameId);
+      res.status(200).json({ group });
+    } catch (error) {
+      res.status(500).json({
+        error: 'Failed to assign demo NFC card group',
+        message: String(error),
+      });
     }
   }
 

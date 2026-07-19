@@ -106,37 +106,24 @@ export function GameRefereePanel({
     setAssignLoading(true);
     setAssignError(null);
     try {
-      const createRes = await fetch('/api/games/nfc-card-groups', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'Demo Set',
-          cards: [
-            { cardUid: '5B:6F:B8:08', slotLabel: 'A', displayName: 'R12 - Monkey' },
-            { cardUid: 'DB:93:B7:08', slotLabel: 'B', displayName: 'W3 - Clown' },
-          ],
-        }),
-        credentials: 'same-origin',
-      });
-      if (!createRes.ok) {
-        const body = (await createRes.json()) as { error?: string };
-        setAssignError(body.error ?? `Server error ${createRes.status}`);
-        return;
-      }
-      const { groupId } = (await createRes.json()) as { groupId: string };
-
-      const attachRes = await fetch(`/api/games/${game.id}/nfc-card-groups/${groupId}/attach`, {
+      // Single idempotent call: ensures hardcoded Demo Set seed, then attaches.
+      const res = await fetch(`/api/games/${game.id}/nfc-card-groups/demo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
         credentials: 'same-origin',
       });
-      if (!attachRes.ok) {
-        const body = (await attachRes.json()) as { error?: string };
-        setAssignError(body.error ?? `Server error ${attachRes.status}`);
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string; message?: string };
+        setAssignError(body.error ?? body.message ?? `Server error ${res.status}`);
         return;
       }
-      await loadCardGroup();
+      const data = (await res.json()) as { group: CardGroupInfo };
+      if (data.group) {
+        setCardGroup(data.group);
+      } else {
+        await loadCardGroup();
+      }
     } catch {
       setAssignError('Network error — could not assign card group.');
     } finally {
