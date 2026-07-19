@@ -53,6 +53,8 @@ type Question = {
   sequence: number;
   mode: QuestionMode;
   state: string;
+  /** Guesses already recorded for this question (any pair). */
+  guessCount?: number;
   answerOptions: AnswerOption[];
 };
 
@@ -346,6 +348,8 @@ function QuestionCard({
 
   const isActive = gameState === 'active';
   const isOpen = question.state === 'open';
+  const hasAnswers = (question.guessCount ?? 0) > 0;
+  const openLabel = hasAnswers ? 'Reopen' : 'Open';
 
   const handleToggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -378,6 +382,15 @@ function QuestionCard({
             <span className="capitalize">{question.state}</span>
             <span>·</span>
             <span>{question.answerOptions.length} options</span>
+            {hasAnswers && (
+              <>
+                <span>·</span>
+                <span>
+                  {question.guessCount} answer
+                  {(question.guessCount ?? 0) === 1 ? '' : 's'}
+                </span>
+              </>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -387,7 +400,13 @@ function QuestionCard({
               variant={isOpen ? 'default' : 'outline'}
               className="h-7 text-xs"
               disabled={toggling || (!isOpen && hasOpenQuestion)}
-              title={!isOpen && hasOpenQuestion ? 'Another question is already open' : undefined}
+              title={
+                !isOpen && hasOpenQuestion
+                  ? 'Another question is already open'
+                  : !isOpen && hasAnswers
+                    ? 'This question already has answers — reopen to accept more'
+                    : undefined
+              }
               onClick={handleToggle}
             >
               {toggling ? (
@@ -395,7 +414,7 @@ function QuestionCard({
               ) : isOpen ? (
                 'Close'
               ) : (
-                'Open'
+                openLabel
               )}
             </Button>
           )}
@@ -647,7 +666,10 @@ export function GameDetailView() {
         ) {
           void loadScores();
         }
-        if (message.type === 'game.state.changed') {
+        if (
+          message.type === 'game.state.changed' ||
+          message.type === 'controller.joined'
+        ) {
           void loadGame();
         }
       } catch {

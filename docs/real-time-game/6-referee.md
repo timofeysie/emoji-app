@@ -71,8 +71,9 @@ the current game appear as clickable dashed chips for one-click binding:
 
 - Calls `POST /api/games/:gameId/pairs` with `{ pairName }`.
 - On success, calls `onRefresh()` which re-fetches `GET /api/games/:gameId`.
-- Bound pairs list shows each `pairName` with a green "joined" chip or
-  "· not joined" text.
+- Bound pairs list shows each `pairName` with a green "ready to start" chip
+  or "· waiting to join" text. `GameDetailView` refreshes this list on WS
+  `controller.joined`.
 - Inline loading spinner + error message on failure (surfaces server
   `error` and `message` fields).
 
@@ -268,7 +269,8 @@ export function GameRefereePanel({
 
 The panel renders (top to bottom):
 
-1. **Bound pairs list** — each pair with joined/not-joined chip.
+1. **Bound pairs list** — each pair with ready-to-start / waiting-to-join chip
+   (live via `controller.joined` → `loadGame()`).
 2. **Known-pair quick-bind chips** — dashed chips from `GET /api/badges`,
    filtered to exclude already-bound pairs. One click binds.
 3. **Manual bind input + Bind button** — fallback for pairs not yet in

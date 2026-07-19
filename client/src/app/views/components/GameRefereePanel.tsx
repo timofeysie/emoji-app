@@ -266,9 +266,12 @@ export function GameRefereePanel({
                 >
                   {bp.pairName}
                   {bp.joined ? (
-                    <CheckCircle2 className="h-3 w-3" aria-label="Joined" />
+                    <>
+                      <CheckCircle2 className="h-3 w-3" aria-label="Ready to start" />
+                      <span className="text-[10px]">· ready to start</span>
+                    </>
                   ) : (
-                    <span className="text-[10px]">· not joined</span>
+                    <span className="text-[10px]">· waiting to join</span>
                   )}
                 </span>
               </div>

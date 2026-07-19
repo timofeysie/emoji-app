@@ -70,6 +70,8 @@ export type QuestionDetail = {
   sequence: number;
   mode: QuestionMode;
   state: string;
+  /** Number of Guess docs for this question (any pair). */
+  guessCount: number;
   answerOptions: AnswerOptionDetail[];
 };
 
@@ -693,6 +695,20 @@ export class GameDataRepository {
     }));
   }
 
+  private async guessCountsByQuestionIds(
+    questionIds: Types.ObjectId[],
+  ): Promise<Map<string, number>> {
+    if (questionIds.length === 0) {
+      return new Map();
+    }
+    const { Guess } = this.mongoService.getModels();
+    const rows = await Guess.aggregate<{ _id: Types.ObjectId; count: number }>([
+      { $match: { questionId: { $in: questionIds } } },
+      { $group: { _id: '$questionId', count: { $sum: 1 } } },
+    ]);
+    return new Map(rows.map((r) => [r._id.toString(), r.count]));
+  }
+
   async getGameDetail(gameId: string): Promise<GameDetail | null> {
     const { Game, Question, AnswerOption, PairBinding } = this.mongoService.getModels();
     const game = await Game.findById(asObjectId(gameId)).lean();
@@ -703,8 +719,11 @@ export class GameDataRepository {
     const questions = await Question.find({ gameId: asObjectId(gameId) })
       .sort({ sequence: 1 })
       .lean();
-    const questionIds = questions.map((q) => q._id);
-    const allOptions = await AnswerOption.find({ questionId: { $in: questionIds } }).lean();
+    const questionIds = questions.map((q) => q._id as Types.ObjectId);
+    const [allOptions, guessCounts] = await Promise.all([
+      AnswerOption.find({ questionId: { $in: questionIds } }).lean(),
+      this.guessCountsByQuestionIds(questionIds),
+    ]);
 
     const optsByQuestion = new Map<string, typeof allOptions>();
     for (const opt of allOptions) {
@@ -724,15 +743,17 @@ export class GameDataRepository {
       startedAt: game.startedAt ? game.startedAt.toISOString() : null,
       endedAt: game.endedAt ? game.endedAt.toISOString() : null,
       questions: questions.map((q) => {
-        const opts = (optsByQuestion.get((q._id as Types.ObjectId).toString()) ?? [])
+        const qid = (q._id as Types.ObjectId).toString();
+        const opts = (optsByQuestion.get(qid) ?? [])
           .slice()
           .sort((a, b) => a.sequence - b.sequence);
         return {
-          id: (q._id as Types.ObjectId).toString(),
+          id: qid,
           text: q.text,
           sequence: q.sequence,
           mode: q.mode as QuestionMode,
           state: q.state,
+          guessCount: guessCounts.get(qid) ?? 0,
           answerOptions: opts.map((o) => ({
             id: (o._id as Types.ObjectId).toString(),
             slotLabel: o.slotLabel as SlotLabel,
@@ -755,8 +776,11 @@ export class GameDataRepository {
     const questions = await Question.find({ gameId: asObjectId(gameId) })
       .sort({ sequence: 1 })
       .lean();
-    const questionIds = questions.map((q) => q._id);
-    const allOptions = await AnswerOption.find({ questionId: { $in: questionIds } }).lean();
+    const questionIds = questions.map((q) => q._id as Types.ObjectId);
+    const [allOptions, guessCounts] = await Promise.all([
+      AnswerOption.find({ questionId: { $in: questionIds } }).lean(),
+      this.guessCountsByQuestionIds(questionIds),
+    ]);
 
     const optsByQuestion = new Map<string, typeof allOptions>();
     for (const opt of allOptions) {
@@ -767,15 +791,17 @@ export class GameDataRepository {
     }
 
     return questions.map((q) => {
-      const opts = (optsByQuestion.get((q._id as Types.ObjectId).toString()) ?? [])
+      const qid = (q._id as Types.ObjectId).toString();
+      const opts = (optsByQuestion.get(qid) ?? [])
         .slice()
         .sort((a, b) => a.sequence - b.sequence);
       return {
-        id: (q._id as Types.ObjectId).toString(),
+        id: qid,
         text: q.text,
         sequence: q.sequence,
         mode: q.mode as QuestionMode,
         state: q.state,
+        guessCount: guessCounts.get(qid) ?? 0,
         answerOptions: opts.map((o) => ({
           id: (o._id as Types.ObjectId).toString(),
           slotLabel: o.slotLabel as SlotLabel,
