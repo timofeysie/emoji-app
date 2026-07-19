@@ -333,6 +333,15 @@ Bump Pico `VERSION` when shipping (minor).
 
 ## 8d — React: icons, result chips, leaderboard
 
+Status: **✅ done**
+
+- `game-state-icon.ts` — Platform icon → Lucide map (`Trophy` stands in for
+  `Podium` until lucide-react ships it)
+- `BadgesView` — state icon per badge, result chips, handles `question.*` /
+  `question.result` / `isCorrect` on `nfc.tagged`
+- `GameDetailView` — live scores panel via `GET /api/games/:id/scores`,
+  refreshes on `question.result` and game state changes
+
 ### 8d-i — Shared game-state → Lucide map
 
 Add a small helper (e.g. `game-state-icon.ts`) used by `BadgesView` (and
@@ -403,14 +412,13 @@ Place below questions or as a third column on wide layouts.
 
 ## 8e — Docs sync
 
-When implementation lands:
+Status: **✅ done**
 
-1. Mark Step 8 ✅ in `next-steps.md` and `game-realtime-design.md`.
-2. Update `multiplayer-mode.md` Pico/Zero command tables so Step 8 rows are
-   no longer "planned" (and remove superseded YES/WIN scroll wording if any
-   remains outside the Platform icon section).
-3. Resolve open question in `game-realtime-design.md` ("Pico display
-   semantics") by pointing at the Platform icon table.
+1. ✅ Step 8 marked done in `next-steps.md` and `game-realtime-design.md`.
+2. ✅ `multiplayer-mode.md` Platform icon + `GAME:*` tables updated (no longer
+   "planned").
+3. ✅ Pico display semantics open question points at Platform icon table /
+   `8-scoring.md`.
 
 ---
 

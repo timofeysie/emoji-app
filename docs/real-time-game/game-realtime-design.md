@@ -13,7 +13,7 @@
 | 5 | Games CRUD + server read endpoints + React Games view | ✅ done | `5-dashboard.md` |
 | 6 | Referee panel + live game dashboard (enhanced BadgesView) | ✅ done | `6-referee.md` |
 | 7 | NFC card → answer mapping (demo-ready) | ✅ done | `next-steps.md` |
-| 8 | Scoring, results, and platform icons | 🔲 next | `8-scoring.md` |
+| 8 | Scoring, results, and platform icons | ✅ done | `8-scoring.md` |
 
 ## Overview
 

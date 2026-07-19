@@ -39,6 +39,13 @@ import {
   logFromServerGameState,
   logGameState,
 } from '../shared/game-state-log';
+import {
+  GAME_STATE_ICON_CLASS,
+  GAME_STATE_ICONS,
+  resolvePairVisualState,
+  type QuestionResultEntry,
+} from '../shared/game-state-icon';
+import { getWsUrl } from '../shared/ws-url';
 
 /** Values accepted by `POST /api/status` (device-reported). */
 type DeviceBleStatus =
@@ -98,6 +105,30 @@ type WsEnvelope =
       slotLabel?: string;
       isCorrect?: boolean;
       serverTime: string;
+    }
+  | {
+      type: 'question.opened';
+      gameId: string;
+      questionId: string;
+      serverTime: string;
+    }
+  | {
+      type: 'question.closed';
+      gameId: string;
+      questionId: string;
+      serverTime: string;
+    }
+  | {
+      type: 'question.result';
+      gameId: string;
+      questionId: string;
+      correctSlotLabel: string;
+      results: Array<{
+        pairName: string;
+        slotLabel: string | null;
+        isCorrect: boolean;
+      }>;
+      serverTime: string;
     };
 
 type BadgeRecord = {
@@ -128,8 +159,11 @@ type NfcTagEvent = {
   badgeId?: string;
   cardUid?: string;
   slotLabel?: string;
+  isCorrect?: boolean;
   serverTime: string;
 };
+
+type QuestionPhase = 'none' | 'open' | 'closed';
 
 type VersionInfo = {
   version: string;
@@ -239,20 +273,6 @@ function getEmojiIconForLabel(label: string): LucideIcon {
     return LABEL_ICON_MAP[key];
   }
   return Smile;
-}
-
-function getWsUrl(): string {
-  const configuredWsUrl = import.meta.env['VITE_WS_URL'] as string | undefined;
-  if (configuredWsUrl) {
-    return configuredWsUrl;
-  }
-
-  if (import.meta.env.DEV) {
-    return 'ws://localhost:3000/ws';
-  }
-
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/ws`;
 }
 
 function formatTimestamp(ts?: string): string {
@@ -570,26 +590,74 @@ function formatShortTime(ts?: string): string {
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
+function ResultChip({ result }: { result: QuestionResultEntry }) {
+  if (result.slotLabel == null) {
+    return (
+      <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+        —
+      </span>
+    );
+  }
+  if (result.isCorrect) {
+    return (
+      <span className="rounded bg-blue-50 px-1 py-0.5 text-[10px] font-medium text-blue-700">
+        ✓ {result.slotLabel}
+      </span>
+    );
+  }
+  return (
+    <span className="rounded bg-red-50 px-1 py-0.5 text-[10px] font-medium text-red-700">
+      ✗ {result.slotLabel}
+    </span>
+  );
+}
+
 function BadgeCardGameSection({
   pairName,
   activeGame,
   joinsByPair,
   nfcByPair,
+  questionPhase,
+  resultsByPair,
+  winnerPairNames,
 }: {
   pairName?: string;
   activeGame: GameEventState | null;
   joinsByPair: Record<string, JoinEvent>;
   nfcByPair: Record<string, NfcTagEvent>;
+  questionPhase: QuestionPhase;
+  resultsByPair: Record<string, QuestionResultEntry>;
+  winnerPairNames: Set<string> | null;
 }) {
   if (!pairName) return null;
   const joinEvent = joinsByPair[pairName];
   const nfcEvent = nfcByPair[pairName];
-  if (!joinEvent && !nfcEvent && !activeGame) return null;
+  const result = resultsByPair[pairName] ?? null;
+  if (!joinEvent && !nfcEvent && !activeGame && !result) return null;
+
+  const visual = resolvePairVisualState({
+    gameState: activeGame?.gameState,
+    joined: Boolean(joinEvent),
+    questionPhase,
+    nfcIsCorrect: nfcEvent?.isCorrect,
+    result,
+    winnerPairNames,
+    pairName,
+  });
+  const Icon = visual ? GAME_STATE_ICONS[visual] : null;
+  const iconClass = visual ? GAME_STATE_ICON_CLASS[visual] : undefined;
 
   return (
     <div className="w-full rounded-md border bg-muted/10 px-1.5 py-1 text-[10px] text-muted-foreground">
       {activeGame && (
         <div className="flex items-center gap-1">
+          {Icon ? (
+            <Icon
+              className={cn('h-3.5 w-3.5 shrink-0', iconClass ?? 'text-foreground')}
+              strokeWidth={2}
+              aria-hidden
+            />
+          ) : null}
           <span className="font-medium text-foreground capitalize">{activeGame.gameState}</span>
           <span className="text-[9px]">· {formatShortTime(activeGame.serverTime)}</span>
         </div>
@@ -598,8 +666,25 @@ function BadgeCardGameSection({
         <div>Joined at {formatShortTime(joinEvent.serverTime)}</div>
       )}
       {nfcEvent && (
-        <div>
-          NFC{nfcEvent.slotLabel ? `: ${nfcEvent.slotLabel}` : ''} · {formatShortTime(nfcEvent.serverTime)}
+        <div className="flex items-center gap-1">
+          <span>
+            NFC{nfcEvent.slotLabel ? `: ${nfcEvent.slotLabel}` : ''} ·{' '}
+            {formatShortTime(nfcEvent.serverTime)}
+          </span>
+          {typeof nfcEvent.isCorrect === 'boolean' && !result && (
+            <ResultChip
+              result={{
+                slotLabel: nfcEvent.slotLabel ?? null,
+                isCorrect: nfcEvent.isCorrect,
+              }}
+            />
+          )}
+        </div>
+      )}
+      {result && (
+        <div className="mt-0.5 flex items-center gap-1">
+          <span>Result</span>
+          <ResultChip result={result} />
         </div>
       )}
     </div>
@@ -628,7 +713,36 @@ export const BadgesView = () => {
   const [activeGame, setActiveGame] = useState<GameEventState | null>(null);
   const [joinsByPair, setJoinsByPair] = useState<Record<string, JoinEvent>>({});
   const [nfcByPair, setNfcByPair] = useState<Record<string, NfcTagEvent>>({});
+  const [questionPhase, setQuestionPhase] = useState<QuestionPhase>('none');
+  const [resultsByPair, setResultsByPair] = useState<
+    Record<string, QuestionResultEntry>
+  >({});
+  const [winnerPairNames, setWinnerPairNames] = useState<Set<string> | null>(
+    null,
+  );
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+
+  const loadWinnerPairs = useCallback(async (gameId: string) => {
+    try {
+      const res = await fetch(`/api/games/${gameId}/scores`, {
+        credentials: 'same-origin',
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        scores: Array<{ pairName: string; correct: number }>;
+      };
+      if (!Array.isArray(data.scores) || data.scores.length === 0) {
+        setWinnerPairNames(new Set());
+        return;
+      }
+      const top = Math.max(...data.scores.map((s) => s.correct));
+      setWinnerPairNames(
+        new Set(data.scores.filter((s) => s.correct === top).map((s) => s.pairName)),
+      );
+    } catch {
+      // optional enrichment for winner/loser icons
+    }
+  }, []);
 
   const refreshSnapshot = useCallback(async () => {
     try {
@@ -759,6 +873,19 @@ export const BadgesView = () => {
             gameState: message.state,
             serverTime: message.serverTime,
           });
+          if (message.state === 'lobby') {
+            setQuestionPhase('none');
+            setResultsByPair({});
+            setNfcByPair({});
+            setWinnerPairNames(null);
+            setJoinsByPair({});
+          } else if (message.state === 'active') {
+            setQuestionPhase('none');
+            setResultsByPair({});
+            setWinnerPairNames(null);
+          } else if (message.state === 'completed' || message.state === 'cancelled') {
+            void loadWinnerPairs(message.gameId);
+          }
           logFromServerGameState(
             message.state,
             `WS game.state.changed gameId=${message.gameId}`,
@@ -783,6 +910,51 @@ export const BadgesView = () => {
           return;
         }
 
+        if (message.type === 'question.opened') {
+          setQuestionPhase('open');
+          setResultsByPair({});
+          setNfcByPair({});
+          logGameState(
+            'question_open',
+            `WS question.opened questionId=${message.questionId} icon=message-circle-question-mark`,
+          );
+          return;
+        }
+
+        if (message.type === 'question.closed') {
+          setQuestionPhase('closed');
+          logGameState(
+            'question_closed',
+            `WS question.closed questionId=${message.questionId} icon=book-alert`,
+          );
+          return;
+        }
+
+        if (message.type === 'question.result') {
+          const next: Record<string, QuestionResultEntry> = {};
+          for (const row of message.results) {
+            next[row.pairName] = {
+              slotLabel: row.slotLabel,
+              isCorrect: row.isCorrect,
+            };
+          }
+          setResultsByPair(next);
+          for (const row of message.results) {
+            if (row.slotLabel == null) {
+              logGameState(
+                'wrong',
+                `WS question.result pair=${row.pairName} no guess`,
+              );
+            } else {
+              logGameState(
+                row.isCorrect ? 'correct' : 'wrong',
+                `WS question.result pair=${row.pairName} slot=${row.slotLabel}`,
+              );
+            }
+          }
+          return;
+        }
+
         if (message.type === 'nfc.tagged') {
           const pairName = message.pairName;
           if (pairName) {
@@ -795,6 +967,7 @@ export const BadgesView = () => {
                 badgeId: message.badgeId,
                 cardUid: message.cardUid,
                 slotLabel: message.slotLabel,
+                isCorrect: message.isCorrect,
                 serverTime: message.serverTime,
               },
             }));
@@ -861,7 +1034,7 @@ export const BadgesView = () => {
     return () => {
       ws.close();
     };
-  }, []);
+  }, [loadWinnerPairs]);
 
   const badgeRecords = useMemo(() => {
     const hasRealBadges = Object.keys(recordsByKey).length > 0;
@@ -918,6 +1091,9 @@ export const BadgesView = () => {
                   activeGame={activeGame}
                   joinsByPair={joinsByPair}
                   nfcByPair={nfcByPair}
+                  questionPhase={questionPhase}
+                  resultsByPair={resultsByPair}
+                  winnerPairNames={winnerPairNames}
                 />
               </div>
             </div>

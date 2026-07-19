@@ -71,7 +71,7 @@
     "esbuild": "^0.25.0",
     "eslint": "^9.8.0",
     "jest": "^30.3.0",
-    "lucide-react": "^0.488.0",
+    "lucide-react": "^0.577.0",
     "openai": "^6.9.0",
     "postcss": "^8.4.5",
     "react-day-picker": "^8.10.1",

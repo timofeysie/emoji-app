@@ -10,7 +10,7 @@
 | 5 | Games CRUD + React Games view + GameDetailView | ✅ done |
 | 6 | Referee panel + live game dashboard | ✅ done |
 | 7 | NFC card → answer mapping (demo-ready) | ✅ done |
-| 8 | Scoring + results + platform icons | 🔲 **next** — see `8-scoring.md` |
+| 8 | Scoring + results + platform icons | ✅ done — see `8-scoring.md` |
 | 9 | NFC card group management UI | 🔲 planned |
 | 10 | Multi-badge (Mode 2) | 🔲 planned |
 

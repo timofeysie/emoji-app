@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { CheckCircle2, ChevronLeft, Circle, Loader2, Plus } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, Circle, Loader2, Plus, Star } from 'lucide-react';
 import { Button } from '../shared/button';
 import { GameRefereePanel } from './components/GameRefereePanel';
 import {
@@ -18,6 +18,13 @@ import { Label } from '../shared/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../shared/select';
 import { cn } from '../shared/utils';
 import { logGameState } from '../shared/game-state-log';
+import { getWsUrl } from '../shared/ws-url';
+
+type ScoreRow = {
+  pairName: string;
+  correct: number;
+  total: number;
+};
 
 const DEMO_CREATOR_ID = '000000000000000000000001';
 const SLOT_LABELS = ['A', 'B', 'C', 'D', 'E'] as const;
@@ -420,12 +427,91 @@ function QuestionCard({
   );
 }
 
+function GameScoresPanel({
+  gameId,
+  scores,
+  loading,
+}: {
+  gameId: string;
+  scores: ScoreRow[];
+  loading: boolean;
+}) {
+  const topScore = scores.reduce((max, row) => Math.max(max, row.correct), 0);
+
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Scores
+      </p>
+      {loading && scores.length === 0 ? (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+          Loading…
+        </div>
+      ) : scores.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">
+          No bound pairs yet for game {gameId.slice(-6)}.
+        </p>
+      ) : (
+        <ol className="flex flex-col gap-1.5">
+          {scores.map((row, index) => {
+            const rank = scores.filter((other) => other.correct > row.correct).length + 1;
+            const isLeader = row.correct === topScore && topScore > 0;
+            return (
+              <li
+                key={row.pairName}
+                className="flex items-center justify-between gap-2 text-sm"
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="w-4 shrink-0 text-xs text-muted-foreground">
+                    {rank}.
+                  </span>
+                  <span className="truncate font-medium">{row.pairName}</span>
+                  {isLeader && (
+                    <Star
+                      className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-500"
+                      aria-label="Leading"
+                    />
+                  )}
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {row.correct} / {row.total} correct
+                </span>
+                <span className="sr-only">rank {index + 1}</span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 export function GameDetailView() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
   const [game, setGame] = useState<GameDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [scores, setScores] = useState<ScoreRow[]>([]);
+  const [scoresLoading, setScoresLoading] = useState(false);
+
+  const loadScores = useCallback(async () => {
+    if (!gameId) return;
+    setScoresLoading(true);
+    try {
+      const res = await fetch(`/api/games/${gameId}/scores`, {
+        credentials: 'same-origin',
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { scores: ScoreRow[] };
+      setScores(Array.isArray(data.scores) ? data.scores : []);
+    } catch {
+      // non-critical
+    } finally {
+      setScoresLoading(false);
+    }
+  }, [gameId]);
 
   const loadGame = useCallback(async () => {
     if (!gameId) return;
@@ -487,13 +573,48 @@ export function GameDetailView() {
         );
       }
       await refreshQuestions();
+      if (newState === 'closed') {
+        await loadScores();
+      }
     },
-    [gameId, refreshQuestions],
+    [gameId, refreshQuestions, loadScores],
   );
 
   useEffect(() => {
     void loadGame();
   }, [loadGame]);
+
+  useEffect(() => {
+    void loadScores();
+  }, [loadScores]);
+
+  useEffect(() => {
+    if (!gameId) return;
+    const ws = new WebSocket(getWsUrl());
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data) as {
+          type?: string;
+          gameId?: string;
+        };
+        if (message.gameId !== gameId) return;
+        if (
+          message.type === 'question.result' ||
+          message.type === 'game.state.changed'
+        ) {
+          void loadScores();
+        }
+        if (message.type === 'game.state.changed') {
+          void loadGame();
+        }
+      } catch {
+        // ignore malformed payloads
+      }
+    };
+    return () => {
+      ws.close();
+    };
+  }, [gameId, loadScores, loadGame]);
 
   if (loading) {
     return (
@@ -543,44 +664,60 @@ export function GameDetailView() {
         </p>
       </div>
 
-      {/* Two-column layout: questions left, referee panel right */}
+      {/* Layout: questions + scores | referee */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
-        {/* Questions column */}
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-semibold">
-              Questions{' '}
-              <span className="text-muted-foreground">({game.questions.length})</span>
-            </p>
-            <AddQuestionDialog
-              gameId={game.id}
-              nextSequence={nextSequence}
-              onCreated={() => void refreshQuestions()}
-            />
+        {/* Questions + scores column */}
+        <div className="flex min-w-0 flex-1 flex-col gap-4 xl:flex-row xl:items-start">
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold">
+                Questions{' '}
+                <span className="text-muted-foreground">({game.questions.length})</span>
+              </p>
+              <AddQuestionDialog
+                gameId={game.id}
+                nextSequence={nextSequence}
+                onCreated={() => void refreshQuestions()}
+              />
+            </div>
+
+            {game.questions.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                No questions yet. Click <strong>Add Question</strong> to get started.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {game.questions.map((q) => (
+                  <QuestionCard
+                    key={q.id}
+                    question={q}
+                    gameState={game.state}
+                    hasOpenQuestion={hasOpenQuestion}
+                    onToggleState={toggleQuestionState}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
-          {game.questions.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              No questions yet. Click <strong>Add Question</strong> to get started.
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {game.questions.map((q) => (
-                <QuestionCard
-                  key={q.id}
-                  question={q}
-                  gameState={game.state}
-                  hasOpenQuestion={hasOpenQuestion}
-                  onToggleState={toggleQuestionState}
-                />
-              ))}
-            </div>
-          )}
+          <div className="w-full shrink-0 xl:w-56">
+            <GameScoresPanel
+              gameId={game.id}
+              scores={scores}
+              loading={scoresLoading}
+            />
+          </div>
         </div>
 
         {/* Referee sidebar */}
         <div className="w-full shrink-0 lg:w-72">
-          <GameRefereePanel game={game} onRefresh={() => void loadGame()} />
+          <GameRefereePanel
+            game={game}
+            onRefresh={() => {
+              void loadGame();
+              void loadScores();
+            }}
+          />
         </div>
       </div>
     </div>
