@@ -337,17 +337,11 @@ and played through again from the beginning.
 | `game.endedAt` | cleared (`$unset`) | Remove the old end marker |
 | `question.state` (all for this game) | `'closed'` | Ensure no question is left open from the previous run |
 | `pairBinding.joined` (all for this game) | `false` | Pairs must re-join the new session |
-| `guesses` (all for this game) | **kept** | Preserved for historical review; see note below |
+| `guesses` (all for this game) | **deleted** | Clears `uniq_guess_per_pair` so the same pair can answer again |
 
-**Guesses are intentionally kept.** Deleting them is a destructive operation
-that removes the record of the previous play-through. If scoring or result
-history is needed later (Step 8), the guesses from prior runs are useful.
-When Step 8 is built, `GET /api/games/:id/scores` can accept a `runId` or
-`since` filter to scope scores to the current play-through. For now the
-score will be incorrect after a restart, which is acceptable for the demo.
-
-If a clean-slate restart is later required, a separate
-`DELETE /api/games/:id/guesses` endpoint can be added as an opt-in action.
+**Guesses are deleted on Play Again / Restart.** Keeping them blocked replay
+with `E11000 duplicate key` on `(questionId, pairName)`. Per-run history can
+return later via a `runId` (scoped uniqueness) without blocking demos.
 
 ### Server changes
 
@@ -445,7 +439,7 @@ Pico. After that the lifecycle follows the same path as a new game:
       immediately (on `onRefresh()`).
 - [x] The question Open/Close buttons no longer appear (game is not `active`).
 - [x] Existing questions and answer options are preserved — no re-entry needed.
-- [x] Guesses from the previous run are retained in the database.
+- [x] Guesses from the previous run are deleted so pairs can answer again.
 - [x] Bound pairs are retained — referee does not need to re-bind controllers.
 - [x] The game can then be opened, joined, and played through again from
       the `ready` state, exactly as a first run.

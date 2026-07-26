@@ -464,22 +464,26 @@ export class GameDataRepository {
     }
 
     if (input.state === 'ready' && (currentState === 'completed' || currentState === 'cancelled')) {
-      const { Question, PairBinding } = this.mongoService.getModels();
+      const { Question, PairBinding, Guess } = this.mongoService.getModels();
+      const gid = asObjectId(input.gameId);
 
       await Game.updateOne(
-        { _id: asObjectId(input.gameId) },
+        { _id: gid },
         { $set: { state: 'ready' }, $unset: { startedAt: '', endedAt: '' } },
       );
 
       await Question.updateMany(
-        { gameId: asObjectId(input.gameId) },
+        { gameId: gid },
         { $set: { state: 'closed' }, $unset: { openedAt: '', closedAt: '' } },
       );
 
       await PairBinding.updateMany(
-        { gameId: asObjectId(input.gameId) },
+        { gameId: gid },
         { $set: { joined: false, updatedAt: new Date() } },
       );
+
+      // Clear prior-run guesses so uniq_guess_per_pair does not block replay.
+      await Guess.deleteMany({ gameId: gid });
 
       return { gameId: input.gameId, state: input.state };
     }

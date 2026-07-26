@@ -198,13 +198,9 @@ Cumulative correct counts per `pairName` for the current game:
 }
 ```
 
-**Restart note (from 6d):** guesses are retained across Play Again. For the
-demo, either:
-
-- Scope scores to guesses with `createdAt >= game.startedAt`, or
-- Accept inflated totals after restart until a later cleanup endpoint exists.
-
-Prefer scoping to `startedAt` when present.
+**Restart note (from 6d):** Play Again / Restart deletes all guesses for the
+game so `uniq_guess_per_pair` does not block replay. Scores for the new run
+start from zero.
 
 ### 8a-iv — Enrich controller `game.ended`
 
@@ -458,8 +454,8 @@ because immediate feedback only needs the guess POST body.
 
 - [ ] `POST /api/guesses` 201 body includes `isCorrect`.
 - [ ] Closing a question emits `question.result` to dashboards and bound pairs.
-- [ ] `GET /api/games/:id/scores` returns per-pair correct/total (scoped sensibly
-      after Play Again).
+- [ ] `GET /api/games/:id/scores` returns per-pair correct/total (fresh after
+      Play Again clears guesses).
 - [ ] `GameDetailView` leaderboard updates after each `question.result`.
 - [ ] On game complete, each Zero receives `game.ended` with `isWinner` / `rank`
       / `score` and drives `GAME:winner` or `GAME:loser`.
@@ -490,4 +486,4 @@ because immediate feedback only needs the guess POST body.
 
 - Step 9 — NFC card group management UI
 - Step 10 — Multi-badge Mode 2
-- Deleting guesses on Play Again (optional later endpoint)
+- Per-run guess history (`runId`) without deleting prior runs
