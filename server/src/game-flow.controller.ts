@@ -3,7 +3,7 @@ import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { GameDataRepository } from './persistence/game-data.repository';
 import { BadgeStateService } from './badge-state.service';
-import { NfcCardService } from './nfc-card.service';
+import { NfcCardService, shortCardLabel } from './nfc-card.service';
 import type { SlotLabel } from './persistence/domain-types';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
@@ -213,6 +213,44 @@ export class GameFlowController {
     }
   }
 
+  @Get('games/:gameId/guess-chart')
+  async getGameGuessChart(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+    try {
+      const chart = await this.gameDataRepository.getGameGuessChart(gameId);
+      const seedByUid = new Map(
+        this.nfcCardService.getCards().map((card) => [card.id, card.name]),
+      );
+      // Prefer Mongo card names; fill gaps from the demo seed (no group assigned).
+      for (const question of chart.questions) {
+        for (const pairName of chart.pairs) {
+          const cell = question.byPair[pairName];
+          if (!cell?.cardUid) continue;
+          const seedName = seedByUid.get(cell.cardUid);
+          if (!seedName) continue;
+          if (cell.cardLabel === '-' || cell.cardLabel === cell.slotLabel.toLowerCase()) {
+            cell.cardLabel = shortCardLabel(seedName, cell.slotLabel);
+          }
+        }
+      }
+      res.status(200).json(chart);
+    } catch (error) {
+      const message = String(error);
+      if (message.includes('Game not found')) {
+        res.status(404).json({ error: 'Game not found', message });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to fetch guess chart', message });
+    }
+  }
+
   @Post('games')
   async createGame(@Body() body: unknown, @Res() res: Response): Promise<void> {
     const result = createGameSchema.safeParse(body);
@@ -251,11 +289,14 @@ export class GameFlowController {
       await this.gameDataRepository.setGameState({ gameId, state });
 
       const serverTime = new Date().toISOString();
+      const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
+      const gameTitle = gameDetail?.title;
 
       // Notify dashboard of the state change
       this.badgeStateService.broadcastDashboard({
         type: 'game.state.changed',
         gameId,
+        ...(gameTitle ? { gameTitle } : {}),
         state,
         serverTime,
       });
@@ -264,12 +305,13 @@ export class GameFlowController {
 
       if (state === 'completed' && pairNames.length > 0) {
         // Enriched per-pair game.ended (rank / score / isWinner). Ties for
-        // first place all get isWinner: true.
+        // first place all get isWinner: true, but a 0-correct field is never
+        // a win (solo/all-wrong → rain on the badge, not fireworks).
         const { scores } = await this.gameDataRepository.getGameScores(gameId);
         const topScore = scores.reduce((max, row) => Math.max(max, row.correct), 0);
         for (const row of scores) {
           const rank = scores.filter((other) => other.correct > row.correct).length + 1;
-          const isWinner = row.correct === topScore;
+          const isWinner = topScore > 0 && row.correct === topScore;
           console.log(
             `[GAME] server | ${isWinner ? 'winner' : 'loser'} | ${
               isWinner ? 'Game winner' : 'Game loser'
@@ -305,11 +347,14 @@ export class GameFlowController {
           const questionEvent = {
             type: 'question.opened' as const,
             gameId,
+            ...(gameTitle ? { gameTitle } : {}),
             questionId: openedQuestionId,
             serverTime: new Date().toISOString(),
           };
           console.log(
-            `[GAME] server | question_open | Question open | auto on Start Game questionId=${openedQuestionId}`,
+            `[GAME] server | question_open | Question open | auto on Start Game questionId=${openedQuestionId}${
+              gameTitle ? ` game="${gameTitle}"` : ''
+            }`,
           );
           this.badgeStateService.broadcastDashboard(questionEvent);
           if (pairNames.length > 0) {
@@ -491,10 +536,13 @@ export class GameFlowController {
 
       const serverTime = new Date().toISOString();
       const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
+      const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
+      const gameTitle = gameDetail?.title;
       const questionEventType = state === 'open' ? 'question.opened' : 'question.closed';
       const questionEvent = {
         type: questionEventType,
         gameId,
+        ...(gameTitle ? { gameTitle } : {}),
         questionId,
         serverTime,
       };
@@ -502,7 +550,9 @@ export class GameFlowController {
       console.log(
         `[GAME] server | ${
           state === 'open' ? 'question_open' : 'question_closed'
-        } | ${state === 'open' ? 'Question open' : 'Question closed'} | questionId=${questionId}`,
+        } | ${state === 'open' ? 'Question open' : 'Question closed'} | questionId=${questionId}${
+          gameTitle ? ` game="${gameTitle}"` : ''
+        }`,
       );
 
       this.badgeStateService.broadcastDashboard(questionEvent);
@@ -544,19 +594,25 @@ export class GameFlowController {
       const outcome = await this.gameDataRepository.submitGuess(result.data);
 
       const { gameId, questionId, pairName, badgeId, cardUid } = result.data;
+      const seedCard = cardUid ? this.nfcCardService.findByUid(cardUid) : undefined;
+      const cardLabel = seedCard
+        ? shortCardLabel(seedCard.name, outcome.slotLabel)
+        : outcome.cardLabel;
       this.badgeStateService.broadcastDashboard({
         type: 'nfc.tagged',
         gameId,
+        ...(outcome.gameTitle ? { gameTitle: outcome.gameTitle } : {}),
         questionId,
         ...(pairName ? { pairName } : {}),
         ...(badgeId ? { badgeId } : {}),
         ...(cardUid ? { cardUid } : {}),
         slotLabel: outcome.slotLabel ?? undefined,
+        cardLabel,
         isCorrect: outcome.isCorrect,
         serverTime: new Date().toISOString(),
       });
 
-      res.status(201).json(outcome);
+      res.status(201).json({ ...outcome, cardLabel });
     } catch (error) {
       res.status(400).json({ error: 'Failed to submit guess', message: String(error) });
     }

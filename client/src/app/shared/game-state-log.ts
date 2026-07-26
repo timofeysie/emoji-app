@@ -23,6 +23,25 @@ export const GAME_STATE_LABELS = {
 
 export type GameVisualStateId = keyof typeof GAME_STATE_LABELS;
 
+/** `game="Title" gameId=…` for console detail strings. */
+export function gameLogRef(game: {
+  id?: string | null;
+  title?: string | null;
+}): string {
+  const id = game.id?.trim();
+  const title = game.title?.trim();
+  if (title && id) {
+    return `game="${title}" gameId=${id}`;
+  }
+  if (title) {
+    return `game="${title}"`;
+  }
+  if (id) {
+    return `gameId=${id}`;
+  }
+  return 'game=?';
+}
+
 export function logGameState(
   stateId: GameVisualStateId | string,
   detail?: string,

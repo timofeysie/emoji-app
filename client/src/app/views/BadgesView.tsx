@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../shared/utils';
 import {
+  gameLogRef,
   logFromServerGameState,
   logGameState,
 } from '../shared/game-state-log';
@@ -92,35 +93,53 @@ type EmojiSentEvent = {
 type WsEnvelope =
   | { type: 'status.changed'; payload: StatusChangedEvent }
   | { type: 'emoji.sent'; payload: EmojiSentEvent }
-  | { type: 'game.state.changed'; gameId: string; state: string; serverTime: string }
-  | { type: 'controller.joined'; gameId: string; pairName: string; controllerId?: string; serverTime: string }
+  | {
+      type: 'game.state.changed';
+      gameId: string;
+      gameTitle?: string;
+      state: string;
+      serverTime: string;
+    }
+  | {
+      type: 'controller.joined';
+      gameId: string;
+      gameTitle?: string;
+      pairName: string;
+      controllerId?: string;
+      serverTime: string;
+    }
   | {
       type: 'nfc.tagged';
       gameId: string;
+      gameTitle?: string;
       questionId?: string;
       pairName?: string;
       controllerId?: string;
       badgeId?: string;
       cardUid?: string;
       slotLabel?: string;
+      cardLabel?: string;
       isCorrect?: boolean;
       serverTime: string;
     }
   | {
       type: 'question.opened';
       gameId: string;
+      gameTitle?: string;
       questionId: string;
       serverTime: string;
     }
   | {
       type: 'question.closed';
       gameId: string;
+      gameTitle?: string;
       questionId: string;
       serverTime: string;
     }
   | {
       type: 'question.result';
       gameId: string;
+      gameTitle?: string;
       questionId: string;
       correctSlotLabel: string;
       results: Array<{
@@ -708,6 +727,7 @@ export const BadgesView = () => {
   );
   const socketStatusRef = useRef(socketStatus);
   socketStatusRef.current = socketStatus;
+  const gameTitlesByIdRef = useRef<Record<string, string>>({});
 
   // Game event state
   const [activeGame, setActiveGame] = useState<GameEventState | null>(null);
@@ -736,8 +756,13 @@ export const BadgesView = () => {
         return;
       }
       const top = Math.max(...data.scores.map((s) => s.correct));
+      // Mirror server: 0-correct is never a win (solo/all-wrong → loser icon).
       setWinnerPairNames(
-        new Set(data.scores.filter((s) => s.correct === top).map((s) => s.pairName)),
+        new Set(
+          top > 0
+            ? data.scores.filter((s) => s.correct === top).map((s) => s.pairName)
+            : [],
+        ),
       );
     } catch {
       // optional enrichment for winner/loser icons
@@ -867,6 +892,19 @@ export const BadgesView = () => {
       try {
         const message = JSON.parse(event.data) as WsEnvelope;
 
+        const rememberGameTitle = (gameId: string, gameTitle?: string) => {
+          if (gameTitle) {
+            gameTitlesByIdRef.current[gameId] = gameTitle;
+          }
+        };
+        const refFor = (gameId: string, gameTitle?: string) => {
+          rememberGameTitle(gameId, gameTitle);
+          return gameLogRef({
+            id: gameId,
+            title: gameTitle ?? gameTitlesByIdRef.current[gameId],
+          });
+        };
+
         if (message.type === 'game.state.changed') {
           setActiveGame({
             gameId: message.gameId,
@@ -894,7 +932,7 @@ export const BadgesView = () => {
           }
           logFromServerGameState(
             message.state,
-            `WS game.state.changed gameId=${message.gameId}`,
+            `WS game.state.changed ${refFor(message.gameId, message.gameTitle)}`,
           );
           return;
         }
@@ -911,7 +949,7 @@ export const BadgesView = () => {
           }));
           logGameState(
             'lobby_joined',
-            `WS controller.joined pair=${message.pairName} icon=hand-platter`,
+            `WS controller.joined pair=${message.pairName} ${refFor(message.gameId, message.gameTitle)} icon=hand-platter`,
           );
           return;
         }
@@ -922,7 +960,7 @@ export const BadgesView = () => {
           setNfcByPair({});
           logGameState(
             'question_open',
-            `WS question.opened questionId=${message.questionId} icon=message-circle-question-mark`,
+            `WS question.opened questionId=${message.questionId} ${refFor(message.gameId, message.gameTitle)} icon=message-circle-question-mark`,
           );
           return;
         }
@@ -931,7 +969,7 @@ export const BadgesView = () => {
           setQuestionPhase('closed');
           logGameState(
             'question_closed',
-            `WS question.closed questionId=${message.questionId} icon=book-alert`,
+            `WS question.closed questionId=${message.questionId} ${refFor(message.gameId, message.gameTitle)} icon=book-alert`,
           );
           return;
         }
@@ -945,16 +983,17 @@ export const BadgesView = () => {
             };
           }
           setResultsByPair(next);
+          const gameRef = refFor(message.gameId, message.gameTitle);
           for (const row of message.results) {
             if (row.slotLabel == null) {
               logGameState(
                 'wrong',
-                `WS question.result pair=${row.pairName} no guess`,
+                `WS question.result pair=${row.pairName} no guess ${gameRef}`,
               );
             } else {
               logGameState(
                 row.isCorrect ? 'correct' : 'wrong',
-                `WS question.result pair=${row.pairName} slot=${row.slotLabel}`,
+                `WS question.result pair=${row.pairName} slot=${row.slotLabel} ${gameRef}`,
               );
             }
           }
@@ -980,14 +1019,16 @@ export const BadgesView = () => {
           }
           const pair = pairName ?? '?';
           const slot = message.slotLabel ?? '?';
+          const card = message.cardLabel ?? slot;
+          const gameRef = refFor(message.gameId, message.gameTitle);
           logGameState(
             'card_scanned',
-            `WS nfc.tagged pair=${pair} slot=${slot} cardUid=${message.cardUid ?? '?'}`,
+            `WS nfc.tagged pair=${pair} card=${card} slot=${slot} cardUid=${message.cardUid ?? '?'} ${gameRef}`,
           );
           if (typeof message.isCorrect === 'boolean') {
             logGameState(
               message.isCorrect ? 'correct' : 'wrong',
-              `pair=${pair} slot=${slot} icon=${message.isCorrect ? 'circle' : 'x'}`,
+              `pair=${pair} card=${card} slot=${slot} ${gameRef} icon=${message.isCorrect ? 'circle' : 'x'}`,
             );
           }
           return;

@@ -10,7 +10,11 @@ import {
   SelectValue,
 } from '../../shared/select';
 import { cn } from '../../shared/utils';
-import { logFromServerGameState, logGameState } from '../../shared/game-state-log';
+import {
+  gameLogRef,
+  logFromServerGameState,
+  logGameState,
+} from '../../shared/game-state-log';
 
 type GameState =
   | 'draft'
@@ -204,14 +208,15 @@ export function GameRefereePanel({
         setLifecycleError(body.error ?? `Failed to transition to ${targetState}.`);
         return;
       }
+      const gameRef = gameLogRef({ id: game.id, title: game.title });
       if (targetState === 'lobby') {
-        logGameState('lobby', `referee Open for Joining gameId=${game.id} icon=door-open`);
+        logGameState('lobby', `referee Open for Joining ${gameRef} icon=door-open`);
       } else if (targetState === 'active') {
-        logGameState('active', `referee Start Game gameId=${game.id} icon=turntable`);
+        logGameState('active', `referee Start Game ${gameRef} icon=turntable`);
       } else if (targetState === 'completed') {
-        logGameState('game_ended', `referee End Game gameId=${game.id} icon=sparkles`);
+        logGameState('game_ended', `referee End Game ${gameRef} icon=sparkles`);
       } else {
-        logFromServerGameState(targetState, `referee → ${targetState} gameId=${game.id}`);
+        logFromServerGameState(targetState, `referee → ${targetState} ${gameRef}`);
       }
       onRefresh();
     } catch {

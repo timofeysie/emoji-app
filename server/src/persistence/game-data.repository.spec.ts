@@ -86,6 +86,9 @@ describe('GameDataRepository', () => {
   });
 
   it('submits guess in happy path', async () => {
+    models.Game.findById.mockReturnValue(
+      createLeanQuery({ _id: 'g1', title: 'Demo Night' }),
+    );
     models.Question.findOne.mockReturnValue(
       createLeanQuery({ _id: 'q1', state: 'open', gameId: 'g1' }),
     );
@@ -93,7 +96,12 @@ describe('GameDataRepository', () => {
       createLeanQuery({ _id: 'a1', groupId: 'grp1' }),
     );
     models.NfcCard.findOne.mockReturnValue(
-      createLeanQuery({ _id: 'c1', slotLabel: 'A', status: 'active' }),
+      createLeanQuery({
+        _id: 'c1',
+        slotLabel: 'A',
+        status: 'active',
+        displayName: 'R12 - Monkey',
+      }),
     );
     models.AnswerOption.findOne.mockReturnValue(
       createLeanQuery({
@@ -118,11 +126,16 @@ describe('GameDataRepository', () => {
       answerOptionId: '507f1f77bcf86cd799439022',
       slotLabel: 'A',
       isCorrect: true,
+      cardLabel: 'monkey',
+      gameTitle: 'Demo Night',
     });
     expect((session.commitTransaction as jest.Mock)).toHaveBeenCalled();
   });
 
   it('throws when question is not open', async () => {
+    models.Game.findById.mockReturnValue(
+      createLeanQuery({ _id: 'g1', title: 'Demo Night' }),
+    );
     models.Question.findOne.mockReturnValue(
       createLeanQuery({ _id: 'q1', state: 'closed', gameId: 'g1' }),
     );
@@ -140,6 +153,9 @@ describe('GameDataRepository', () => {
   });
 
   it('returns isCorrect false when no card group and no slotLabel (unknown card)', async () => {
+    models.Game.findById.mockReturnValue(
+      createLeanQuery({ _id: 'g1', title: 'Demo Night' }),
+    );
     models.Question.findOne.mockReturnValue(
       createLeanQuery({ _id: 'q1', state: 'open', gameId: 'g1' }),
     );
@@ -157,6 +173,8 @@ describe('GameDataRepository', () => {
       answerOptionId: '',
       slotLabel: '?',
       isCorrect: false,
+      cardLabel: '?',
+      gameTitle: 'Demo Night',
     });
   });
 

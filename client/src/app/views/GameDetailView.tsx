@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { CheckCircle2, ChevronLeft, Circle, Loader2, Plus, Star } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, Circle, Loader2, Plus } from 'lucide-react';
 import { Button } from '../shared/button';
 import { GameRefereePanel } from './components/GameRefereePanel';
 import {
@@ -17,14 +17,12 @@ import { Input } from '../shared/input';
 import { Label } from '../shared/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../shared/select';
 import { cn } from '../shared/utils';
-import { logGameState } from '../shared/game-state-log';
+import { gameLogRef, logGameState } from '../shared/game-state-log';
 import { getWsUrl } from '../shared/ws-url';
-
-type ScoreRow = {
-  pairName: string;
-  correct: number;
-  total: number;
-};
+import {
+  PairGuessChart,
+  type GuessChartData,
+} from './components/PairGuessChart';
 
 const DEMO_CREATOR_ID = '000000000000000000000001';
 const SLOT_LABELS = ['A', 'B', 'C', 'D', 'E'] as const;
@@ -454,89 +452,29 @@ function QuestionCard({
   );
 }
 
-function GameScoresPanel({
-  gameId,
-  scores,
-  loading,
-}: {
-  gameId: string;
-  scores: ScoreRow[];
-  loading: boolean;
-}) {
-  const topScore = scores.reduce((max, row) => Math.max(max, row.correct), 0);
-
-  return (
-    <div className="rounded-lg border p-3">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Scores
-      </p>
-      {loading && scores.length === 0 ? (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-          Loading…
-        </div>
-      ) : scores.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic">
-          No bound pairs yet for game {gameId.slice(-6)}.
-        </p>
-      ) : (
-        <ol className="flex flex-col gap-1.5">
-          {scores.map((row, index) => {
-            const rank = scores.filter((other) => other.correct > row.correct).length + 1;
-            const isLeader = row.correct === topScore && topScore > 0;
-            return (
-              <li
-                key={row.pairName}
-                className="flex items-center justify-between gap-2 text-sm"
-              >
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="w-4 shrink-0 text-xs text-muted-foreground">
-                    {rank}.
-                  </span>
-                  <span className="truncate font-medium">{row.pairName}</span>
-                  {isLeader && (
-                    <Star
-                      className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-500"
-                      aria-label="Leading"
-                    />
-                  )}
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {row.correct} / {row.total} correct
-                </span>
-                <span className="sr-only">rank {index + 1}</span>
-              </li>
-            );
-          })}
-        </ol>
-      )}
-    </div>
-  );
-}
-
 export function GameDetailView() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
   const [game, setGame] = useState<GameDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [scores, setScores] = useState<ScoreRow[]>([]);
-  const [scoresLoading, setScoresLoading] = useState(false);
+  const [guessChart, setGuessChart] = useState<GuessChartData | null>(null);
+  const [guessChartLoading, setGuessChartLoading] = useState(false);
 
-  const loadScores = useCallback(async () => {
+  const loadGuessChart = useCallback(async () => {
     if (!gameId) return;
-    setScoresLoading(true);
+    setGuessChartLoading(true);
     try {
-      const res = await fetch(`/api/games/${gameId}/scores`, {
+      const res = await fetch(`/api/games/${gameId}/guess-chart`, {
         credentials: 'same-origin',
       });
       if (!res.ok) return;
-      const data = (await res.json()) as { scores: ScoreRow[] };
-      setScores(Array.isArray(data.scores) ? data.scores : []);
+      const data = (await res.json()) as GuessChartData;
+      setGuessChart(data);
     } catch {
       // non-critical
     } finally {
-      setScoresLoading(false);
+      setGuessChartLoading(false);
     }
   }, [gameId]);
 
@@ -588,23 +526,24 @@ export function GameDetailView() {
         const body = (await res.json()) as { error?: string };
         throw new Error(body.error ?? `Failed to set question state to ${newState}.`);
       }
+      const gameRef = gameLogRef({ id: gameId, title: game?.title });
       if (newState === 'open') {
         logGameState(
           'question_open',
-          `referee Open questionId=${questionId} icon=message-circle-question-mark`,
+          `referee Open questionId=${questionId} ${gameRef} icon=message-circle-question-mark`,
         );
       } else {
         logGameState(
           'question_closed',
-          `referee Close questionId=${questionId} icon=book-alert`,
+          `referee Close questionId=${questionId} ${gameRef} icon=book-alert`,
         );
       }
       await refreshQuestions();
       if (newState === 'closed') {
-        await loadScores();
+        await loadGuessChart();
       }
     },
-    [gameId, refreshQuestions, loadScores],
+    [gameId, game?.title, refreshQuestions, loadGuessChart],
   );
 
   useEffect(() => {
@@ -635,7 +574,13 @@ export function GameDetailView() {
           promotingDraftRef.current = null;
           return;
         }
-        logGameState('ready', `referee opened game detail — draft → ready gameId=${gameId}`);
+        logGameState(
+          'ready',
+          `referee opened game detail — draft → ready ${gameLogRef({
+            id: gameId,
+            title: game.title,
+          })}`,
+        );
         setGame((prev) => (prev ? { ...prev, state: 'ready' } : prev));
       } catch {
         promotingDraftRef.current = null;
@@ -647,8 +592,8 @@ export function GameDetailView() {
   }, [game, gameId]);
 
   useEffect(() => {
-    void loadScores();
-  }, [loadScores]);
+    void loadGuessChart();
+  }, [loadGuessChart]);
 
   useEffect(() => {
     if (!gameId) return;
@@ -658,19 +603,46 @@ export function GameDetailView() {
         const message = JSON.parse(event.data) as {
           type?: string;
           gameId?: string;
+          gameTitle?: string;
+          questionId?: string;
+          pairName?: string;
+          cardLabel?: string;
+          slotLabel?: string;
+          cardUid?: string;
+          isCorrect?: boolean;
         };
         if (message.gameId !== gameId) return;
         if (
           message.type === 'question.result' ||
-          message.type === 'game.state.changed'
+          message.type === 'game.state.changed' ||
+          message.type === 'nfc.tagged'
         ) {
-          void loadScores();
+          void loadGuessChart();
         }
         if (
           message.type === 'game.state.changed' ||
-          message.type === 'controller.joined'
+          message.type === 'controller.joined' ||
+          message.type === 'nfc.tagged'
         ) {
           void loadGame();
+        }
+        if (message.type === 'nfc.tagged') {
+          const gameRef = gameLogRef({
+            id: message.gameId,
+            title: message.gameTitle ?? game?.title,
+          });
+          const pair = message.pairName ?? '?';
+          const card = message.cardLabel ?? message.slotLabel ?? '?';
+          logGameState(
+            'card_scanned',
+            `WS nfc.tagged pair=${pair} card=${card} slot=${message.slotLabel ?? '?'} ${gameRef}`,
+          );
+          if (typeof message.isCorrect === 'boolean') {
+            logGameState(
+              message.isCorrect ? 'correct' : 'wrong',
+              `pair=${pair} card=${card} ${gameRef} icon=${message.isCorrect ? 'circle' : 'x'}`,
+            );
+          }
         }
       } catch {
         // ignore malformed payloads
@@ -679,7 +651,7 @@ export function GameDetailView() {
     return () => {
       ws.close();
     };
-  }, [gameId, loadScores, loadGame]);
+  }, [gameId, game?.title, loadGuessChart, loadGame]);
 
   if (loading) {
     return (
@@ -729,9 +701,9 @@ export function GameDetailView() {
         </p>
       </div>
 
-      {/* Layout: questions + scores | referee */}
+      {/* Layout: questions + guess chart | referee */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
-        {/* Questions + scores column */}
+        {/* Questions + guess chart column */}
         <div className="flex min-w-0 flex-1 flex-col gap-4 xl:flex-row xl:items-start">
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex items-center justify-between">
@@ -765,12 +737,8 @@ export function GameDetailView() {
             )}
           </div>
 
-          <div className="w-full shrink-0 xl:w-56">
-            <GameScoresPanel
-              gameId={game.id}
-              scores={scores}
-              loading={scoresLoading}
-            />
+          <div className="w-full shrink-0 xl:w-64">
+            <PairGuessChart chart={guessChart} loading={guessChartLoading} />
           </div>
         </div>
 
@@ -780,7 +748,7 @@ export function GameDetailView() {
             game={game}
             onRefresh={() => {
               void loadGame();
-              void loadScores();
+              void loadGuessChart();
             }}
           />
         </div>

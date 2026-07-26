@@ -22,11 +22,32 @@ const SEED_NFC_CARDS: NfcCard[] = [
   { id: 'DB:93:B7:08', name: 'W3 - Clown',   display: 'x',      slotLabel: 'B' },
 ];
 
+/** "R12 - Monkey" → "monkey"; falls back to slot or "-". */
+export function shortCardLabel(
+  displayName: string | undefined | null,
+  fallback?: string | null,
+): string {
+  const raw = displayName?.trim();
+  if (raw) {
+    const dash = raw.lastIndexOf(' - ');
+    const name = (dash >= 0 ? raw.slice(dash + 3) : raw).trim();
+    if (name) {
+      return name.toLowerCase();
+    }
+  }
+  const fb = fallback?.trim();
+  return fb ? fb.toLowerCase() : '-';
+}
+
 @Injectable()
 export class NfcCardService {
   private readonly cards: NfcCard[] = SEED_NFC_CARDS;
 
   getCards(): NfcCard[] {
     return this.cards.map((card) => ({ ...card }));
+  }
+
+  findByUid(cardUid: string): NfcCard | undefined {
+    return this.cards.find((card) => card.id === cardUid);
   }
 }

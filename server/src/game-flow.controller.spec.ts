@@ -37,6 +37,8 @@ describe('GameFlowController', () => {
     getBindingsByGameId: jest.fn(),
     computeQuestionResult: jest.fn(),
     getGameScores: jest.fn(),
+    getGameDetail: jest.fn(),
+    getGameGuessChart: jest.fn(),
   } as unknown as jest.Mocked<GameDataRepository>;
 
   const badgeStateService: jest.Mocked<Pick<BadgeStateService, 'broadcastDashboard' | 'sendToPairNames'>> = {
@@ -54,6 +56,16 @@ describe('GameFlowController', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      state: 'lobby',
+      createdAt: new Date().toISOString(),
+      startedAt: null,
+      endedAt: null,
+      questions: [],
+      boundPairs: [],
+    });
   });
 
   it('returns 400 for invalid game creation payload', async () => {
@@ -194,6 +206,8 @@ describe('GameFlowController', () => {
       answerOptionId: '507f1f77bcf86cd799439021',
       slotLabel: 'A',
       isCorrect: true,
+      cardLabel: 'a',
+      gameTitle: 'Demo Night',
     });
 
     await controller.submitGuess(
@@ -201,7 +215,7 @@ describe('GameFlowController', () => {
         gameId: '507f1f77bcf86cd799439017',
         questionId: '507f1f77bcf86cd799439018',
         pairName: 'white',
-        cardUid: 'CARD-UID-A-001',
+        cardUid: '5B:6F:B8:08',
       },
       res as unknown as Response,
     );
@@ -213,6 +227,8 @@ describe('GameFlowController', () => {
         type: 'nfc.tagged',
         pairName: 'white',
         isCorrect: true,
+        cardLabel: 'monkey',
+        gameTitle: 'Demo Night',
       }),
     );
   });
@@ -334,6 +350,36 @@ describe('GameFlowController', () => {
         }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('emits isWinner false when all scores are zero', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'completed',
+      });
+      repository.getBindingsByGameId.mockResolvedValue(['power-cable']);
+      repository.getGameScores.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        scores: [{ pairName: 'power-cable', correct: 0, total: 2 }],
+      });
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'completed' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['power-cable'],
+        expect.objectContaining({
+          type: 'game.ended',
+          pairName: 'power-cable',
+          isWinner: false,
+          rank: 1,
+          score: 0,
+        }),
+      );
     });
 
     it('emits game.ready to controllers when draft is opened to ready', async () => {

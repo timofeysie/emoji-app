@@ -3,6 +3,7 @@ import { ClientSession, Types } from 'mongoose';
 import { MongoService } from './mongo.service';
 import { GameState, PlayMode, QuestionMode, SlotLabel } from './domain-types';
 import { asObjectId } from './models';
+import { shortCardLabel } from '../nfc-card.service';
 
 export type CreateGameInput = {
   title: string;
@@ -91,6 +92,24 @@ export type QuestionResultPayload = {
 export type GameScoresPayload = {
   gameId: string;
   scores: Array<{ pairName: string; correct: number; total: number }>;
+};
+
+export type GuessChartPairCell = {
+  cardLabel: string;
+  slotLabel: string;
+  isCorrect: boolean;
+  cardUid?: string;
+};
+
+export type GameGuessChartPayload = {
+  gameId: string;
+  title: string;
+  pairs: string[];
+  questions: Array<{
+    questionId: string;
+    sequence: number;
+    byPair: Record<string, GuessChartPairCell | null>;
+  }>;
 };
 
 export type GameDetail = {
@@ -335,11 +354,21 @@ export class GameDataRepository {
 
   async submitGuess(
     input: SubmitGuessInput,
-  ): Promise<{ guessId: string; answerOptionId: string; slotLabel: string; isCorrect: boolean }> {
-    const { Question, AnswerOption, Guess, GameNfcCardGroupAssignment, NfcCard } =
+  ): Promise<{
+    guessId: string;
+    answerOptionId: string;
+    slotLabel: string;
+    isCorrect: boolean;
+    cardLabel: string;
+    gameTitle: string;
+  }> {
+    const { Question, AnswerOption, Guess, GameNfcCardGroupAssignment, NfcCard, Game } =
       this.mongoService.getModels();
 
     return this.withOptionalTransaction(async (session) => {
+      const game = await Game.findById(asObjectId(input.gameId), undefined, { session }).lean();
+      const gameTitle = game?.title ?? '';
+
       const question = await Question.findOne(
         { _id: asObjectId(input.questionId), gameId: asObjectId(input.gameId) },
         undefined,
@@ -356,6 +385,7 @@ export class GameDataRepository {
       ).lean();
 
       let resolvedSlotLabel: SlotLabel;
+      let cardDisplayName: string | undefined;
 
       if (assignment) {
         // MongoDB path — card group assigned; resolve slot via NfcCard document.
@@ -377,11 +407,14 @@ export class GameDataRepository {
               answerOptionId: '',
               slotLabel: input.slotLabel ?? '?',
               isCorrect: false,
+              cardLabel: shortCardLabel(undefined, input.slotLabel ?? '?'),
+              gameTitle,
             };
           }
           resolvedSlotLabel = wrongOption.slotLabel as SlotLabel;
         } else {
           resolvedSlotLabel = nfcCard.slotLabel as SlotLabel;
+          cardDisplayName = nfcCard.displayName as string | undefined;
         }
       } else if (input.slotLabel) {
         // Fallback path — no card group assigned; trust the slotLabel supplied
@@ -395,6 +428,8 @@ export class GameDataRepository {
           answerOptionId: '',
           slotLabel: '?',
           isCorrect: false,
+          cardLabel: shortCardLabel(undefined, '?'),
+          gameTitle,
         };
       }
 
@@ -412,6 +447,8 @@ export class GameDataRepository {
           answerOptionId: '',
           slotLabel: resolvedSlotLabel,
           isCorrect: false,
+          cardLabel: shortCardLabel(cardDisplayName, resolvedSlotLabel),
+          gameTitle,
         };
       }
 
@@ -436,8 +473,96 @@ export class GameDataRepository {
         answerOptionId: answerOption._id.toString(),
         slotLabel: resolvedSlotLabel,
         isCorrect: Boolean(answerOption.isCorrect),
+        cardLabel: shortCardLabel(cardDisplayName, resolvedSlotLabel),
+        gameTitle,
       };
     });
+  }
+
+  async getGameGuessChart(gameId: string): Promise<GameGuessChartPayload> {
+    const { Game, Question, Guess, AnswerOption, PairBinding, NfcCard, GameNfcCardGroupAssignment } =
+      this.mongoService.getModels();
+
+    const game = await Game.findById(asObjectId(gameId)).lean();
+    if (!game) {
+      throw new Error('Game not found.');
+    }
+
+    const [questions, bindings, assignment] = await Promise.all([
+      Question.find({ gameId: asObjectId(gameId) }).sort({ sequence: 1 }).lean(),
+      PairBinding.find({ gameId: asObjectId(gameId) }, { pairName: 1 }).lean(),
+      GameNfcCardGroupAssignment.findOne({
+        gameId: asObjectId(gameId),
+        status: 'active',
+      }).lean(),
+    ]);
+
+    const pairs = bindings.map((b) => b.pairName);
+    const questionIds = questions.map((q) => q._id as Types.ObjectId);
+
+    const guessFilter: Record<string, unknown> = { gameId: asObjectId(gameId) };
+    if (game.startedAt) {
+      guessFilter['createdAt'] = { $gte: game.startedAt };
+    }
+    if (questionIds.length > 0) {
+      guessFilter['questionId'] = { $in: questionIds };
+    }
+
+    const [guesses, groupCards, options] = await Promise.all([
+      Guess.find(guessFilter).lean(),
+      assignment
+        ? NfcCard.find({ groupId: assignment.groupId, status: 'active' }).lean()
+        : Promise.resolve([]),
+      questionIds.length > 0
+        ? AnswerOption.find({ questionId: { $in: questionIds } }).lean()
+        : Promise.resolve([]),
+    ]);
+
+    const cardNameByUid = new Map(
+      groupCards.map((c) => [c.cardUid as string, c.displayName as string]),
+    );
+    const correctByQuestion = new Map<string, string>();
+    for (const opt of options) {
+      if (opt.isCorrect) {
+        correctByQuestion.set(
+          (opt.questionId as Types.ObjectId).toString(),
+          opt.slotLabel as string,
+        );
+      }
+    }
+
+    const guessByQuestionPair = new Map<string, GuessChartPairCell>();
+    for (const guess of guesses) {
+      if (!guess.pairName) continue;
+      const qid = (guess.questionId as Types.ObjectId).toString();
+      const slotLabel = (guess.slotLabel as string | undefined) ?? '?';
+      const cardUid = guess.cardUid as string | undefined;
+      const displayName = cardUid ? cardNameByUid.get(cardUid) : undefined;
+      guessByQuestionPair.set(`${qid}::${guess.pairName}`, {
+        cardLabel: shortCardLabel(displayName, slotLabel),
+        slotLabel,
+        isCorrect: slotLabel === (correctByQuestion.get(qid) ?? ''),
+        ...(cardUid ? { cardUid } : {}),
+      });
+    }
+
+    return {
+      gameId: (game._id as Types.ObjectId).toString(),
+      title: game.title,
+      pairs,
+      questions: questions.map((q) => {
+        const questionId = (q._id as Types.ObjectId).toString();
+        const byPair: Record<string, GuessChartPairCell | null> = {};
+        for (const pairName of pairs) {
+          byPair[pairName] = guessByQuestionPair.get(`${questionId}::${pairName}`) ?? null;
+        }
+        return {
+          questionId,
+          sequence: q.sequence,
+          byPair,
+        };
+      }),
+    };
   }
 
   async setGameState(input: { gameId: string; state: GameState }): Promise<{ gameId: string; state: GameState }> {
