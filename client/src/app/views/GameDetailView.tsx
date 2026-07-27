@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { LayoutGroup, motion } from 'motion/react';
 import { CheckCircle2, ChevronLeft, Circle, Loader2, Plus } from 'lucide-react';
 import { Button } from '../shared/button';
 import { GameRefereePanel } from './components/GameRefereePanel';
@@ -24,6 +25,8 @@ import {
   type GuessChartData,
 } from './components/PairGuessChart';
 
+const focusSpring = { type: 'spring' as const, stiffness: 280, damping: 26 };
+
 const DEMO_CREATOR_ID = '000000000000000000000001';
 const SLOT_LABELS = ['A', 'B', 'C', 'D', 'E'] as const;
 type SlotLabel = (typeof SLOT_LABELS)[number];
@@ -36,6 +39,29 @@ type GameState =
   | 'paused'
   | 'completed'
   | 'cancelled';
+
+/** Which stage panel should wear the sliding focus border. */
+type FocusSection = 'referee' | 'questions' | 'guessChart' | null;
+
+function focusSectionForState(state: GameState): FocusSection {
+  if (state === 'ready' || state === 'lobby') return 'referee';
+  if (state === 'active' || state === 'paused') return 'questions';
+  if (state === 'completed') return 'guessChart';
+  return null;
+}
+
+/** Shared sliding / state-driven focus ring (dotted border like Motion's state-updates demo). */
+function StageFocusRing({ active }: { active: boolean }) {
+  if (!active) return null;
+  return (
+    <motion.div
+      layoutId="game-stage-focus-ring"
+      className="pointer-events-none absolute -inset-1 z-10 rounded-[calc(var(--radius)+4px)] border-[3px] border-dotted border-primary"
+      transition={focusSpring}
+      aria-hidden
+    />
+  );
+}
 
 type AnswerOption = {
   id: string;
@@ -478,9 +504,12 @@ export function GameDetailView() {
     }
   }, [gameId]);
 
-  const loadGame = useCallback(async () => {
+  const loadGame = useCallback(async (opts?: { silent?: boolean }) => {
     if (!gameId) return;
-    setLoading(true);
+    const silent = opts?.silent === true;
+    if (!silent) {
+      setLoading(true);
+    }
     setFetchError(null);
     try {
       const res = await fetch(`/api/games/${gameId}`, { credentials: 'same-origin' });
@@ -497,7 +526,9 @@ export function GameDetailView() {
     } catch {
       setFetchError('Could not reach server.');
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [gameId]);
 
@@ -624,7 +655,7 @@ export function GameDetailView() {
           message.type === 'controller.joined' ||
           message.type === 'nfc.tagged'
         ) {
-          void loadGame();
+          void loadGame({ silent: true });
         }
         if (message.type === 'nfc.tagged') {
           const gameRef = gameLogRef({
@@ -653,6 +684,25 @@ export function GameDetailView() {
     };
   }, [gameId, game?.title, loadGuessChart, loadGame]);
 
+  // State-updates demo: spring x/y/rotate on the referee panel when entering lobby.
+  const [refereePose, setRefereePose] = useState({ x: 0, y: 0, rotate: 0 });
+  const prevStateRef = useRef<GameState | null>(null);
+  useEffect(() => {
+    const state = game?.state ?? null;
+    const prev = prevStateRef.current;
+    prevStateRef.current = state;
+    if (state === 'lobby' && prev !== 'lobby') {
+      setRefereePose({ x: 6, y: -4, rotate: 2 });
+      const t = window.setTimeout(() => {
+        setRefereePose({ x: 0, y: 0, rotate: 0 });
+      }, 450);
+      return () => window.clearTimeout(t);
+    }
+    if (state !== 'lobby') {
+      setRefereePose({ x: 0, y: 0, rotate: 0 });
+    }
+  }, [game?.state]);
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -677,6 +727,7 @@ export function GameDetailView() {
 
   const nextSequence = Math.max(0, ...game.questions.map((q) => q.sequence)) + 1;
   const hasOpenQuestion = game.questions.some((q) => q.state === 'open');
+  const focusSection = focusSectionForState(game.state);
 
   return (
     <div className="flex flex-col gap-4">
@@ -702,57 +753,72 @@ export function GameDetailView() {
       </div>
 
       {/* Layout: questions + guess chart | referee */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
-        {/* Questions + guess chart column */}
-        <div className="flex min-w-0 flex-1 flex-col gap-4 xl:flex-row xl:items-start">
-          <div className="min-w-0 flex-1">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-semibold">
-                Questions{' '}
-                <span className="text-muted-foreground">({game.questions.length})</span>
-              </p>
-              <AddQuestionDialog
-                gameId={game.id}
-                nextSequence={nextSequence}
-                onCreated={() => void refreshQuestions()}
-              />
-            </div>
+      <LayoutGroup id={`game-stage-${game.id}`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
+          {/* Questions + guess chart column */}
+          <div className="flex min-w-0 flex-1 flex-col gap-4 xl:flex-row xl:items-start">
+            <motion.div
+              className="relative min-w-0 flex-1 rounded-lg"
+              layout
+            >
+              <StageFocusRing active={focusSection === 'questions'} />
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold">
+                  Questions{' '}
+                  <span className="text-muted-foreground">({game.questions.length})</span>
+                </p>
+                <AddQuestionDialog
+                  gameId={game.id}
+                  nextSequence={nextSequence}
+                  onCreated={() => void refreshQuestions()}
+                />
+              </div>
 
-            {game.questions.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No questions yet. Click <strong>Add Question</strong> to get started.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {game.questions.map((q) => (
-                  <QuestionCard
-                    key={q.id}
-                    question={q}
-                    gameState={game.state}
-                    hasOpenQuestion={hasOpenQuestion}
-                    onToggleState={toggleQuestionState}
-                  />
-                ))}
-              </div>
-            )}
+              {game.questions.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  No questions yet. Click <strong>Add Question</strong> to get started.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {game.questions.map((q) => (
+                    <QuestionCard
+                      key={q.id}
+                      question={q}
+                      gameState={game.state}
+                      hasOpenQuestion={hasOpenQuestion}
+                      onToggleState={toggleQuestionState}
+                    />
+                  ))}
+                </div>
+              )}
+            </motion.div>
+
+            <motion.div
+              className="relative w-full shrink-0 rounded-lg xl:w-64"
+              layout
+            >
+              <StageFocusRing active={focusSection === 'guessChart'} />
+              <PairGuessChart chart={guessChart} loading={guessChartLoading} />
+            </motion.div>
           </div>
 
-          <div className="w-full shrink-0 xl:w-64">
-            <PairGuessChart chart={guessChart} loading={guessChartLoading} />
-          </div>
+          {/* Referee sidebar — Open for Joining lands the focus ring here */}
+          <motion.div
+            className="relative w-full shrink-0 lg:w-72"
+            animate={refereePose}
+            transition={focusSpring}
+          >
+            <StageFocusRing active={focusSection === 'referee'} />
+            <GameRefereePanel
+              game={game}
+              onRefresh={() => {
+                void loadGame({ silent: true });
+                void loadGuessChart();
+              }}
+            />
+          </motion.div>
         </div>
-
-        {/* Referee sidebar */}
-        <div className="w-full shrink-0 lg:w-72">
-          <GameRefereePanel
-            game={game}
-            onRefresh={() => {
-              void loadGame();
-              void loadGuessChart();
-            }}
-          />
-        </div>
-      </div>
+      </LayoutGroup>
     </div>
   );
 }

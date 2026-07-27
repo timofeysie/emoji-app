@@ -48,7 +48,7 @@ export function PairGuessChart({
   return (
     <div className="rounded-lg border p-3">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Question — badge
+        Result
       </p>
       {loading && !chart ? (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
