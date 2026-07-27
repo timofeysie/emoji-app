@@ -39,6 +39,7 @@ describe('GameFlowController', () => {
     getGameScores: jest.fn(),
     getGameDetail: jest.fn(),
     getGameGuessChart: jest.fn(),
+    haveAllBoundPairsGuessed: jest.fn(),
   } as unknown as jest.Mocked<GameDataRepository>;
 
   const badgeStateService: jest.Mocked<Pick<BadgeStateService, 'broadcastDashboard' | 'sendToPairNames'>> = {
@@ -66,6 +67,7 @@ describe('GameFlowController', () => {
       questions: [],
       boundPairs: [],
     });
+    repository.haveAllBoundPairsGuessed.mockResolvedValue(false);
   });
 
   it('returns 400 for invalid game creation payload', async () => {
@@ -231,6 +233,50 @@ describe('GameFlowController', () => {
         gameTitle: 'Demo Night',
       }),
     );
+    expect(repository.setQuestionState).not.toHaveBeenCalled();
+  });
+
+  it('auto-closes the question when the last bound pair answers', async () => {
+    const res = createResponseMock();
+    repository.submitGuess.mockResolvedValue({
+      guessId: '507f1f77bcf86cd799439020',
+      answerOptionId: '507f1f77bcf86cd799439021',
+      slotLabel: 'A',
+      isCorrect: true,
+      cardLabel: 'monkey',
+      gameTitle: 'Demo Night',
+    });
+    repository.haveAllBoundPairsGuessed.mockResolvedValue(true);
+    repository.getBindingsByGameId.mockResolvedValue(['white']);
+    repository.computeQuestionResult.mockResolvedValue({
+      gameId: '507f1f77bcf86cd799439017',
+      questionId: '507f1f77bcf86cd799439018',
+      correctSlotLabel: 'A',
+      results: [{ pairName: 'white', slotLabel: 'A', isCorrect: true }],
+    });
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'white',
+        cardUid: '5B:6F:B8:08',
+      },
+      res as unknown as Response,
+    );
+
+    expect(repository.setQuestionState).toHaveBeenCalledWith({
+      gameId: '507f1f77bcf86cd799439017',
+      questionId: '507f1f77bcf86cd799439018',
+      state: 'closed',
+    });
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'question.closed' }),
+    );
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'question.result' }),
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
   });
 
   describe('POST /api/games/:gameId/state', () => {

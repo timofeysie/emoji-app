@@ -687,6 +687,35 @@ export class GameDataRepository {
   }
 
   /**
+   * True when every bound pair has a Guess for this question.
+   * No bindings → false (do not auto-close an unbound game).
+   */
+  async haveAllBoundPairsGuessed(gameId: string, questionId: string): Promise<boolean> {
+    const { PairBinding, Guess } = this.mongoService.getModels();
+    const bindings = await PairBinding.find(
+      { gameId: asObjectId(gameId) },
+      { pairName: 1 },
+    ).lean();
+    if (bindings.length === 0) {
+      return false;
+    }
+
+    const guesses = await Guess.find(
+      {
+        gameId: asObjectId(gameId),
+        questionId: asObjectId(questionId),
+        pairName: { $in: bindings.map((b) => b.pairName) },
+      },
+      { pairName: 1 },
+    ).lean();
+
+    const guessedPairs = new Set(
+      guesses.map((g) => g.pairName).filter((name): name is string => Boolean(name)),
+    );
+    return bindings.every((b) => guessedPairs.has(b.pairName));
+  }
+
+  /**
    * Build per-pair correct/wrong outcomes for a closed question.
    * Includes every bound pair; `slotLabel: null` means no guess was submitted.
    */

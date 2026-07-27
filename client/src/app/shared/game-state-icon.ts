@@ -4,15 +4,18 @@ import {
   Circle,
   DoorOpen,
   EyeClosed,
+  Gamepad2,
   HandPlatter,
   MessageCircleQuestion,
   Sparkles,
+  Square,
   Trophy,
-  Turntable,
   X,
 } from 'lucide-react';
+
 /** Platform icon visual states used on badge cards (subset of log state ids). */
 export type GameVisualState =
+  | 'ready'
   | 'lobby'
   | 'lobby_joined'
   | 'active'
@@ -25,11 +28,16 @@ export type GameVisualState =
   | 'loser';
 
 export const GAME_STATE_ICONS: Record<GameVisualState, LucideIcon> = {
+  // Standby "G" on devices — Gamepad stands in on the dashboard card.
+  ready: Gamepad2,
   lobby: DoorOpen,
   lobby_joined: HandPlatter,
-  active: Turntable,
+  // Platform: solid green 4×4 centre square
+  active: Square,
   question_open: MessageCircleQuestion,
+  // Platform: blue filled circle
   correct: Circle,
+  // Platform: red X
   wrong: X,
   question_closed: BookAlert,
   completed: Sparkles,
@@ -38,14 +46,34 @@ export const GAME_STATE_ICONS: Record<GameVisualState, LucideIcon> = {
   loser: EyeClosed,
 };
 
-/** Tailwind classes for colour variants (blue circle / red x). */
+/** Short card labels (Platform icon / display reference). */
+export const GAME_STATE_SHORT_LABELS: Record<GameVisualState, string> = {
+  ready: 'Ready',
+  lobby: 'Lobby',
+  lobby_joined: 'Joined',
+  active: 'Active',
+  question_open: 'Question open',
+  correct: 'Correct',
+  wrong: 'Wrong',
+  question_closed: 'Question closed',
+  completed: 'Game over',
+  winner: 'Winner',
+  loser: 'Loser',
+};
+
+/** Tailwind classes for colour variants (blue circle / red x / green square). */
 export const GAME_STATE_ICON_CLASS: Partial<Record<GameVisualState, string>> = {
-  correct: 'text-blue-500',
+  // Filled glyphs so correct/wrong/active are unmistakable at card size.
+  correct: 'text-blue-500 fill-blue-500',
   wrong: 'text-red-500',
+  ready: 'text-emerald-600',
   lobby: 'text-amber-500',
-  active: 'text-green-600',
+  lobby_joined: 'text-amber-600',
+  active: 'text-green-600 fill-green-600',
   question_open: 'text-amber-600',
+  question_closed: 'text-slate-600',
   winner: 'text-amber-600',
+  loser: 'text-slate-500',
 };
 
 export type QuestionResultEntry = {
@@ -84,17 +112,23 @@ export function resolvePairVisualState(input: {
     return 'completed';
   }
 
+  if (gameState === 'ready' || gameState === 'draft') {
+    return 'ready';
+  }
+
   if (gameState === 'lobby') {
     return joined ? 'lobby_joined' : 'lobby';
   }
 
   if (gameState === 'active' || gameState === 'paused') {
-    if (result) {
-      if (result.slotLabel == null) return 'wrong';
-      return result.isCorrect ? 'correct' : 'wrong';
-    }
+    // Answer outcome wins over phase — including after auto-close, while the
+    // green "active" square must not replace a red X / blue circle.
     if (typeof nfcIsCorrect === 'boolean') {
       return nfcIsCorrect ? 'correct' : 'wrong';
+    }
+    if (result) {
+      if (result.slotLabel == null) return 'wrong';
+      return result.isCorrect === true ? 'correct' : 'wrong';
     }
     if (questionPhase === 'open') return 'question_open';
     if (questionPhase === 'closed') return 'question_closed';

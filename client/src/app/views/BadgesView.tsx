@@ -34,6 +34,7 @@ import {
   X as XIcon,
   Zap,
 } from 'lucide-react';
+import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { cn } from '../shared/utils';
 import {
   gameLogRef,
@@ -43,10 +44,17 @@ import {
 import {
   GAME_STATE_ICON_CLASS,
   GAME_STATE_ICONS,
+  GAME_STATE_SHORT_LABELS,
   resolvePairVisualState,
+  type GameVisualState,
   type QuestionResultEntry,
 } from '../shared/game-state-icon';
 import { getWsUrl } from '../shared/ws-url';
+
+const FRESH_HIGHLIGHT_MS = 1800;
+
+const cardSpring = { type: 'spring' as const, stiffness: 120, damping: 18, mass: 1.1 };
+const crossfadeSpring = { type: 'spring' as const, stiffness: 500, damping: 35 };
 
 /** Values accepted by `POST /api/status` (device-reported). */
 type DeviceBleStatus =
@@ -160,6 +168,7 @@ type BadgeRecord = {
 
 type GameEventState = {
   gameId: string;
+  gameTitle?: string;
   gameState: string;
   serverTime: string;
 };
@@ -358,7 +367,7 @@ function BleConnectionRow({ status }: { status?: StatusChangedEvent }) {
                 : BluetoothSearching;
 
   const midClass = cn(
-    'mx-1.5 h-5 w-5 shrink-0',
+    'h-5 w-5 shrink-0',
     display === 'connected' && 'text-primary',
     (display === 'disconnected' || display === 'offline') &&
       'text-muted-foreground',
@@ -400,10 +409,57 @@ function BleConnectionRow({ status }: { status?: StatusChangedEvent }) {
       />
       <div className="flex min-h-7 min-w-0 flex-1 items-center">
         <div className={lineClass} />
-        <MidIcon className={midClass} strokeWidth={2} aria-hidden />
+        <span className="relative mx-1.5 inline-flex h-5 w-5 shrink-0 items-center justify-center">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={display}
+              className="absolute inset-0 flex items-center justify-center"
+              initial={{ opacity: 0, scale: 0.7 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.7 }}
+              transition={crossfadeSpring}
+            >
+              <MidIcon className={midClass} strokeWidth={2} aria-hidden />
+            </motion.span>
+          </AnimatePresence>
+        </span>
         <div className={lineClass} />
       </div>
       <ClientBadgeIcon />
+    </div>
+  );
+}
+
+function GameVisualBlock({
+  visual,
+  gameTitle,
+  gameId,
+}: {
+  visual: GameVisualState;
+  gameTitle?: string;
+  gameId?: string;
+}) {
+  const Icon = GAME_STATE_ICONS[visual];
+  const iconClass = GAME_STATE_ICON_CLASS[visual];
+  const label = GAME_STATE_SHORT_LABELS[visual];
+  const filled = visual === 'correct' || visual === 'active';
+
+  return (
+    <div className="flex min-w-0 w-full flex-col items-center gap-0.5 rounded-md border bg-muted/15 px-1.5 py-1.5 text-center">
+      <Icon
+        className={cn('h-7 w-7 shrink-0', iconClass ?? 'text-foreground')}
+        strokeWidth={visual === 'wrong' ? 2.5 : filled ? 0 : 2}
+        fill={filled ? 'currentColor' : 'none'}
+        aria-hidden
+      />
+      <span className="w-full break-words text-xs font-semibold leading-tight">
+        {label}
+      </span>
+      {(gameTitle || gameId) && (
+        <div className="w-full break-words text-[10px] leading-tight text-muted-foreground">
+          {gameTitle ?? `game ${gameId?.slice(-6)}`}
+        </div>
+      )}
     </div>
   );
 }
@@ -463,6 +519,85 @@ function EmojiLabelBlock({
         {formatTimestamp(emoji.timestamp)}
       </div>
     </div>
+  );
+}
+
+function BadgePrimaryVisual({
+  emoji,
+  nfcCardMap,
+  pairName,
+  activeGame,
+  joinsByPair,
+  answerByPair,
+  questionPhase,
+  resultsByPair,
+  winnerPairNames,
+}: {
+  emoji?: EmojiSentEvent;
+  nfcCardMap: NfcCardMap;
+  pairName?: string;
+  activeGame: GameEventState | null;
+  joinsByPair: Record<string, JoinEvent>;
+  /** Sticky per-pair isCorrect from nfc.tagged / question.result. */
+  answerByPair: Record<string, boolean>;
+  questionPhase: QuestionPhase;
+  resultsByPair: Record<string, QuestionResultEntry>;
+  winnerPairNames: Set<string> | null;
+}) {
+  const joinEvent = pairName ? joinsByPair[pairName] : undefined;
+  const result = pairName ? (resultsByPair[pairName] ?? null) : null;
+  const answered =
+    pairName != null && Object.prototype.hasOwnProperty.call(answerByPair, pairName);
+
+  // Prefer live Platform game icon over free-play emoji while a game is running.
+  const inGame =
+    Boolean(activeGame) &&
+    activeGame!.gameState !== 'draft' &&
+    Boolean(pairName);
+  const visual = inGame
+    ? resolvePairVisualState({
+        gameState: activeGame?.gameState,
+        joined: Boolean(joinEvent),
+        questionPhase,
+        nfcIsCorrect: answered && pairName ? answerByPair[pairName] : null,
+        result,
+        winnerPairNames,
+        pairName,
+      })
+    : null;
+
+  const content = visual ? (
+    <motion.div
+      key={`game-${visual}-${activeGame?.gameId ?? ''}`}
+      className="w-full"
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={crossfadeSpring}
+    >
+      <GameVisualBlock
+        visual={visual}
+        gameTitle={activeGame?.gameTitle}
+        gameId={activeGame?.gameId}
+      />
+    </motion.div>
+  ) : (
+    <motion.div
+      key={`emoji-${emoji?.label ?? 'none'}-${emoji?.timestamp ?? ''}`}
+      className="w-full"
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={crossfadeSpring}
+    >
+      <EmojiLabelBlock emoji={emoji} nfcCardMap={nfcCardMap} />
+    </motion.div>
+  );
+
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      {content}
+    </AnimatePresence>
   );
 }
 
@@ -636,6 +771,7 @@ function BadgeCardGameSection({
   activeGame,
   joinsByPair,
   nfcByPair,
+  answerByPair,
   questionPhase,
   resultsByPair,
   winnerPairNames,
@@ -644,6 +780,7 @@ function BadgeCardGameSection({
   activeGame: GameEventState | null;
   joinsByPair: Record<string, JoinEvent>;
   nfcByPair: Record<string, NfcTagEvent>;
+  answerByPair: Record<string, boolean>;
   questionPhase: QuestionPhase;
   resultsByPair: Record<string, QuestionResultEntry>;
   winnerPairNames: Set<string> | null;
@@ -652,32 +789,30 @@ function BadgeCardGameSection({
   const joinEvent = joinsByPair[pairName];
   const nfcEvent = nfcByPair[pairName];
   const result = resultsByPair[pairName] ?? null;
-  if (!joinEvent && !nfcEvent && !activeGame && !result) return null;
+  const answered = Object.prototype.hasOwnProperty.call(answerByPair, pairName);
+  if (!joinEvent && !nfcEvent && !activeGame && !result && !answered) return null;
 
   const visual = resolvePairVisualState({
     gameState: activeGame?.gameState,
     joined: Boolean(joinEvent),
     questionPhase,
-    nfcIsCorrect: nfcEvent?.isCorrect,
+    nfcIsCorrect: answered ? answerByPair[pairName] : null,
     result,
     winnerPairNames,
     pairName,
   });
-  const Icon = visual ? GAME_STATE_ICONS[visual] : null;
-  const iconClass = visual ? GAME_STATE_ICON_CLASS[visual] : undefined;
+  const statusLabel = visual
+    ? GAME_STATE_SHORT_LABELS[visual]
+    : activeGame?.gameState;
 
   return (
     <div className="w-full rounded-md border bg-muted/10 px-1.5 py-1 text-[10px] text-muted-foreground">
       {activeGame && (
-        <div className="flex items-center gap-1">
-          {Icon ? (
-            <Icon
-              className={cn('h-3.5 w-3.5 shrink-0', iconClass ?? 'text-foreground')}
-              strokeWidth={2}
-              aria-hidden
-            />
-          ) : null}
-          <span className="font-medium text-foreground capitalize">{activeGame.gameState}</span>
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
+          <span className="font-medium text-foreground">{statusLabel}</span>
+          {activeGame.gameTitle && (
+            <span className="text-[9px]">· {activeGame.gameTitle}</span>
+          )}
           <span className="text-[9px]">· {formatShortTime(activeGame.serverTime)}</span>
         </div>
       )}
@@ -690,11 +825,11 @@ function BadgeCardGameSection({
             NFC{nfcEvent.slotLabel ? `: ${nfcEvent.slotLabel}` : ''} ·{' '}
             {formatShortTime(nfcEvent.serverTime)}
           </span>
-          {typeof nfcEvent.isCorrect === 'boolean' && !result && (
+          {answered && !result && (
             <ResultChip
               result={{
                 slotLabel: nfcEvent.slotLabel ?? null,
-                isCorrect: nfcEvent.isCorrect,
+                isCorrect: answerByPair[pairName],
               }}
             />
           )}
@@ -716,6 +851,9 @@ export const BadgesView = () => {
   const [recordsByKey, setRecordsByKey] = useState<Record<string, BadgeRecord>>(
     {},
   );
+  const [freshKeys, setFreshKeys] = useState<Set<string>>(() => new Set());
+  const knownKeysRef = useRef<Set<string>>(new Set());
+  const freshTimeoutsRef = useRef<Map<string, number>>(new Map());
   const [nfcCardMap, setNfcCardMap] = useState<NfcCardMap>({});
   const [socketStatus, setSocketStatus] = useState<
     'connecting' | 'connected' | 'closed'
@@ -733,6 +871,8 @@ export const BadgesView = () => {
   const [activeGame, setActiveGame] = useState<GameEventState | null>(null);
   const [joinsByPair, setJoinsByPair] = useState<Record<string, JoinEvent>>({});
   const [nfcByPair, setNfcByPair] = useState<Record<string, NfcTagEvent>>({});
+  /** Sticky isCorrect per pair — survives question.closed; cleared on next open. */
+  const [answerByPair, setAnswerByPair] = useState<Record<string, boolean>>({});
   const [questionPhase, setQuestionPhase] = useState<QuestionPhase>('none');
   const [resultsByPair, setResultsByPair] = useState<
     Record<string, QuestionResultEntry>
@@ -741,6 +881,57 @@ export const BadgesView = () => {
     null,
   );
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+
+  const markFreshKeys = useCallback((keys: string[]) => {
+    if (keys.length === 0) return;
+    setFreshKeys((prev) => {
+      const next = new Set(prev);
+      for (const key of keys) next.add(key);
+      return next;
+    });
+    for (const key of keys) {
+      const existing = freshTimeoutsRef.current.get(key);
+      if (existing != null) window.clearTimeout(existing);
+      const id = window.setTimeout(() => {
+        freshTimeoutsRef.current.delete(key);
+        setFreshKeys((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }, FRESH_HIGHLIGHT_MS);
+      freshTimeoutsRef.current.set(key, id);
+    }
+  }, []);
+
+  /**
+   * Track known badge keys. Until the first snapshot finishes, new keys are
+   * baseline only (no highlight). After that, newly seen keys get a brief pulse.
+   */
+  const snapshotDoneRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      for (const id of freshTimeoutsRef.current.values()) {
+        window.clearTimeout(id);
+      }
+      freshTimeoutsRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    const newcomers: string[] = [];
+    for (const [key, record] of Object.entries(recordsByKey)) {
+      if (record.badgeId === 'unknown') continue;
+      if (!knownKeysRef.current.has(key)) {
+        newcomers.push(key);
+        knownKeysRef.current.add(key);
+      }
+    }
+    if (!snapshotDoneRef.current || newcomers.length === 0) return;
+    markFreshKeys(newcomers);
+  }, [recordsByKey, markFreshKeys]);
 
   const loadWinnerPairs = useCallback(async (gameId: string) => {
     try {
@@ -780,9 +971,19 @@ export const BadgesView = () => {
         return;
       }
       const fromServer = snapshotToRecords(data.badges);
+      // First snapshot only: seed baseline keys so the initial grid is not "fresh".
+      if (!snapshotDoneRef.current) {
+        for (const [key, record] of Object.entries(fromServer)) {
+          if (record.badgeId !== 'unknown') {
+            knownKeysRef.current.add(key);
+          }
+        }
+      }
       setRecordsByKey((prev) => ({ ...prev, ...fromServer }));
     } catch {
       // Snapshot is optional; WebSocket may still deliver events.
+    } finally {
+      snapshotDoneRef.current = true;
     }
   }, []);
 
@@ -908,24 +1109,34 @@ export const BadgesView = () => {
         if (message.type === 'game.state.changed') {
           setActiveGame({
             gameId: message.gameId,
+            gameTitle: message.gameTitle ?? gameTitlesByIdRef.current[message.gameId],
             gameState: message.state,
             serverTime: message.serverTime,
           });
+          if (message.gameTitle) {
+            gameTitlesByIdRef.current[message.gameId] = message.gameTitle;
+          }
           if (message.state === 'draft' || message.state === 'ready') {
             setQuestionPhase('none');
             setResultsByPair({});
             setNfcByPair({});
+            setAnswerByPair({});
             setWinnerPairNames(null);
             setJoinsByPair({});
           } else if (message.state === 'lobby') {
             setQuestionPhase('none');
             setResultsByPair({});
             setNfcByPair({});
+            setAnswerByPair({});
             setWinnerPairNames(null);
             setJoinsByPair({});
           } else if (message.state === 'active') {
-            setQuestionPhase('none');
+            // Do not reset questionPhase here — question.opened often arrives in
+            // the same burst and resetting to 'none' races to the green "active"
+            // square over "?". Clear prior-question answers only.
             setResultsByPair({});
+            setNfcByPair({});
+            setAnswerByPair({});
             setWinnerPairNames(null);
           } else if (message.state === 'completed' || message.state === 'cancelled') {
             void loadWinnerPairs(message.gameId);
@@ -958,6 +1169,7 @@ export const BadgesView = () => {
           setQuestionPhase('open');
           setResultsByPair({});
           setNfcByPair({});
+          setAnswerByPair({});
           logGameState(
             'question_open',
             `WS question.opened questionId=${message.questionId} ${refFor(message.gameId, message.gameTitle)} icon=message-circle-question-mark`,
@@ -976,13 +1188,20 @@ export const BadgesView = () => {
 
         if (message.type === 'question.result') {
           const next: Record<string, QuestionResultEntry> = {};
+          const nextAnswers: Record<string, boolean> = {};
           for (const row of message.results) {
             next[row.pairName] = {
               slotLabel: row.slotLabel,
               isCorrect: row.isCorrect,
             };
+            if (row.slotLabel != null) {
+              nextAnswers[row.pairName] = row.isCorrect;
+            } else {
+              nextAnswers[row.pairName] = false;
+            }
           }
           setResultsByPair(next);
+          setAnswerByPair((prev) => ({ ...prev, ...nextAnswers }));
           const gameRef = refFor(message.gameId, message.gameTitle);
           for (const row of message.results) {
             if (row.slotLabel == null) {
@@ -1016,6 +1235,12 @@ export const BadgesView = () => {
                 serverTime: message.serverTime,
               },
             }));
+            if (typeof message.isCorrect === 'boolean') {
+              setAnswerByPair((prev) => ({
+                ...prev,
+                [pairName]: message.isCorrect as boolean,
+              }));
+            }
           }
           const pair = pairName ?? '?';
           const slot = message.slotLabel ?? '?';
@@ -1084,12 +1309,11 @@ export const BadgesView = () => {
   }, [loadWinnerPairs]);
 
   const badgeRecords = useMemo(() => {
-    const hasRealBadges = Object.keys(recordsByKey).length > 0;
-
     // DEV DUMMY BADGE: to inject a static example badge for layout development without a physical
     // device, uncomment the block below and uncomment devExampleBadgeRecord near the top of this
     // file. Do not commit with this enabled.
     //
+    // const hasRealBadges = Object.keys(recordsByKey).length > 0;
     // const source =
     //   import.meta.env.DEV && !hasRealBadges
     //     ? { [devExampleBadgeRecord.key]: devExampleBadgeRecord }
@@ -1105,6 +1329,15 @@ export const BadgesView = () => {
 
     return records.sort((a, b) => a.badgeId.localeCompare(b.badgeId));
   }, [recordsByKey]);
+
+  const skipStaggerRef = useRef(false);
+  const useStagger = !skipStaggerRef.current;
+
+  useEffect(() => {
+    if (badgeRecords.length > 0) {
+      skipStaggerRef.current = true;
+    }
+  }, [badgeRecords.length]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -1126,26 +1359,68 @@ export const BadgesView = () => {
           this page after posting.
         </div>
       ) : (
-        <div className="-mx-2 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2">
-          {badgeRecords.map((record) => (
-            <div key={record.key} className="min-w-0 overflow-hidden rounded-lg border">
-              <BadgeCardHeader record={record} versionInfo={versionInfo} />
-              <div className="flex flex-col items-center gap-1 p-1.5">
-                <BleConnectionRow status={record.status} />
-                <EmojiLabelBlock emoji={record.emoji} nfcCardMap={nfcCardMap} />
-                <BadgeCardGameSection
-                  pairName={record.status?.pairName}
-                  activeGame={activeGame}
-                  joinsByPair={joinsByPair}
-                  nfcByPair={nfcByPair}
-                  questionPhase={questionPhase}
-                  resultsByPair={resultsByPair}
-                  winnerPairNames={winnerPairNames}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
+        <LayoutGroup>
+          <motion.div
+            layout
+            className="relative -mx-2 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2"
+          >
+            <AnimatePresence mode="popLayout">
+              {badgeRecords.map((record, index) => {
+                const isFresh = freshKeys.has(record.key);
+                return (
+                  <motion.div
+                    key={record.key}
+                    layout
+                    initial={{ opacity: 0, scale: 0.6, y: 16 }}
+                    animate={{
+                      opacity: 1,
+                      scale: 1,
+                      y: 0,
+                      boxShadow: isFresh
+                        ? '0 0 0 2px hsl(var(--primary)), 0 8px 24px -8px hsl(var(--primary) / 0.45)'
+                        : '0 0 0 0px transparent',
+                    }}
+                    exit={{ opacity: 0, scale: 0.85, y: -8 }}
+                    transition={{
+                      ...cardSpring,
+                      delay: useStagger ? Math.min(index * 0.12, 0.7) : 0,
+                    }}
+                    className={cn(
+                      'min-w-0 overflow-hidden rounded-lg border bg-background',
+                      isFresh && 'border-primary/70',
+                    )}
+                  >
+                    <BadgeCardHeader record={record} versionInfo={versionInfo} />
+                    <div className="flex flex-col items-center gap-1 p-1.5">
+                      <BleConnectionRow status={record.status} />
+                      <BadgePrimaryVisual
+                        emoji={record.emoji}
+                        nfcCardMap={nfcCardMap}
+                        pairName={record.status?.pairName}
+                        activeGame={activeGame}
+                        joinsByPair={joinsByPair}
+                        answerByPair={answerByPair}
+                        questionPhase={questionPhase}
+                        resultsByPair={resultsByPair}
+                        winnerPairNames={winnerPairNames}
+                      />
+                      <BadgeCardGameSection
+                        pairName={record.status?.pairName}
+                        activeGame={activeGame}
+                        joinsByPair={joinsByPair}
+                        nfcByPair={nfcByPair}
+                        answerByPair={answerByPair}
+                        questionPhase={questionPhase}
+                        resultsByPair={resultsByPair}
+                        winnerPairNames={winnerPairNames}
+                      />
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </motion.div>
+        </LayoutGroup>
       )}
     </div>
   );

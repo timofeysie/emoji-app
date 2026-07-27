@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle2, CreditCard, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '../../shared/button';
 import { Input } from '../../shared/input';
@@ -15,6 +16,8 @@ import {
   logFromServerGameState,
   logGameState,
 } from '../../shared/game-state-log';
+
+const chipSpring = { type: 'spring' as const, stiffness: 420, damping: 28 };
 
 type GameState =
   | 'draft'
@@ -258,29 +261,58 @@ export function GameRefereePanel({
         {game.boundPairs.length === 0 ? (
           <p className="text-xs text-muted-foreground italic">None bound yet.</p>
         ) : (
-          <div className="flex flex-col gap-1">
-            {game.boundPairs.map((bp) => (
-              <div key={bp.pairName} className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs',
-                    bp.joined
-                      ? 'border-green-400/60 bg-green-50 text-green-800'
-                      : 'border-border bg-muted/50 text-muted-foreground',
-                  )}
+          <div className="relative flex flex-col gap-1">
+            <AnimatePresence mode="popLayout" initial={false}>
+              {game.boundPairs.map((bp) => (
+                <motion.div
+                  key={bp.pairName}
+                  layout
+                  initial={{ opacity: 0, scale: 0.85, y: -4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: -4 }}
+                  transition={chipSpring}
+                  className="flex items-center gap-2"
                 >
-                  {bp.pairName}
-                  {bp.joined ? (
-                    <>
-                      <CheckCircle2 className="h-3 w-3" aria-label="Ready to start" />
-                      <span className="text-[10px]">· ready to start</span>
-                    </>
-                  ) : (
-                    <span className="text-[10px]">· waiting to join</span>
-                  )}
-                </span>
-              </div>
-            ))}
+                  <motion.span
+                    layout
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs',
+                      bp.joined
+                        ? 'border-green-400/60 bg-green-50 text-green-800'
+                        : 'border-border bg-muted/50 text-muted-foreground',
+                    )}
+                  >
+                    {bp.pairName}
+                    <AnimatePresence mode="wait" initial={false}>
+                      {bp.joined ? (
+                        <motion.span
+                          key="joined"
+                          className="inline-flex items-center gap-1"
+                          initial={{ opacity: 0, scale: 0.5 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.5 }}
+                          transition={chipSpring}
+                        >
+                          <CheckCircle2 className="h-3 w-3" aria-label="Ready to start" />
+                          <span className="text-[10px]">· ready to start</span>
+                        </motion.span>
+                      ) : (
+                        <motion.span
+                          key="waiting"
+                          className="text-[10px]"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          · waiting to join
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </motion.span>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
         )}
 
@@ -325,9 +357,7 @@ export function GameRefereePanel({
           </div>
         ) : (
           <p className="rounded-md border border-dashed px-2.5 py-2 text-xs text-muted-foreground">
-            No live pairs to invite. Power on a Zero (with{' '}
-            <code className="text-[11px]">pairName</code> in status) and check the Badges
-            page, then hit Refresh.
+            No live pairs to invite.
           </p>
         )}
 

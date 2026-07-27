@@ -122,6 +122,57 @@ export class GameFlowController {
     private readonly nfcCardService: NfcCardService,
   ) {}
 
+  /** Close a question and broadcast question.closed + question.result. */
+  private async closeQuestionAndNotify(
+    gameId: string,
+    questionId: string,
+    options: { reason: 'referee' | 'all_pairs_answered' },
+  ): Promise<void> {
+    const { reason } = options;
+    await this.gameDataRepository.setQuestionState({
+      gameId,
+      questionId,
+      state: 'closed',
+    });
+
+    const serverTime = new Date().toISOString();
+    const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
+    const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
+    const gameTitle = gameDetail?.title;
+    const questionEvent = {
+      type: 'question.closed' as const,
+      gameId,
+      ...(gameTitle ? { gameTitle } : {}),
+      questionId,
+      serverTime,
+    };
+
+    console.log(
+      `[GAME] server | question_closed | Question closed | questionId=${questionId}${
+        gameTitle ? ` game="${gameTitle}"` : ''
+      } reason=${reason}`,
+    );
+
+    this.badgeStateService.broadcastDashboard(questionEvent);
+    if (pairNames.length > 0) {
+      this.badgeStateService.sendToPairNames(pairNames, questionEvent);
+    }
+
+    const result = await this.gameDataRepository.computeQuestionResult(gameId, questionId);
+    const resultEvent = {
+      type: 'question.result' as const,
+      ...result,
+      serverTime,
+    };
+    console.log(
+      `[GAME] server | question_closed | Question closed | question.result pairs=${result.results.length} correctSlot=${result.correctSlotLabel}`,
+    );
+    this.badgeStateService.broadcastDashboard(resultEvent);
+    if (pairNames.length > 0) {
+      this.badgeStateService.sendToPairNames(pairNames, resultEvent);
+    }
+  }
+
   @Get('games')
   async listGames(@Res() res: Response): Promise<void> {
     try {
@@ -528,6 +579,13 @@ export class GameFlowController {
 
     try {
       const { gameId, state } = payloadResult.data;
+
+      if (state === 'closed') {
+        await this.closeQuestionAndNotify(gameId, questionId, { reason: 'referee' });
+        res.status(200).json({ ok: true });
+        return;
+      }
+
       await this.gameDataRepository.setQuestionState({
         gameId,
         questionId,
@@ -538,9 +596,8 @@ export class GameFlowController {
       const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
       const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
       const gameTitle = gameDetail?.title;
-      const questionEventType = state === 'open' ? 'question.opened' : 'question.closed';
       const questionEvent = {
-        type: questionEventType,
+        type: 'question.opened' as const,
         gameId,
         ...(gameTitle ? { gameTitle } : {}),
         questionId,
@@ -548,9 +605,7 @@ export class GameFlowController {
       };
 
       console.log(
-        `[GAME] server | ${
-          state === 'open' ? 'question_open' : 'question_closed'
-        } | ${state === 'open' ? 'Question open' : 'Question closed'} | questionId=${questionId}${
+        `[GAME] server | question_open | Question open | questionId=${questionId}${
           gameTitle ? ` game="${gameTitle}"` : ''
         }`,
       );
@@ -558,22 +613,6 @@ export class GameFlowController {
       this.badgeStateService.broadcastDashboard(questionEvent);
       if (pairNames.length > 0) {
         this.badgeStateService.sendToPairNames(pairNames, questionEvent);
-      }
-
-      if (state === 'closed') {
-        const result = await this.gameDataRepository.computeQuestionResult(gameId, questionId);
-        const resultEvent = {
-          type: 'question.result' as const,
-          ...result,
-          serverTime,
-        };
-        console.log(
-          `[GAME] server | question_closed | Question closed | question.result pairs=${result.results.length} correctSlot=${result.correctSlotLabel}`,
-        );
-        this.badgeStateService.broadcastDashboard(resultEvent);
-        if (pairNames.length > 0) {
-          this.badgeStateService.sendToPairNames(pairNames, resultEvent);
-        }
       }
 
       res.status(200).json({ ok: true });
@@ -611,6 +650,16 @@ export class GameFlowController {
         isCorrect: outcome.isCorrect,
         serverTime: new Date().toISOString(),
       });
+
+      // Last bound pair to answer → close so badges leave NFC-armed state.
+      if (
+        outcome.guessId &&
+        (await this.gameDataRepository.haveAllBoundPairsGuessed(gameId, questionId))
+      ) {
+        await this.closeQuestionAndNotify(gameId, questionId, {
+          reason: 'all_pairs_answered',
+        });
+      }
 
       res.status(201).json({ ...outcome, cardLabel });
     } catch (error) {
