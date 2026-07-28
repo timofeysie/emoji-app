@@ -26,6 +26,11 @@ import {
 } from './components/PairGuessChart';
 
 const focusSpring = { type: 'spring' as const, stiffness: 280, damping: 26 };
+const questionFocusSpring = {
+  type: 'spring' as const,
+  stiffness: 240,
+  damping: 24,
+};
 
 const DEMO_CREATOR_ID = '000000000000000000000001';
 const SLOT_LABELS = ['A', 'B', 'C', 'D', 'E'] as const;
@@ -58,6 +63,18 @@ function StageFocusRing({ active }: { active: boolean }) {
       layoutId="game-stage-focus-ring"
       className="pointer-events-none absolute -inset-1 z-10 rounded-[calc(var(--radius)+4px)] border-[3px] border-dotted border-primary"
       transition={focusSpring}
+      aria-hidden
+    />
+  );
+}
+
+function NextQuestionRing({ active }: { active: boolean }) {
+  if (!active) return null;
+  return (
+    <motion.div
+      layoutId="next-question-focus-ring"
+      className="pointer-events-none absolute -inset-0.5 z-10 rounded-[calc(var(--radius)+2px)] border-2 border-amber-400 shadow-[0_0_0_3px_hsl(45_93%_58%/0.16)]"
+      transition={questionFocusSpring}
       aria-hidden
     />
   );
@@ -175,7 +192,7 @@ function AddQuestionDialog({
 
   const handleSubmit = async () => {
     if (!questionText.trim()) {
-      setError('Question text is required.');
+      setError('Round text is required.');
       return;
     }
     if (options.some((o) => !o.text.trim())) {
@@ -210,14 +227,14 @@ function AddQuestionDialog({
       });
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
-        setError(body.error ?? 'Failed to create question.');
+        setError(body.error ?? 'Failed to create round.');
         return;
       }
       setOpen(false);
       reset();
       onCreated();
     } catch {
-      setError('Network error — could not create question.');
+      setError('Network error — could not create round.');
     } finally {
       setSaving(false);
     }
@@ -234,20 +251,20 @@ function AddQuestionDialog({
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-          Add Question
+          Add Round
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add Question</DialogTitle>
+          <DialogTitle>Add Round</DialogTitle>
           <DialogDescription>
-            Question {nextSequence} · NFC slot labels are auto-assigned (A–E).
+            Round {nextSequence} · NFC slot labels are auto-assigned (A–E).
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="q-text">Question</Label>
+            <Label htmlFor="q-text">Round</Label>
             <Input
               id="q-text"
               placeholder="e.g. What colour is the sky?"
@@ -342,7 +359,7 @@ function AddQuestionDialog({
         <DialogFooter>
           <Button onClick={() => void handleSubmit()} disabled={saving}>
             {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden />}
-            Add Question
+            Add Round
           </Button>
           <DialogClose asChild>
             <Button type="button" variant="secondary">
@@ -359,14 +376,18 @@ function QuestionCard({
   question,
   gameState,
   hasOpenQuestion,
+  guesses,
+  isNext,
   onToggleState,
 }: {
   question: Question;
   gameState: GameState;
   hasOpenQuestion: boolean;
+  guesses: Array<{ pairName: string; cardLabel: string }>;
+  isNext: boolean;
   onToggleState: (questionId: string, newState: 'open' | 'closed') => Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [toggleError, setToggleError] = useState<string | null>(null);
 
@@ -382,40 +403,41 @@ function QuestionCard({
     try {
       await onToggleState(question.id, isOpen ? 'closed' : 'open');
     } catch (err) {
-      setToggleError(err instanceof Error ? err.message : 'Failed to update question state.');
+      setToggleError(err instanceof Error ? err.message : 'Failed to update round state.');
     } finally {
       setToggling(false);
     }
   };
 
   return (
-    <div className="rounded-lg border">
+    <motion.div className="relative rounded-lg border bg-background" layout>
+      <NextQuestionRing active={isNext} />
       <button
         type="button"
         className="flex w-full items-start gap-3 px-4 py-3 text-left"
         onClick={() => setExpanded((v) => !v)}
       >
         <span className="mt-0.5 shrink-0 text-xs font-bold text-muted-foreground">
-          Q{question.sequence}
+          Round {question.sequence}
         </span>
         <div className="min-w-0 flex-1">
           <p className="font-medium leading-snug">{question.text}</p>
-          <div className="mt-0.5 flex gap-2 text-[11px] text-muted-foreground">
-            <span>{question.mode}</span>
-            <span>·</span>
-            <span className="capitalize">{question.state}</span>
-            <span>·</span>
-            <span>{question.answerOptions.length} options</span>
-            {hasAnswers && (
-              <>
-                <span>·</span>
-                <span>
-                  {question.guessCount} answer
-                  {(question.guessCount ?? 0) === 1 ? '' : 's'}
+          {guesses.length > 0 ? (
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+              {guesses.map((guess) => (
+                <span key={guess.pairName}>
+                  <span className="font-medium capitalize text-foreground">
+                    {guess.pairName}
+                  </span>{' '}
+                  · <span className="font-medium">{guess.cardLabel}</span>
                 </span>
-              </>
-            )}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              No badge scans yet
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {isActive && (
@@ -426,9 +448,9 @@ function QuestionCard({
               disabled={toggling || (!isOpen && hasOpenQuestion)}
               title={
                 !isOpen && hasOpenQuestion
-                  ? 'Another question is already open'
+                  ? 'Another round is already open'
                   : !isOpen && hasAnswers
-                    ? 'This question already has answers — reopen to accept more'
+                    ? 'This round already has answers — reopen to accept more'
                     : undefined
               }
               onClick={handleToggle}
@@ -452,6 +474,22 @@ function QuestionCard({
 
       {expanded && (
         <div className="border-t px-4 py-3">
+          <div className="mb-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+            <span>{question.mode}</span>
+            <span>·</span>
+            <span className="capitalize">{question.state}</span>
+            <span>·</span>
+            <span>{question.answerOptions.length} options</span>
+            {hasAnswers && (
+              <>
+                <span>·</span>
+                <span>
+                  {question.guessCount} answer
+                  {(question.guessCount ?? 0) === 1 ? '' : 's'}
+                </span>
+              </>
+            )}
+          </div>
           <div className="grid gap-1.5 sm:grid-cols-2">
             {question.answerOptions.map((opt) => (
               <div
@@ -474,7 +512,7 @@ function QuestionCard({
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -728,6 +766,21 @@ export function GameDetailView() {
   const nextSequence = Math.max(0, ...game.questions.map((q) => q.sequence)) + 1;
   const hasOpenQuestion = game.questions.some((q) => q.state === 'open');
   const focusSection = focusSectionForState(game.state);
+  const orderedQuestions = [...game.questions].sort(
+    (a, b) => a.sequence - b.sequence,
+  );
+  const highlightedQuestion =
+    orderedQuestions.find((q) => q.state === 'open') ??
+    orderedQuestions.find((q) => q.state === 'draft') ??
+    null;
+  const guessesByQuestion = new Map(
+    (guessChart?.questions ?? []).map((question) => [
+      question.questionId,
+      Object.entries(question.byPair).flatMap(([pairName, cell]) =>
+        cell ? [{ pairName, cardLabel: cell.cardLabel }] : [],
+      ),
+    ]),
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -758,14 +811,14 @@ export function GameDetailView() {
           {/* Questions + guess chart column */}
           <div className="flex min-w-0 flex-1 flex-col gap-4 xl:flex-row xl:items-start">
             <motion.div
-              className="relative min-w-0 flex-1 rounded-lg"
+              className="relative min-w-0 flex-1 rounded-lg border bg-background p-3"
               layout
             >
               <StageFocusRing active={focusSection === 'questions'} />
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold">
-                  Questions{' '}
-                  <span className="text-muted-foreground">({game.questions.length})</span>
+                  {game.questions.length}{' '}
+                  {game.questions.length === 1 ? 'Round' : 'Rounds'}
                 </p>
                 <AddQuestionDialog
                   gameId={game.id}
@@ -776,16 +829,21 @@ export function GameDetailView() {
 
               {game.questions.length === 0 ? (
                 <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  No questions yet. Click <strong>Add Question</strong> to get started.
+                  No rounds yet. Click <strong>Add Round</strong> to get started.
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {game.questions.map((q) => (
+                  {orderedQuestions.map((q) => (
                     <QuestionCard
                       key={q.id}
                       question={q}
                       gameState={game.state}
                       hasOpenQuestion={hasOpenQuestion}
+                      guesses={guessesByQuestion.get(q.id) ?? []}
+                      isNext={
+                        game.state === 'active' &&
+                        highlightedQuestion?.id === q.id
+                      }
                       onToggleState={toggleQuestionState}
                     />
                   ))}

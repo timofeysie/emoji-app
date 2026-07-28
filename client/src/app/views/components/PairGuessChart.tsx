@@ -58,13 +58,13 @@ export function PairGuessChart({
       ) : pairs.length === 0 ? (
         <p className="text-xs italic text-muted-foreground">No bound pairs yet.</p>
       ) : questions.length === 0 ? (
-        <p className="text-xs italic text-muted-foreground">No questions yet.</p>
+        <p className="text-xs italic text-muted-foreground">No rounds yet.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[12rem] border-collapse text-sm">
             <thead>
               <tr className="border-b text-left text-[11px] text-muted-foreground">
-                <th className="py-1 pr-3 font-medium">Question</th>
+                <th className="py-1 pr-3 font-medium">Round</th>
                 {pairs.map((pairName) => (
                   <th key={pairName} className="px-2 py-1 font-medium capitalize">
                     {pairName}
@@ -75,7 +75,9 @@ export function PairGuessChart({
             <tbody>
               {questions.map((q) => (
                 <tr key={q.questionId} className="border-b border-border/60">
-                  <td className="py-1.5 pr-3 font-medium tabular-nums">Q{q.sequence}</td>
+                  <td className="py-1.5 pr-3 font-medium tabular-nums">
+                    Round {q.sequence}
+                  </td>
                   {pairs.map((pairName) => {
                     const cell = q.byPair[pairName];
                     const label = cell?.cardLabel ?? '-';
