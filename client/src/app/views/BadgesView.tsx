@@ -55,6 +55,7 @@ const FRESH_HIGHLIGHT_MS = 1800;
 
 const cardSpring = { type: 'spring' as const, stiffness: 120, damping: 18, mass: 1.1 };
 const crossfadeSpring = { type: 'spring' as const, stiffness: 500, damping: 35 };
+const cardEntranceTimes = [0, 0.48, 0.82, 1];
 
 /** Values accepted by `POST /api/status` (device-reported). */
 type DeviceBleStatus =
@@ -1371,19 +1372,23 @@ export const BadgesView = () => {
                   <motion.div
                     key={record.key}
                     layout
-                    initial={{ opacity: 0, scale: 0.6, y: 16 }}
+                    initial={{ opacity: 0, scale: 0.08, rotate: 0 }}
                     animate={{
-                      opacity: 1,
-                      scale: 1,
-                      y: 0,
+                      opacity: [0, 1, 1, 1],
+                      scale: [0.08, 0.45, 1.04, 1],
+                      rotate: [0, 210, 345, 360],
                       boxShadow: isFresh
                         ? '0 0 0 2px hsl(var(--primary)), 0 8px 24px -8px hsl(var(--primary) / 0.45)'
                         : '0 0 0 0px transparent',
                     }}
                     exit={{ opacity: 0, scale: 0.85, y: -8 }}
                     transition={{
-                      ...cardSpring,
+                      duration: 1.05,
+                      times: cardEntranceTimes,
+                      ease: ['easeOut', [0.22, 1, 0.36, 1], 'easeOut'],
                       delay: useStagger ? Math.min(index * 0.12, 0.7) : 0,
+                      layout: cardSpring,
+                      boxShadow: cardSpring,
                     }}
                     className={cn(
                       'min-w-0 overflow-hidden rounded-lg border bg-background',

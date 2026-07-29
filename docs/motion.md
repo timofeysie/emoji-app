@@ -34,8 +34,9 @@ allowing existing cards to reposition smoothly when another pair appears.
 
 New cards:
 
-- Enter from a smaller scale and lower position.
-- Settle with a deliberately slow spring.
+- Appear as a small tile, spin once while expanding, then settle upright at full
+  size.
+- Use a slight scale overshoot to soften the final expansion.
 - Receive a short primary-color ring and shadow.
 - Skip the initial stagger when added through a live update.
 
