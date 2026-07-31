@@ -149,6 +149,8 @@ describe('GameFlowController', () => {
       title: 'Demo Night',
       state: 'active',
       boundPairs: [],
+      totalRounds: 2,
+      nextRoundSequence: null,
       currentQuestion: {
         id: '507f1f77bcf86cd799439015',
         text: 'Visible question',
@@ -194,6 +196,15 @@ describe('GameFlowController', () => {
             },
           ],
         },
+        {
+          id: '507f1f77bcf86cd799439017',
+          text: 'Hidden next question',
+          sequence: 2,
+          mode: 'standard',
+          state: 'draft',
+          guessCount: 0,
+          answerOptions: [],
+        },
       ],
     });
     repository.getGameGuessChart.mockResolvedValue({
@@ -225,6 +236,7 @@ describe('GameFlowController', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         currentQuestion: null,
+        nextRoundSequence: 2,
         previousResult: {
           questionId: '507f1f77bcf86cd799439015',
           text: 'Completed question',
@@ -244,6 +256,49 @@ describe('GameFlowController', () => {
             },
           ],
         },
+      }),
+    );
+  });
+
+  it('marks the player view complete after the final round closes', async () => {
+    const res = createResponseMock();
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [],
+      questions: [
+        {
+          id: '507f1f77bcf86cd799439015',
+          text: 'Final question',
+          sequence: 1,
+          mode: 'standard',
+          state: 'closed',
+          guessCount: 1,
+          answerOptions: [],
+        },
+      ],
+    });
+    repository.getGameGuessChart.mockResolvedValue({
+      gameId: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      pairs: [],
+      questions: [],
+    });
+
+    await controller.getGamePlayView(
+      '507f1f77bcf86cd799439011',
+      res as unknown as Response,
+    );
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentQuestion: null,
+        nextRoundSequence: null,
+        totalRounds: 1,
       }),
     );
   });

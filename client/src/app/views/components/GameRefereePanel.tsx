@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { CheckCircle2, CreditCard, Loader2, Plus, RefreshCw } from 'lucide-react';
+import {
+  CheckCircle2,
+  CreditCard,
+  HelpCircle,
+  Loader2,
+  Plus,
+  RefreshCw,
+  XCircle,
+} from 'lucide-react';
 import { Button } from '../../shared/button';
 import { Input } from '../../shared/input';
 import {
@@ -31,6 +39,7 @@ type GameState =
 type BoundPair = {
   pairName: string;
   joined: boolean;
+  readyForNextQuestion: boolean | null;
   controllerId?: string;
 };
 
@@ -39,6 +48,7 @@ type GameDetail = {
   title: string;
   state: GameState;
   boundPairs: BoundPair[];
+  questions: Array<{ state: string }>;
 };
 
 type LifecycleButton = {
@@ -230,6 +240,9 @@ export function GameRefereePanel({
   };
 
   const lifecycleButtons = LIFECYCLE_BUTTONS[game.state] ?? [];
+  const isBetweenRounds =
+    game.state === 'active' &&
+    !game.questions.some((question) => question.state === 'open');
 
   return (
     <div className="flex flex-col gap-5 rounded-lg border p-4">
@@ -277,14 +290,49 @@ export function GameRefereePanel({
                     layout
                     className={cn(
                       'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs',
-                      bp.joined
+                      isBetweenRounds && bp.readyForNextQuestion === true
                         ? 'border-green-400/60 bg-green-50 text-green-800'
-                        : 'border-border bg-muted/50 text-muted-foreground',
+                        : isBetweenRounds && bp.readyForNextQuestion === false
+                          ? 'border-red-400/60 bg-red-50 text-red-800'
+                          : isBetweenRounds
+                            ? 'border-amber-400/60 bg-amber-50 text-amber-800'
+                            : bp.joined
+                              ? 'border-green-400/60 bg-green-50 text-green-800'
+                              : 'border-border bg-muted/50 text-muted-foreground',
                     )}
                   >
                     {bp.pairName}
                     <AnimatePresence mode="wait" initial={false}>
-                      {bp.joined ? (
+                      {isBetweenRounds ? (
+                        <motion.span
+                          key={`readiness-${String(bp.readyForNextQuestion)}`}
+                          className="inline-flex items-center gap-1"
+                          initial={{ opacity: 0, scale: 0.5 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.5 }}
+                          transition={chipSpring}
+                        >
+                          {bp.readyForNextQuestion === true ? (
+                            <>
+                              <CheckCircle2 className="h-3 w-3" aria-label="Ready" />
+                              <span className="text-[10px]">· ready</span>
+                            </>
+                          ) : bp.readyForNextQuestion === false ? (
+                            <>
+                              <XCircle className="h-3 w-3" aria-label="Needs more time" />
+                              <span className="text-[10px]">· wait</span>
+                            </>
+                          ) : (
+                            <>
+                              <HelpCircle
+                                className="h-3 w-3"
+                                aria-label="Waiting for response"
+                              />
+                              <span className="text-[10px]">· awaiting response</span>
+                            </>
+                          )}
+                        </motion.span>
+                      ) : bp.joined ? (
                         <motion.span
                           key="joined"
                           className="inline-flex items-center gap-1"

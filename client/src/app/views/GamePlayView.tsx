@@ -44,6 +44,8 @@ type GamePlayDetail = {
     pairName: string;
     readyForNextQuestion: boolean | null;
   }>;
+  totalRounds: number;
+  nextRoundSequence: number | null;
   currentQuestion: PlayQuestion | null;
   previousResult: {
     questionId: string;
@@ -176,6 +178,8 @@ export function GamePlayView() {
   const isLive = LIVE_STATES.includes(game.state);
   const question = game.currentQuestion;
   const boundPairs = game.boundPairs ?? [];
+  const totalRounds = game.totalRounds ?? game.previousResult?.sequence ?? 0;
+  const nextRoundSequence = game.nextRoundSequence ?? null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -312,13 +316,17 @@ export function GamePlayView() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Round {game.previousResult.sequence} result
+                    {nextRoundSequence !== null
+                      ? `Round ${nextRoundSequence}`
+                      : `Total rounds: ${totalRounds}`}
                   </p>
                   <h2
                     id="previous-result-heading"
                     className="mt-1 text-lg font-semibold"
                   >
-                    {game.previousResult.text}
+                    {nextRoundSequence !== null
+                      ? 'Waiting for the referee to open the next round.'
+                      : 'Game complete'}
                   </h2>
                 </div>
                 <ScanLine
@@ -327,42 +335,47 @@ export function GamePlayView() {
                 />
               </div>
 
-              <div className="mt-4">
-                <p className="mb-2 text-xs font-medium text-muted-foreground">
-                  Ready for the next round?
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {boundPairs.map((pair) => (
-                    <span
-                      key={pair.pairName}
-                      className="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs font-medium"
-                    >
-                      {pair.readyForNextQuestion === null ? (
-                        <HelpCircle
-                          className="h-3.5 w-3.5 text-amber-600"
-                          aria-label="Waiting for ready or wait response"
-                        />
-                      ) : pair.readyForNextQuestion ? (
-                        <CheckCircle2
-                          className="h-3.5 w-3.5 text-green-600"
-                          aria-label="Ready"
-                        />
-                      ) : (
-                        <XCircle
-                          className="h-3.5 w-3.5 text-red-600"
-                          aria-label="Needs more time"
-                        />
-                      )}
-                      <span className="capitalize">{pair.pairName}</span>
-                    </span>
-                  ))}
-                  {boundPairs.length === 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      No controller pairs are connected.
-                    </span>
-                  )}
+              {nextRoundSequence !== null && (
+                <div className="mt-4 rounded-lg border border-dashed bg-muted/20 p-3">
+                  <p className="mb-2 text-sm font-semibold">
+                    Ready for round {nextRoundSequence}?
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {boundPairs.map((pair) => (
+                      <span
+                        key={pair.pairName}
+                        className="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs font-medium"
+                      >
+                        {pair.readyForNextQuestion === null ? (
+                          <HelpCircle
+                            className="h-3.5 w-3.5 text-amber-600"
+                            aria-label="Waiting for ready or wait response"
+                          />
+                        ) : pair.readyForNextQuestion ? (
+                          <CheckCircle2
+                            className="h-3.5 w-3.5 text-green-600"
+                            aria-label="Ready"
+                          />
+                        ) : (
+                          <XCircle
+                            className="h-3.5 w-3.5 text-red-600"
+                            aria-label="Needs more time"
+                          />
+                        )}
+                        <span className="capitalize">{pair.pairName}</span>
+                      </span>
+                    ))}
+                    {boundPairs.length === 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        No controller pairs are connected.
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    The question stays hidden until the referee opens the round.
+                  </p>
                 </div>
-              </div>
+              )}
 
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {game.previousResult.scans.map((scan, index) => (
@@ -410,10 +423,6 @@ export function GamePlayView() {
                   </p>
                 )}
               </div>
-
-              <p className="mt-5 text-center text-xs text-muted-foreground">
-                Waiting for the referee to open the next round.
-              </p>
             </motion.section>
           ) : (
             <motion.div

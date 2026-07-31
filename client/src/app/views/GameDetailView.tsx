@@ -102,6 +102,7 @@ type Question = {
 type BoundPair = {
   pairName: string;
   joined: boolean;
+  readyForNextQuestion: boolean | null;
   controllerId?: string;
 };
 
@@ -691,6 +692,7 @@ export function GameDetailView() {
         if (
           message.type === 'game.state.changed' ||
           message.type === 'controller.joined' ||
+          message.type === 'controller.readiness.changed' ||
           message.type === 'nfc.tagged'
         ) {
           void loadGame({ silent: true });

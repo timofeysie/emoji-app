@@ -235,6 +235,13 @@ export class GameFlowController {
           (question) =>
             question.state === 'closed' || question.state === 'scored',
         );
+      const nextQuestion = previousQuestion
+        ? game.questions.find(
+            (question) =>
+              question.sequence > previousQuestion.sequence &&
+              question.state !== 'archived',
+          )
+        : null;
       const previousChart = previousQuestion
         ? await this.gameDataRepository.getGameGuessChart(gameId)
         : null;
@@ -251,6 +258,10 @@ export class GameFlowController {
           pairName: pair.pairName,
           readyForNextQuestion: pair.readyForNextQuestion,
         })),
+        totalRounds: game.questions.filter(
+          (question) => question.state !== 'archived',
+        ).length,
+        nextRoundSequence: openQuestion ? null : (nextQuestion?.sequence ?? null),
         currentQuestion: openQuestion
           ? {
               id: openQuestion.id,
