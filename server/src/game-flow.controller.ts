@@ -205,6 +205,84 @@ export class GameFlowController {
     }
   }
 
+  @Get('games/:gameId/play')
+  async getGamePlayView(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({
+        error: 'Invalid gameId',
+        details: getValidationErrors(gameIdResult.error),
+      });
+      return;
+    }
+    try {
+      const game = await this.gameDataRepository.getGameDetail(gameId);
+      if (!game) {
+        res.status(404).json({ error: 'Game not found' });
+        return;
+      }
+      const openQuestion = game.questions.find(
+        (question) => question.state === 'open',
+      );
+      const previousQuestion = game.questions
+        .slice()
+        .reverse()
+        .find(
+          (question) =>
+            question.state === 'closed' || question.state === 'scored',
+        );
+      const previousChart = previousQuestion
+        ? await this.gameDataRepository.getGameGuessChart(gameId)
+        : null;
+      const previousChartQuestion = previousQuestion
+        ? previousChart?.questions.find(
+            (question) => question.questionId === previousQuestion.id,
+          )
+        : undefined;
+      res.status(200).json({
+        id: game.id,
+        title: game.title,
+        state: game.state,
+        currentQuestion: openQuestion
+          ? {
+              id: openQuestion.id,
+              text: openQuestion.text,
+              sequence: openQuestion.sequence,
+              answerOptions: openQuestion.answerOptions.map((option) => ({
+                id: option.id,
+                slotLabel: option.slotLabel,
+                text: option.text,
+                sequence: option.sequence,
+              })),
+            }
+          : null,
+        previousResult: previousQuestion
+          ? {
+              questionId: previousQuestion.id,
+              text: previousQuestion.text,
+              sequence: previousQuestion.sequence,
+              scans: Object.entries(previousChartQuestion?.byPair ?? {}).map(
+                ([pairName, scan]) => ({
+                  pairName,
+                  cardLabel: scan?.cardLabel ?? null,
+                  slotLabel: scan?.slotLabel ?? null,
+                  isCorrect: scan?.isCorrect ?? false,
+                }),
+              ),
+            }
+          : null,
+      });
+    } catch (error) {
+      res.status(500).json({
+        error: 'Failed to fetch game play view',
+        message: String(error),
+      });
+    }
+  }
+
   @Get('games/:gameId/nfc-card-group')
   async getActiveNfcCardGroup(
     @Param('gameId') gameId: string,

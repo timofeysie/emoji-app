@@ -23,6 +23,7 @@ const NAV_LINKS = [
 function viewTitleForPathname(pathname: string): string {
   if (pathname === '/') return 'Dashboard';
   if (pathname === '/games') return 'Games';
+  if (/^\/games\/[^/]+\/play$/.test(pathname)) return 'Student Game';
   if (pathname.startsWith('/games/')) return 'Game';
   if (pathname === '/badges') return 'Badges';
   if (pathname === '/lights') return 'Lights';

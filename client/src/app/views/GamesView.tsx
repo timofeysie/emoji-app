@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Gamepad2, Loader2, Plus } from 'lucide-react';
+import { Gamepad2, Loader2, Pencil, Play, Plus } from 'lucide-react';
 import { Button } from '../shared/button';
 import {
   Dialog,
@@ -37,6 +37,15 @@ type GameSummary = {
   endedAt: string | null;
   questionCount: number;
 };
+
+function canPlayGame(game: GameSummary): boolean {
+  return (
+    game.questionCount > 0 &&
+    (game.state === 'lobby' ||
+      game.state === 'active' ||
+      game.state === 'paused')
+  );
+}
 
 const STATE_STYLES: Record<GameState, string> = {
   draft: 'bg-muted text-muted-foreground',
@@ -233,27 +242,57 @@ export function GamesView() {
 
       {!loading && games.length > 0 && (
         <div className="flex flex-col gap-2">
-          {games.map((game) => (
-            <button
-              key={game.id}
-              type="button"
-              className="flex w-full items-center gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-accent/50"
-              onClick={() => navigate(`/games/${game.id}`)}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-semibold">{game.title}</span>
-                  <StateChip state={game.state} />
+          {games.map((game) => {
+            const playable = canPlayGame(game);
+            const playTitle = playable
+              ? `Play ${game.title} in student mode`
+              : game.questionCount === 0
+                ? 'Add at least one round before playing'
+                : 'Open the game for joining before playing';
+
+            return (
+              <div
+                key={game.id}
+                className="flex w-full items-center gap-3 rounded-lg border bg-card px-4 py-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-semibold">{game.title}</span>
+                    <StateChip state={game.state} />
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {game.questionCount} question
+                    {game.questionCount === 1 ? '' : 's'}
+                    {' · '}
+                    {new Date(game.createdAt).toLocaleDateString()}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                  {game.questionCount} question{game.questionCount === 1 ? '' : 's'}
-                  {' · '}
-                  {new Date(game.createdAt).toLocaleDateString()}
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Edit ${game.title}`}
+                    title={`Edit ${game.title}`}
+                    onClick={() => navigate(`/games/${game.id}`)}
+                  >
+                    <Pencil aria-hidden />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={playTitle}
+                    title={playTitle}
+                    disabled={!playable}
+                    onClick={() => navigate(`/games/${game.id}/play`)}
+                  >
+                    <Play aria-hidden />
+                  </Button>
                 </div>
               </div>
-              <span className="shrink-0 text-xs text-muted-foreground">Open →</span>
-            </button>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

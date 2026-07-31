@@ -101,6 +101,13 @@ Closing the current round updates server state. After the questions refresh,
 the amber ring moves to the next draft round. Internal API and model names
 continue to use `question`; the interface presents these records as rounds.
 
+## Student round transition
+
+`client/src/app/views/GamePlayView.tsx` replaces a completed round with its tag
+scan results while waiting for the referee. When the next round opens,
+`AnimatePresence` moves the result panel away before the new question expands
+and rotates into place. Answer options then enter with a short stagger.
+
 ## Adding motion
 
 When adding another animated state:
@@ -135,6 +142,8 @@ Check the following flows:
 6. Select **End Game** and confirm the stage ring moves to Result.
 7. Select **Play Again** and confirm the stage ring returns to Referee
    Controls.
+8. Open student mode, close a round, and confirm its tag results remain visible
+   until the next round animates in.
 
 Run static checks after changing animation code:
 

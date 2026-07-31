@@ -1363,7 +1363,7 @@ export const BadgesView = () => {
         <LayoutGroup>
           <motion.div
             layout
-            className="relative -mx-2 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2"
+            className="relative mx-1 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2"
           >
             <AnimatePresence mode="popLayout">
               {badgeRecords.map((record, index) => {

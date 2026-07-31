@@ -12,6 +12,7 @@ import { ScheduledScenesView } from './views/ScheduledScenesView';
 import { BadgesView } from './views/BadgesView';
 import { GamesView } from './views/GamesView';
 import { GameDetailView } from './views/GameDetailView';
+import { GamePlayView } from './views/GamePlayView';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { UserProfileView } from './views/UserProfileView';
 
@@ -30,6 +31,7 @@ function MainShell() {
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <Routes>
               <Route path="/games" element={<GamesView />} />
+              <Route path="/games/:gameId/play" element={<GamePlayView />} />
               <Route path="/games/:gameId" element={<GameDetailView />} />
               <Route path="/badges" element={<BadgesView />} />
               <Route path="/lights" element={<LightsView />} />

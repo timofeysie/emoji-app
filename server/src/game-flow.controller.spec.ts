@@ -96,6 +96,155 @@ describe('GameFlowController', () => {
     expect(res.json).toHaveBeenCalledWith({ gameId: '507f1f77bcf86cd799439011' });
   });
 
+  it('returns only the open question without correct-answer flags for student play', async () => {
+    const res = createResponseMock();
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [],
+      questions: [
+        {
+          id: '507f1f77bcf86cd799439015',
+          text: 'Visible question',
+          sequence: 1,
+          mode: 'standard',
+          state: 'open',
+          guessCount: 0,
+          answerOptions: [
+            {
+              id: '507f1f77bcf86cd799439016',
+              slotLabel: 'A',
+              text: 'Visible answer',
+              isCorrect: true,
+              sequence: 1,
+            },
+          ],
+        },
+        {
+          id: '507f1f77bcf86cd799439017',
+          text: 'Future question',
+          sequence: 2,
+          mode: 'standard',
+          state: 'draft',
+          guessCount: 0,
+          answerOptions: [],
+        },
+      ],
+    });
+
+    await controller.getGamePlayView(
+      '507f1f77bcf86cd799439011',
+      res as unknown as Response,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      state: 'active',
+      currentQuestion: {
+        id: '507f1f77bcf86cd799439015',
+        text: 'Visible question',
+        sequence: 1,
+        answerOptions: [
+          {
+            id: '507f1f77bcf86cd799439016',
+            slotLabel: 'A',
+            text: 'Visible answer',
+            sequence: 1,
+          },
+        ],
+      },
+      previousResult: null,
+    });
+  });
+
+  it('returns the latest completed-round tag scans for student play', async () => {
+    const res = createResponseMock();
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [],
+      questions: [
+        {
+          id: '507f1f77bcf86cd799439015',
+          text: 'Completed question',
+          sequence: 1,
+          mode: 'standard',
+          state: 'closed',
+          guessCount: 1,
+          answerOptions: [
+            {
+              id: '507f1f77bcf86cd799439016',
+              slotLabel: 'A',
+              text: 'Correct answer',
+              isCorrect: true,
+              sequence: 1,
+            },
+          ],
+        },
+      ],
+    });
+    repository.getGameGuessChart.mockResolvedValue({
+      gameId: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      pairs: ['green', 'white'],
+      questions: [
+        {
+          questionId: '507f1f77bcf86cd799439015',
+          sequence: 1,
+          byPair: {
+            green: {
+              cardLabel: 'Monkey',
+              slotLabel: 'A',
+              isCorrect: true,
+            },
+            white: null,
+          },
+        },
+      ],
+    });
+
+    await controller.getGamePlayView(
+      '507f1f77bcf86cd799439011',
+      res as unknown as Response,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentQuestion: null,
+        previousResult: {
+          questionId: '507f1f77bcf86cd799439015',
+          text: 'Completed question',
+          sequence: 1,
+          scans: [
+            {
+              pairName: 'green',
+              cardLabel: 'Monkey',
+              slotLabel: 'A',
+              isCorrect: true,
+            },
+            {
+              pairName: 'white',
+              cardLabel: null,
+              slotLabel: null,
+              isCorrect: false,
+            },
+          ],
+        },
+      }),
+    );
+  });
+
   it('returns 400 when player participant is missing playMode', async () => {
     const res = createResponseMock();
 
