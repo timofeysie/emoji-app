@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Clock3,
+  HelpCircle,
   Loader2,
   Pause,
   Play,
@@ -39,6 +40,10 @@ type GamePlayDetail = {
   id: string;
   title: string;
   state: GameState;
+  boundPairs: Array<{
+    pairName: string;
+    readyForNextQuestion: boolean | null;
+  }>;
   currentQuestion: PlayQuestion | null;
   previousResult: {
     questionId: string;
@@ -121,7 +126,8 @@ export function GamePlayView() {
           (message.type === 'game.state.changed' ||
             message.type === 'question.opened' ||
             message.type === 'question.closed' ||
-            message.type === 'question.result')
+            message.type === 'question.result' ||
+            message.type === 'controller.readiness.changed')
         ) {
           void loadGame({ silent: true });
         }
@@ -169,6 +175,7 @@ export function GamePlayView() {
 
   const isLive = LIVE_STATES.includes(game.state);
   const question = game.currentQuestion;
+  const boundPairs = game.boundPairs ?? [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -318,6 +325,43 @@ export function GamePlayView() {
                   className="h-7 w-7 shrink-0 text-primary"
                   aria-hidden
                 />
+              </div>
+
+              <div className="mt-4">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                  Ready for the next round?
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {boundPairs.map((pair) => (
+                    <span
+                      key={pair.pairName}
+                      className="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs font-medium"
+                    >
+                      {pair.readyForNextQuestion === null ? (
+                        <HelpCircle
+                          className="h-3.5 w-3.5 text-amber-600"
+                          aria-label="Waiting for ready or wait response"
+                        />
+                      ) : pair.readyForNextQuestion ? (
+                        <CheckCircle2
+                          className="h-3.5 w-3.5 text-green-600"
+                          aria-label="Ready"
+                        />
+                      ) : (
+                        <XCircle
+                          className="h-3.5 w-3.5 text-red-600"
+                          aria-label="Needs more time"
+                        />
+                      )}
+                      <span className="capitalize">{pair.pairName}</span>
+                    </span>
+                  ))}
+                  {boundPairs.length === 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      No controller pairs are connected.
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="mt-4 grid gap-2 sm:grid-cols-2">

@@ -209,6 +209,7 @@ const pairBindingSchema = new Schema(
     gameId: { type: objectId, ref: 'Game', default: null },
     controllerId: { type: String },
     joined: { type: Boolean, required: true, default: false },
+    readyForNextQuestion: { type: Boolean, default: null },
     updatedAt: { type: Date, default: () => new Date() },
   },
   { collection: 'pairBindings' },

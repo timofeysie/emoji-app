@@ -18,10 +18,16 @@ function createResponseMock(): ResponseMock {
 }
 
 describe('PairBindingsController', () => {
-  const repository: jest.Mocked<Pick<GameDataRepository, 'bindPair' | 'getBinding' | 'markJoined'>> = {
+  const repository: jest.Mocked<
+    Pick<
+      GameDataRepository,
+      'bindPair' | 'getBinding' | 'markJoined' | 'setPairReadyForNextQuestion'
+    >
+  > = {
     bindPair: jest.fn(),
     getBinding: jest.fn(),
     markJoined: jest.fn(),
+    setPairReadyForNextQuestion: jest.fn(),
   };
 
   const badgeStateService: jest.Mocked<Pick<BadgeStateService, 'broadcastDashboard'>> = {
@@ -94,6 +100,7 @@ describe('PairBindingsController', () => {
         gameId: '507f1f77bcf86cd799439011',
         state: 'lobby' as const,
         joined: false,
+        readyForNextQuestion: null,
         openQuestionId: null,
       };
       repository.getBinding.mockResolvedValue(snapshot);
@@ -145,6 +152,65 @@ describe('PairBindingsController', () => {
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ ok: true });
+    });
+  });
+
+  describe('POST /api/games/:gameId/readiness', () => {
+    it('records and broadcasts readiness between questions', async () => {
+      const res = createResponseMock();
+      repository.getBinding.mockResolvedValue({
+        pairName: 'white',
+        controllerId: 'zero-1',
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'active',
+        joined: true,
+        readyForNextQuestion: null,
+        openQuestionId: null,
+      });
+      repository.setPairReadyForNextQuestion.mockResolvedValue(true);
+
+      await controller.setReadiness(
+        '507f1f77bcf86cd799439011',
+        { pairName: 'white', controllerId: 'zero-1', ready: true },
+        res as unknown as Response,
+      );
+
+      expect(repository.setPairReadyForNextQuestion).toHaveBeenCalledWith({
+        gameId: '507f1f77bcf86cd799439011',
+        pairName: 'white',
+        ready: true,
+      });
+      expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'controller.readiness.changed',
+          pairName: 'white',
+          ready: true,
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ok: true, ready: true });
+    });
+
+    it('rejects readiness while a question is open', async () => {
+      const res = createResponseMock();
+      repository.getBinding.mockResolvedValue({
+        pairName: 'white',
+        controllerId: 'zero-1',
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'active',
+        joined: true,
+        readyForNextQuestion: null,
+        openQuestionId: '507f1f77bcf86cd799439012',
+      });
+
+      await controller.setReadiness(
+        '507f1f77bcf86cd799439011',
+        { pairName: 'white', ready: false },
+        res as unknown as Response,
+      );
+
+      expect(repository.setPairReadyForNextQuestion).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(409);
     });
   });
 });

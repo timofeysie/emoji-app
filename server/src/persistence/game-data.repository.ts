@@ -79,6 +79,7 @@ export type QuestionDetail = {
 export type BoundPairSummary = {
   pairName: string;
   joined: boolean;
+  readyForNextQuestion: boolean | null;
   controllerId?: string;
 };
 
@@ -129,6 +130,7 @@ export type PairBindingSnapshot = {
   gameId: string | null;
   state: GameState | null;
   joined: boolean;
+  readyForNextQuestion: boolean | null;
   openQuestionId: string | null;
 };
 
@@ -604,7 +606,13 @@ export class GameDataRepository {
 
       await PairBinding.updateMany(
         { gameId: gid },
-        { $set: { joined: false, updatedAt: new Date() } },
+        {
+          $set: {
+            joined: false,
+            readyForNextQuestion: null,
+            updatedAt: new Date(),
+          },
+        },
       );
 
       // Clear prior-run guesses so uniq_guess_per_pair does not block replay.
@@ -636,6 +644,7 @@ export class GameDataRepository {
         $set: {
           gameId: new Types.ObjectId(input.gameId),
           joined: false,
+          readyForNextQuestion: null,
           updatedAt: new Date(),
           ...(input.controllerId ? { controllerId: input.controllerId } : {}),
         },
@@ -671,6 +680,7 @@ export class GameDataRepository {
       gameId,
       state,
       joined: binding.joined,
+      readyForNextQuestion: binding.readyForNextQuestion ?? null,
       openQuestionId,
     };
   }
@@ -678,6 +688,41 @@ export class GameDataRepository {
   async markJoined(pairName: string): Promise<void> {
     const { PairBinding } = this.mongoService.getModels();
     await PairBinding.updateOne({ pairName }, { $set: { joined: true, updatedAt: new Date() } });
+  }
+
+  async setPairReadyForNextQuestion(input: {
+    gameId: string;
+    pairName: string;
+    ready: boolean;
+  }): Promise<boolean> {
+    const { PairBinding } = this.mongoService.getModels();
+    const result = await PairBinding.updateOne(
+      {
+        gameId: asObjectId(input.gameId),
+        pairName: input.pairName,
+        joined: true,
+      },
+      {
+        $set: {
+          readyForNextQuestion: input.ready,
+          updatedAt: new Date(),
+        },
+      },
+    );
+    return result.matchedCount > 0;
+  }
+
+  async resetPairReadiness(gameId: string): Promise<void> {
+    const { PairBinding } = this.mongoService.getModels();
+    await PairBinding.updateMany(
+      { gameId: asObjectId(gameId) },
+      {
+        $set: {
+          readyForNextQuestion: null,
+          updatedAt: new Date(),
+        },
+      },
+    );
   }
 
   async getBindingsByGameId(gameId: string): Promise<string[]> {
@@ -924,6 +969,7 @@ export class GameDataRepository {
       boundPairs: boundPairs.map((bp) => ({
         pairName: bp.pairName,
         joined: bp.joined,
+        readyForNextQuestion: bp.readyForNextQuestion ?? null,
         controllerId: bp.controllerId ?? undefined,
       })),
     };

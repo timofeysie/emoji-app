@@ -16,6 +16,12 @@ const joinGameSchema = z.object({
   controllerId: z.string().optional(),
 });
 
+const setReadinessSchema = z.object({
+  pairName: z.string().min(1),
+  controllerId: z.string().optional(),
+  ready: z.boolean(),
+});
+
 function getValidationErrors(error: ZodError): Array<{ path: string; message: string }> {
   return error.issues.map((issue) => ({
     path: issue.path.join('.') || 'root',
@@ -110,6 +116,63 @@ export class PairBindingsController {
       res.status(200).json({ ok: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to join game', message: String(error) });
+    }
+  }
+
+  @Post('games/:gameId/readiness')
+  async setReadiness(
+    @Param('gameId') gameId: string,
+    @Body() body: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    const payloadResult = setReadinessSchema.safeParse(body);
+    if (!gameIdResult.success || !payloadResult.success) {
+      const details = [
+        ...(!gameIdResult.success ? getValidationErrors(gameIdResult.error) : []),
+        ...(!payloadResult.success ? getValidationErrors(payloadResult.error) : []),
+      ];
+      res.status(400).json({ error: 'Validation failed', details });
+      return;
+    }
+
+    try {
+      const { pairName, controllerId, ready } = payloadResult.data;
+      const binding = await this.gameDataRepository.getBinding(pairName);
+      if (
+        !binding ||
+        binding.gameId !== gameId ||
+        binding.state !== 'active' ||
+        binding.openQuestionId !== null
+      ) {
+        res.status(409).json({
+          error: 'Readiness is only accepted from joined pairs between questions',
+        });
+        return;
+      }
+
+      const updated = await this.gameDataRepository.setPairReadyForNextQuestion({
+        gameId,
+        pairName,
+        ready,
+      });
+      if (!updated) {
+        res.status(409).json({ error: 'Pair is not joined to this game' });
+        return;
+      }
+
+      const event = {
+        type: 'controller.readiness.changed',
+        gameId,
+        pairName,
+        ready,
+        ...(controllerId ? { controllerId } : {}),
+        serverTime: new Date().toISOString(),
+      };
+      this.badgeStateService.broadcastDashboard(event);
+      res.status(200).json({ ok: true, ready });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update readiness', message: String(error) });
     }
   }
 }

@@ -134,6 +134,7 @@ export class GameFlowController {
       questionId,
       state: 'closed',
     });
+    await this.gameDataRepository.resetPairReadiness(gameId);
 
     const serverTime = new Date().toISOString();
     const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
@@ -246,6 +247,10 @@ export class GameFlowController {
         id: game.id,
         title: game.title,
         state: game.state,
+        boundPairs: game.boundPairs.map((pair) => ({
+          pairName: pair.pairName,
+          readyForNextQuestion: pair.readyForNextQuestion,
+        })),
         currentQuestion: openQuestion
           ? {
               id: openQuestion.id,

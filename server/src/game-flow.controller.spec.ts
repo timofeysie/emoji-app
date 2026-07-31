@@ -34,6 +34,8 @@ describe('GameFlowController', () => {
     bindPair: jest.fn(),
     getBinding: jest.fn(),
     markJoined: jest.fn(),
+    setPairReadyForNextQuestion: jest.fn(),
+    resetPairReadiness: jest.fn(),
     getBindingsByGameId: jest.fn(),
     computeQuestionResult: jest.fn(),
     getGameScores: jest.fn(),
@@ -146,6 +148,7 @@ describe('GameFlowController', () => {
       id: '507f1f77bcf86cd799439011',
       title: 'Demo Night',
       state: 'active',
+      boundPairs: [],
       currentQuestion: {
         id: '507f1f77bcf86cd799439015',
         text: 'Visible question',
@@ -316,6 +319,9 @@ describe('GameFlowController', () => {
       res as unknown as Response,
     );
 
+    expect(repository.resetPairReadiness).toHaveBeenCalledWith(
+      '507f1f77bcf86cd799439016',
+    );
     expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'question.closed' }),
     );
