@@ -201,7 +201,7 @@ describe('GameFlowController', () => {
           text: 'Hidden next question',
           sequence: 2,
           mode: 'standard',
-          state: 'draft',
+          state: 'closed',
           guessCount: 0,
           answerOptions: [],
         },
@@ -355,6 +355,35 @@ describe('GameFlowController', () => {
   it('emits question.closed and question.result when a question is closed', async () => {
     const res = createResponseMock();
     repository.getBindingsByGameId.mockResolvedValue(['green', 'white']);
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439016',
+      title: 'Demo Night',
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [],
+      questions: [
+        {
+          id: '507f1f77bcf86cd799439015',
+          text: 'Round 1',
+          sequence: 1,
+          mode: 'standard',
+          state: 'closed',
+          guessCount: 2,
+          answerOptions: [],
+        },
+        {
+          id: '507f1f77bcf86cd799439017',
+          text: 'Round 2',
+          sequence: 2,
+          mode: 'standard',
+          state: 'draft',
+          guessCount: 0,
+          answerOptions: [],
+        },
+      ],
+    });
     repository.computeQuestionResult.mockResolvedValue({
       gameId: '507f1f77bcf86cd799439016',
       questionId: '507f1f77bcf86cd799439015',
@@ -378,7 +407,10 @@ describe('GameFlowController', () => {
       '507f1f77bcf86cd799439016',
     );
     expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'question.closed' }),
+      expect.objectContaining({
+        type: 'question.closed',
+        isFinalRound: false,
+      }),
     );
     expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -458,6 +490,26 @@ describe('GameFlowController', () => {
     });
     repository.haveAllBoundPairsGuessed.mockResolvedValue(true);
     repository.getBindingsByGameId.mockResolvedValue(['white']);
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439017',
+      title: 'Demo Night',
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [],
+      questions: [
+        {
+          id: '507f1f77bcf86cd799439018',
+          text: 'Final round',
+          sequence: 1,
+          mode: 'standard',
+          state: 'closed',
+          guessCount: 1,
+          answerOptions: [],
+        },
+      ],
+    });
     repository.computeQuestionResult.mockResolvedValue({
       gameId: '507f1f77bcf86cd799439017',
       questionId: '507f1f77bcf86cd799439018',
@@ -481,7 +533,10 @@ describe('GameFlowController', () => {
       state: 'closed',
     });
     expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'question.closed' }),
+      expect.objectContaining({
+        type: 'question.closed',
+        isFinalRound: true,
+      }),
     );
     expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'question.result' }),

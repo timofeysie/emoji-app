@@ -13,6 +13,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '../shared/button';
+import { TextReveal } from '../shared/text-reveal';
 import { getWsUrl } from '../shared/ws-url';
 
 type GameState =
@@ -76,6 +77,12 @@ function unavailableMessage(state: GameState): string {
     return 'This game has ended.';
   }
   return 'This game was cancelled.';
+}
+
+function readinessLabel(ready: boolean | null): string {
+  if (ready === true) return 'ready';
+  if (ready === false) return 'wait';
+  return 'awaiting response';
 }
 
 export function GamePlayView() {
@@ -363,6 +370,12 @@ export function GamePlayView() {
                           />
                         )}
                         <span className="capitalize">{pair.pairName}</span>
+                        <TextReveal
+                          revealKey={readinessLabel(pair.readyForNextQuestion)}
+                          className="text-muted-foreground"
+                        >
+                          · {readinessLabel(pair.readyForNextQuestion)}
+                        </TextReveal>
                       </span>
                     ))}
                     {boundPairs.length === 0 && (

@@ -60,6 +60,24 @@ chips.
 
 These animations do not change pair binding or game lifecycle API calls.
 
+## Live status text reveal
+
+`client/src/app/shared/text-reveal.tsx` adapts Motion's
+[text reveal example](https://motion.dev/examples/react-text-reveal) for
+state-driven updates. The previous value collapses and fades while the new
+value reveals from zero width using a spring transition.
+
+The effect is used for:
+
+- Badge dashboard game-state labels.
+- Referee pair chips when a player joins or changes between awaiting, ready,
+  and wait.
+- Player-view pair chips between rounds.
+
+The reveal key must represent the displayed state, not a timestamp, so polling
+the same value does not replay the animation. The component uses an ARIA live
+region so the changed status remains available to assistive technology.
+
 ## Game-stage focus ring
 
 `client/src/app/views/GameDetailView.tsx` uses a shared focus ring to guide the

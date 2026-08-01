@@ -140,11 +140,22 @@ export class GameFlowController {
     const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
     const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
     const gameTitle = gameDetail?.title;
+    const closedQuestion = gameDetail?.questions.find(
+      (question) => question.id === questionId,
+    );
+    const isFinalRound =
+      closedQuestion != null &&
+      !gameDetail?.questions.some(
+        (question) =>
+          question.sequence > closedQuestion.sequence &&
+          question.state !== 'archived',
+      );
     const questionEvent = {
       type: 'question.closed' as const,
       gameId,
       ...(gameTitle ? { gameTitle } : {}),
       questionId,
+      isFinalRound,
       serverTime,
     };
 
@@ -228,13 +239,22 @@ export class GameFlowController {
       const openQuestion = game.questions.find(
         (question) => question.state === 'open',
       );
-      const previousQuestion = game.questions
-        .slice()
-        .reverse()
-        .find(
-          (question) =>
-            question.state === 'closed' || question.state === 'scored',
-        );
+      const completedQuestions = game.questions.filter(
+        (question) =>
+          question.state === 'closed' || question.state === 'scored',
+      );
+      const previousQuestion =
+        completedQuestions
+          .filter((question) => question.closedAt)
+          .sort(
+            (a, b) =>
+              Date.parse(b.closedAt ?? '') - Date.parse(a.closedAt ?? ''),
+          )[0] ??
+        completedQuestions
+          .slice()
+          .reverse()
+          .find((question) => question.guessCount > 0) ??
+        completedQuestions.slice().reverse()[0];
       const nextQuestion = previousQuestion
         ? game.questions.find(
             (question) =>

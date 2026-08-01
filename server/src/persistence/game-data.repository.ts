@@ -71,6 +71,7 @@ export type QuestionDetail = {
   sequence: number;
   mode: QuestionMode;
   state: string;
+  closedAt?: string | null;
   /** Number of Guess docs for this question (any pair). */
   guessCount: number;
   answerOptions: AnswerOptionDetail[];
@@ -132,6 +133,7 @@ export type PairBindingSnapshot = {
   joined: boolean;
   readyForNextQuestion: boolean | null;
   openQuestionId: string | null;
+  roundsComplete: boolean;
 };
 
 export type CreateNfcCardGroupInput = {
@@ -664,6 +666,7 @@ export class GameDataRepository {
     const gameId = binding.gameId ? (binding.gameId as Types.ObjectId).toString() : null;
     let state: GameState | null = null;
     let openQuestionId: string | null = null;
+    let roundsComplete = false;
 
     if (gameId) {
       const game = await Game.findById(binding.gameId).lean();
@@ -671,6 +674,15 @@ export class GameDataRepository {
         state = game.state as GameState;
         const openQuestion = await Question.findOne({ gameId: binding.gameId, state: 'open' }).lean();
         openQuestionId = openQuestion ? (openQuestion._id as Types.ObjectId).toString() : null;
+        if (state === 'active' && !openQuestion) {
+          const playableQuestions = await Question.find({
+            gameId: binding.gameId,
+            state: { $ne: 'archived' },
+          }).lean();
+          roundsComplete =
+            playableQuestions.length > 0 &&
+            playableQuestions.every((question) => Boolean(question.closedAt));
+        }
       }
     }
 
@@ -682,6 +694,7 @@ export class GameDataRepository {
       joined: binding.joined,
       readyForNextQuestion: binding.readyForNextQuestion ?? null,
       openQuestionId,
+      roundsComplete,
     };
   }
 
@@ -956,6 +969,7 @@ export class GameDataRepository {
           sequence: q.sequence,
           mode: q.mode as QuestionMode,
           state: q.state,
+          closedAt: q.closedAt ? q.closedAt.toISOString() : null,
           guessCount: guessCounts.get(qid) ?? 0,
           answerOptions: opts.map((o) => ({
             id: (o._id as Types.ObjectId).toString(),

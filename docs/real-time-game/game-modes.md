@@ -9,12 +9,12 @@ and in how the dashboard groups and labels badge activity.
 
 ## Mode 1 — Standard pair (one controller, one badge) ✅ current
 
-### Overview
+### Standard pair overview
 
 One Raspberry Pi Zero controller is permanently paired to exactly one Pico
 badge. This is the baseline topology for the current demo.
 
-```
+```text
 ┌─────────────────────────┐      BLE      ┌────────────────────────┐
 │  Pi Zero controller     │ ◀────────────▶ │  Pico badge            │
 │  PAIR_NAME = "green"    │               │  PAIR_NAME = "green"   │
@@ -26,7 +26,7 @@ badge. This is the baseline topology for the current demo.
     emoji-app server
 ```
 
-### Identity
+### Standard pair identity
 
 | Field | Holds | Example |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ badge. This is the baseline topology for the current demo.
 physical device identifier — it is already unique even in this 1:1 mode and
 is carried on every server event.
 
-### Configuration
+### Standard pair configuration
 
 Both devices share the same `pair_config.py`:
 
@@ -52,7 +52,7 @@ Pico only accepts the connection when the Zero sends `PAIR:green` and replies
 
 ### BLE connection lifecycle
 
-```
+```text
 Zero boots → scans for "Pico-Client-green" → connects → sends "PAIR:green"
 Pico replies "PAIR_OK:0.3.2" → Zero marks connected → heartbeat loop starts
 ```
@@ -78,14 +78,14 @@ backoff.
 
 ## Mode 2 — Multi-badge pair (one controller, N badges) 🔮 planned
 
-### Overview
+### Multi-badge pair overview
 
 One Pi Zero controller maintains simultaneous BLE connections to **N Pico
 badges**, all sharing the same `PAIR_NAME`. This enables team-buzzer scenarios,
 audience-participation sets, or classroom kits where one station manages a rack
 of physical devices.
 
-```
+```text
 ┌─────────────────────────┐  BLE  ┌──────────────────────────────┐
 │  Pi Zero controller     │ ◀────▶ │  Pico badge 1 (badge-aa…)   │
 │  PAIR_NAME = "green"    │  BLE  ├──────────────────────────────┤
@@ -99,7 +99,7 @@ of physical devices.
     emoji-app server
 ```
 
-### Identity
+### Multi-badge pair identity
 
 `pairName` still identifies the **controller** (the Zero). Individual badges
 are distinguished by `badgeId` — the Pico's Bluetooth MAC address, unique per
@@ -114,7 +114,7 @@ chip even when all Picos share the same `PAIR_NAME`.
 No per-badge config file is needed — all Picos can use the identical
 `pair_config.py`. This keeps provisioning simple for large sets.
 
-### Configuration
+### Multi-badge pair configuration
 
 All Picos share the same `pair_config.py`:
 
@@ -127,7 +127,7 @@ to connect to **all** matching peripherals rather than the first one found.
 
 ### BLE connection lifecycle (planned)
 
-```
+```text
 Zero boots → scans for ALL devices named "Pico-Client-green"
            → opens one BleakClient per device
            → runs PAIR handshake on each in parallel
@@ -236,14 +236,14 @@ The Waveshare 1.44" display HAT has a 5-way joystick and three side buttons.
 | **Joystick UP** | In `choosing` → move pos up (cycles 1→2→3→4→1) |
 | **Joystick DOWN** | In `choosing` → move pos down |
 | **Joystick LEFT/RIGHT** | Navigate within choosing mode |
-| **KEY1** | Positive emoji selection (or toggle/replay last positive); in game mode when `JOIN? KEY1` shown → POST join |
-| **KEY3** | Negative emoji selection (or toggle/replay last negative) |
+| **KEY1** | Positive emoji selection; in the game lobby → join; between rounds → ready |
+| **KEY3** | Negative emoji selection; in the game lobby → remain unjoined; between rounds → wait |
 
 ### Navigating to game mode
 
 The game mode slot is at **menu 3 (Others), pos 4**.
 
-```
+```text
 Power on
   → state = "none"
 
@@ -266,30 +266,31 @@ Press KEY2
   → display redraws with game status text
 ```
 
-### Zero display states in game mode
+### Three-platform game-state display reference
 
-Once `game_mode_active` is True, the center of the display always shows the
-large 'G' glyph. The status text (y=57) changes with the WebSocket game state:
+The Zero receives game events from the server and relays `GAME:*` commands to
+the Pico. The React column covers the player view, referee view, and dashboard
+badge where they differ.
 
-| Zero shows | Meaning | What to do |
-| --- | --- | --- |
-| *(large 'G', no text)* | WS not connected, or pair not bound to any game | Check server connection; bind pair via API / Step 6 UI |
-| `JOIN? KEY1` | Pair is bound to a game in `lobby` state, not yet joined | Press **KEY1** to join |
-| `WAITING...` | Joined; waiting for referee to start the game | Wait |
-| `GAME ON` | Game is `active`, no question currently open | Wait for referee to open a question |
-| `SCAN NOW` | A question is open — NFC tag scan is ready | Player scans NFC card on Pico |
-| `GAME OVER` | Game is `completed` | Session finished |
-
-### Pico badge display states
-
-The Pico receives `GAME:*` BLE commands from the Zero and shows:
-
-| BLE command received | Pico display |
-| --- | --- |
-| `GAME:active` | Solid green 4×4 square in centre of matrix |
-| `GAME:question_open` | White '?' glyph (NFC ready — scan now) |
-| `GAME:question_close` | Small white 2×2 dot (between questions) |
-| `GAME:ended` | Scrolling "DONE" text, then matrix goes dark |
+| State | Pico badge (8×8 matrix) | Zero controller (LCD) | React app |
+| --- | --- | --- | --- |
+| Game mode standby (`mode`) | Capital white `G` | Capital white `G` | Referee lifecycle shows `ready`; dashboard badge uses the Gamepad icon |
+| Lobby choice (`lobby`) | Yellow 4×4 centre; green 2×2 top-right; red 2×2 bottom-right | Same three shapes; `KEY1 JOIN  KEY3 NO` | Player view says the game is open for joining; referee pair chip says `waiting to join`; dashboard uses Door Open |
+| Joined lobby (`lobby_joined`) | White 4×4 outline | White 4×4 outline | Referee pair chip says `ready to start`; dashboard uses Hand Platter |
+| Game active (`active`) | Solid green 4×4 centre | Solid green 4×4 centre | Referee state is `active`; this state is brief because Start Game automatically opens round 1 |
+| Question open (`question_open`) | Question mark; NFC polling active | Question mark | Player view reveals the round question and answer options; referee round is `open`; dashboard uses Message Circle Question |
+| Card scanned (`card_scanned`) | Green 4×4 outline while the guess response is pending | Holds the question or result display | Referee and dashboard receive `nfc.tagged`; the round closes automatically after every bound pair guesses |
+| Correct (`correct`) | Blue filled circle | Blue filled circle | Dashboard and result UI use a blue Circle |
+| Wrong (`wrong`) | Red X | Red X | Dashboard and result UI use a red X |
+| Between-round prompt (`ready_prompt`) | Green 2×2 top-right and red 2×2 bottom-right | White 2×2 centre; `KEY1 READY  KEY3 WAIT` | Player view says `Ready for round X?`; pair chips in player and referee views show `?` while awaiting a response |
+| Ready for next round (`ready`) | Green 2×2 top-right | White 2×2 centre; `READY` | Pair chips show a green check and `ready` |
+| Wait before next round (`wait`) | Red 2×2 bottom-right | White 2×2 centre; `WAIT` | Pair chips show a red X and `wait` |
+| Next round waiting | Retains ready, wait, or prompt display | Retains ready, wait, or prompt display | Player view hides the question and says `Waiting for the referee to open the next round.` |
+| All rounds complete (`rounds_complete`) | Solid yellow 4×4 centre without join/no corners | Solid yellow 4×4 centre; `ROUNDS COMPLETE` | Player view shows `Total rounds: X` and `Game complete`; referee can end the game |
+| Paused (`paused`) | Retains the current game display | Retains the current game display | Player view shows `Paused`; referee lifecycle shows `paused` |
+| Game ended (`game_ended`) | Scrolls `DONE`, then goes dark | `GAME OVER` when no ranked outcome is available | Player view says the game ended; dashboard uses Sparkles |
+| Winner (`winner`) | Fireworks animation | Fireworks animation | Dashboard uses Trophy and displays the winning score |
+| Loser (`loser`) | Rain animation | Rain animation | Dashboard uses Eye Closed and displays the score |
 
 ### App (React) referee actions
 
@@ -300,72 +301,70 @@ built, use direct API calls.
 | Referee action | API call | Zero reacts | Pico reacts |
 | --- | --- | --- | --- |
 | Bind controller to game | `POST /api/games/:id/pairs { pairName }` | Next WS connect: receives `controller.welcome` with game snapshot | — |
-| Open for joining (lobby) | `POST /api/games/:id/state { state: "lobby" }` | Shows "JOIN? KEY1" | — |
-| Player presses KEY1 | Zero posts `POST /api/games/:id/join` | Shows "WAITING..." | — |
-| Start game | `POST /api/games/:id/state { state: "active" }` | Shows "GAME ON" | Green square |
-| Open question | `POST /api/questions/:qid/state { gameId, state: "open" }` | Shows "SCAN NOW" | '?' glyph |
-| Player scans NFC card | Pico notifies `TAG:<uid>` → Zero posts `POST /api/guesses` | Shows "SCAN NOW" until closed | — |
-| Close question | `POST /api/questions/:qid/state { gameId, state: "closed" }` | Shows "GAME ON" | White dot |
-| End game | `POST /api/games/:id/state { state: "completed" }` | Shows "GAME OVER" | Scrolls "DONE" |
+| Open for joining (lobby) | `POST /api/games/:id/state { state: "lobby" }` | Shows yellow centre with green/red choices | Shows the same three shapes |
+| Player presses KEY1 | Zero posts `POST /api/games/:id/join` | Shows white outline | Shows white outline |
+| Start game | `POST /api/games/:id/state { state: "active" }` | Green square, then question mark | Green square, then question mark; round 1 opens automatically |
+| Open a later round | `POST /api/questions/:qid/state { gameId, state: "open" }` | Shows question mark | Shows question mark and arms NFC |
+| Player scans NFC card | Pico notifies `TAG:<uid>` → Zero posts `POST /api/guesses` | Shows correct or wrong | Shows correct or wrong; server closes the round after all bound pairs guess |
+| Round closes | Automatic after all guesses, or referee posts `state: "closed"` | Shows `KEY1 READY  KEY3 WAIT` | Shows green/red corner choices |
+| Player presses KEY1 / KEY3 | Zero posts `POST /api/games/:id/readiness` | Shows `READY` / `WAIT` | Shows the selected green / red corner |
+| End game | `POST /api/games/:id/state { state: "completed" }` | Shows winner, loser, or `GAME OVER` | Fireworks, rain, or scrolling `DONE` |
 
 ### End-to-end sequence diagram
 
-```
+```text
 Referee (app)              Server             Zero               Pico
      │                       │                 │                  │
-     ├─ POST /games           │                 │                  │
-     │  (create game)         │                 │                  │
-     │                        │                 │                  │
      ├─ POST /games/:id/pairs ─►               │                  │
      │  { pairName }          │                 │                  │
      │                        │                 │                  │
      ├─ POST /games/:id/state ─►               │                  │
      │  { state: lobby }      ├── WS game.opened ──►              │
-     │                        │                 │ "JOIN? KEY1"     │
+     │                        │                 ├── GAME:lobby ───►│
+     │                        │                 │ join/no choices  │ join/no choices
      │                        │                 │                  │
      │         (user presses KEY1 on Zero)       │                  │
      │                        ◄── POST /games/:id/join ──          │
-     │                        ├── WS controller.joined ─► BadgesView
-     │                        │                 │ "WAITING..."     │
+     │◄── WS controller.joined ┤                 ├── lobby_joined ►│
      │                        │                 │                  │
      ├─ POST /games/:id/state ─►               │                  │
      │  { state: active }     ├── WS game.started ──►             │
-     │                        │                 │ "GAME ON"       │
-     │                        │                 ├── BLE GAME:active ──►
-     │                        │                 │                  │ ■ green
-     │                        │                 │                  │   square
-     ├─ POST /questions/:q/state►              │                  │
-     │  { state: open }       ├── WS question.opened ──►          │
-     │                        │                 │ "SCAN NOW"      │
-     │                        │                 ├── BLE GAME:question_open►
-     │                        │                 │                  │ ? glyph
+     │                        ├── auto-open round 1                │
+     │◄── WS question.opened ─┤                 ├── question_open ►│
+     │ player reveals round 1 │                 │ ? glyph          │ ? glyph
      │                        │                 │                  │
      │      (player scans NFC card on Pico)      │                  │
      │                        │                 ◄── BLE TAG:uid ───
      │                        ◄── POST /guesses ──                 │
-     │                        ├── WS nfc.tagged ──► BadgesView     │
+     │◄── WS nfc.tagged ──────┤                 │                  │
+     │                        ├── all pairs guessed: close round   │
+     │◄── WS question.closed ─┤                 ├── ready_prompt ─►│
+     │ Ready for round 2?     │                 │ KEY1/KEY3        │ green/red
+     │                        │                 │                  │
+     │       (user presses KEY1 ready)            │                  │
+     │                        ◄── POST /games/:id/readiness ────── │
+     │◄── readiness.changed ──┤                 ├── GAME:ready ──►│
+     │ pair chip: ready       │                 │                  │ green corner
      │                        │                 │                  │
      ├─ POST /questions/:q/state►              │                  │
-     │  { state: closed }     ├── WS question.closed ──►          │
-     │                        │                 │ "GAME ON"       │
-     │                        │                 ├── BLE GAME:question_close►
-     │                        │                 │                  │ · dot
+     │  { state: open }       ├── WS question.opened ──►          │
+     │ player reveals round 2 │                 ├── question_open ►│
+     │                        │                 │                  │ ? glyph
+     │                        │                 │                  │
      ├─ POST /games/:id/state ─►               │                  │
      │  { state: completed }  ├── WS game.ended ──►               │
-     │                        │                 │ "GAME OVER"     │
-     │                        │                 ├── BLE GAME:ended ──►
-     │                        │                 │                  │ DONE scroll
+     │                        │                 ├── winner/loser ─►│
+     │ scores + outcome       │                 │ outcome animation│ outcome animation
 ```
 
-### Current limitations (pre-Step 6)
+### Current implementation notes
 
-- Pair binding and game state transitions require direct API calls (curl or
-  browser devtools). Step 6 adds referee buttons in `GameDetailView`.
-- `BadgesView` does not yet show live game state or NFC tag events. Step 6
-  extends it to consume `game.state.changed`, `controller.joined`, and
-  `nfc.tagged` WebSocket events.
-- Only one question can be meaningfully open at a time; the server does not
-  enforce this — the referee must close one question before opening another.
+- Start Game automatically opens only the first round.
+- Later questions stay hidden from the player view until the referee opens them.
+- The server automatically closes a round after every bound pair submits a guess.
+- Ready and wait responses are persisted on `pairBindings` and broadcast to the
+  player and referee views.
+- Only one question can be open at a time.
 
 ---
 

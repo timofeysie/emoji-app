@@ -35,6 +35,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
+import { TextReveal } from '../shared/text-reveal';
 import { cn } from '../shared/utils';
 import {
   gameLogRef,
@@ -453,9 +454,12 @@ function GameVisualBlock({
         fill={filled ? 'currentColor' : 'none'}
         aria-hidden
       />
-      <span className="w-full break-words text-xs font-semibold leading-tight">
+      <TextReveal
+        revealKey={visual}
+        className="max-w-full text-xs font-semibold leading-tight"
+      >
         {label}
-      </span>
+      </TextReveal>
       {(gameTitle || gameId) && (
         <div className="w-full break-words text-[10px] leading-tight text-muted-foreground">
           {gameTitle ?? `game ${gameId?.slice(-6)}`}
@@ -810,7 +814,12 @@ function BadgeCardGameSection({
     <div className="w-full rounded-md border bg-muted/10 px-1.5 py-1 text-[10px] text-muted-foreground">
       {activeGame && (
         <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
-          <span className="font-medium text-foreground">{statusLabel}</span>
+          <TextReveal
+            revealKey={statusLabel ?? 'none'}
+            className="font-medium text-foreground"
+          >
+            {statusLabel}
+          </TextReveal>
           {activeGame.gameTitle && (
             <span className="text-[9px]">· {activeGame.gameTitle}</span>
           )}

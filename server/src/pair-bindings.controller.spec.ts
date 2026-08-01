@@ -102,6 +102,7 @@ describe('PairBindingsController', () => {
         joined: false,
         readyForNextQuestion: null,
         openQuestionId: null,
+        roundsComplete: false,
       };
       repository.getBinding.mockResolvedValue(snapshot);
 
@@ -166,6 +167,7 @@ describe('PairBindingsController', () => {
         joined: true,
         readyForNextQuestion: null,
         openQuestionId: null,
+        roundsComplete: false,
       });
       repository.setPairReadyForNextQuestion.mockResolvedValue(true);
 
@@ -201,6 +203,7 @@ describe('PairBindingsController', () => {
         joined: true,
         readyForNextQuestion: null,
         openQuestionId: '507f1f77bcf86cd799439012',
+        roundsComplete: false,
       });
 
       await controller.setReadiness(

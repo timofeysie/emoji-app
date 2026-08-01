@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../shared/button';
 import { Input } from '../../shared/input';
+import { TextReveal } from '../../shared/text-reveal';
 import {
   Select,
   SelectContent,
@@ -315,12 +316,22 @@ export function GameRefereePanel({
                           {bp.readyForNextQuestion === true ? (
                             <>
                               <CheckCircle2 className="h-3 w-3" aria-label="Ready" />
-                              <span className="text-[10px]">· ready</span>
+                              <TextReveal
+                                revealKey="ready"
+                                className="text-[10px]"
+                              >
+                                · ready
+                              </TextReveal>
                             </>
                           ) : bp.readyForNextQuestion === false ? (
                             <>
                               <XCircle className="h-3 w-3" aria-label="Needs more time" />
-                              <span className="text-[10px]">· wait</span>
+                              <TextReveal
+                                revealKey="wait"
+                                className="text-[10px]"
+                              >
+                                · wait
+                              </TextReveal>
                             </>
                           ) : (
                             <>
@@ -328,7 +339,12 @@ export function GameRefereePanel({
                                 className="h-3 w-3"
                                 aria-label="Waiting for response"
                               />
-                              <span className="text-[10px]">· awaiting response</span>
+                              <TextReveal
+                                revealKey="awaiting-response"
+                                className="text-[10px]"
+                              >
+                                · awaiting response
+                              </TextReveal>
                             </>
                           )}
                         </motion.span>
@@ -342,7 +358,12 @@ export function GameRefereePanel({
                           transition={chipSpring}
                         >
                           <CheckCircle2 className="h-3 w-3" aria-label="Ready to start" />
-                          <span className="text-[10px]">· ready to start</span>
+                          <TextReveal
+                            revealKey="ready-to-start"
+                            className="text-[10px]"
+                          >
+                            · ready to start
+                          </TextReveal>
                         </motion.span>
                       ) : (
                         <motion.span
@@ -353,7 +374,12 @@ export function GameRefereePanel({
                           exit={{ opacity: 0 }}
                           transition={{ duration: 0.15 }}
                         >
-                          · waiting to join
+                          <TextReveal
+                            revealKey="waiting-to-join"
+                            className="text-[10px]"
+                          >
+                            · waiting to join
+                          </TextReveal>
                         </motion.span>
                       )}
                     </AnimatePresence>
