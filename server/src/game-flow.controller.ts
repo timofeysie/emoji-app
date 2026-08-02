@@ -743,12 +743,14 @@ export class GameFlowController {
       return;
     }
 
+    let outcome: Awaited<ReturnType<GameDataRepository['submitGuess']>>;
+    let cardLabel: string;
     try {
-      const outcome = await this.gameDataRepository.submitGuess(result.data);
+      outcome = await this.gameDataRepository.submitGuess(result.data);
 
       const { gameId, questionId, pairName, badgeId, cardUid } = result.data;
       const seedCard = cardUid ? this.nfcCardService.findByUid(cardUid) : undefined;
-      const cardLabel = seedCard
+      cardLabel = seedCard
         ? shortCardLabel(seedCard.name, outcome.slotLabel)
         : outcome.cardLabel;
       this.badgeStateService.broadcastDashboard({
@@ -764,7 +766,17 @@ export class GameFlowController {
         isCorrect: outcome.isCorrect,
         serverTime: new Date().toISOString(),
       });
+    } catch (error) {
+      res.status(400).json({ error: 'Failed to submit guess', message: String(error) });
+      return;
+    }
 
+    // A stored guess is authoritative. Reply before auto-closing so controllers
+    // receive isCorrect without waiting for question-close database work/events.
+    res.status(201).json({ ...outcome, cardLabel });
+
+    const { gameId, questionId } = result.data;
+    try {
       // Last bound pair to answer → close so badges leave NFC-armed state.
       if (
         outcome.guessId &&
@@ -774,10 +786,13 @@ export class GameFlowController {
           reason: 'all_pairs_answered',
         });
       }
-
-      res.status(201).json({ ...outcome, cardLabel });
     } catch (error) {
-      res.status(400).json({ error: 'Failed to submit guess', message: String(error) });
+      // The successful response has already been sent. Closing failures must not
+      // turn a persisted correct guess into an HTTP error on the controller.
+      console.error(
+        `[GAME] server | auto-close failed | gameId=${gameId} questionId=${questionId}`,
+        error,
+      );
     }
   }
 }

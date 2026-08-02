@@ -70,6 +70,7 @@ describe('GameFlowController', () => {
       boundPairs: [],
     });
     repository.haveAllBoundPairsGuessed.mockResolvedValue(false);
+    repository.setQuestionState.mockResolvedValue(undefined);
   });
 
   it('returns 400 for invalid game creation payload', async () => {
@@ -488,7 +489,13 @@ describe('GameFlowController', () => {
       cardLabel: 'monkey',
       gameTitle: 'Demo Night',
     });
-    repository.haveAllBoundPairsGuessed.mockResolvedValue(true);
+    repository.haveAllBoundPairsGuessed.mockImplementation(async () => {
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ isCorrect: true, cardLabel: 'monkey' }),
+      );
+      return true;
+    });
     repository.getBindingsByGameId.mockResolvedValue(['white']);
     repository.getGameDetail.mockResolvedValue({
       id: '507f1f77bcf86cd799439017',
@@ -542,6 +549,42 @@ describe('GameFlowController', () => {
       expect.objectContaining({ type: 'question.result' }),
     );
     expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('keeps the successful guess response when automatic closing fails', async () => {
+    const res = createResponseMock();
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    repository.submitGuess.mockResolvedValue({
+      guessId: '507f1f77bcf86cd799439020',
+      answerOptionId: '507f1f77bcf86cd799439021',
+      slotLabel: 'A',
+      isCorrect: true,
+      cardLabel: 'monkey',
+      gameTitle: 'Demo Night',
+    });
+    repository.haveAllBoundPairsGuessed.mockResolvedValue(true);
+    repository.setQuestionState.mockRejectedValue(new Error('close failed'));
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'white',
+        cardUid: '5B:6F:B8:08',
+      },
+      res as unknown as Response,
+    );
+
+    expect(res.status).toHaveBeenCalledTimes(1);
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ isCorrect: true, cardLabel: 'monkey' }),
+    );
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('auto-close failed'),
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
   });
 
   describe('POST /api/games/:gameId/state', () => {
