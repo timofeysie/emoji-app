@@ -2,6 +2,10 @@
   "name": "emoji-app",
   "version": "1.2.6",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -18,7 +22,15 @@
     "docker:run": "docker run -p 3000:3000 --env-file .env emoji-app",
     "seed:local": "node scripts/seed-local.mjs",
     "test:server": "jest --config server/jest.config.ts",
-    "test:server:watch": "jest --config server/jest.config.ts --watch"
+    "test:server:watch": "jest --config server/jest.config.ts --watch",
+    "dev:land-grab-web": "npm run dev --workspace @emoji-app/land-grab-web",
+    "dev:land-grab-mobile": "npm run start --workspace @emoji-app/land-grab-mobile",
+    "build:land-grab-web": "npm run build --workspace @emoji-app/land-grab-web",
+    "sync:land-grab-mobile": "npm run bundle:mobile --workspace @emoji-app/land-grab-web",
+    "test:land-grab": "npm run test --workspace @emoji-app/land-grab-core",
+    "test:land-grab-web": "npm run test --workspace @emoji-app/land-grab-web",
+    "typecheck:land-grab": "npm run typecheck --workspace @emoji-app/land-grab-core && npm run typecheck --workspace @emoji-app/land-grab-web && npm run typecheck --workspace @emoji-app/land-grab-mobile",
+    "export:land-grab-mobile": "npm run export --workspace @emoji-app/land-grab-mobile"
   },
   "dependencies": {
     "@hashbrownai/core": "0.4.1",

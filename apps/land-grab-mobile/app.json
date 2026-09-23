@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "LandGrab",
+    "slug": "land-grab",
+    "version": "0.1.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "dark",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "android": {
+      "package": "com.emojiapp.landgrab"
+    },
+    "ios": {
+      "bundleIdentifier": "com.emojiapp.landgrab"
+    }
+  }
+}
