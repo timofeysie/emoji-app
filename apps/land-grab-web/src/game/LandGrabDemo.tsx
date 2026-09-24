@@ -9,7 +9,6 @@ import {
   type GameRules,
   type GameState,
   type PlayerConfig,
-  type PlayerState,
 } from "@emoji-app/land-grab-core";
 import {
   applyCaptureEvents,
@@ -28,7 +27,6 @@ import {
   saveGameRecord,
   type LandGrabGameRecord,
 } from "./gameRecord";
-import { computeTotalScore } from "@emoji-app/land-grab-core";
 import { createReplayLog, recordFrame, type ReplayLog } from "@emoji-app/land-grab-core";
 import { LandGrabReplay, SPEED_OPTIONS as REPLAY_SPEED_OPTIONS } from "./LandGrabReplay";
 import { loadUserProfile, resolveUsername, saveUserProfile } from "./userProfile";
@@ -49,7 +47,6 @@ import type { Vec2 } from "@emoji-app/land-grab-core";
 
 const CELL_SIZE = 22;
 const DEFAULT_DIMS = { rows: 16, cols: 24, cell: CELL_SIZE };
-const SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4];
 /** How many of the final ticks the auto-played, game-over highlight replay covers. */
 const INTRO_REPLAY_TICKS = 10;
 
@@ -72,39 +69,37 @@ interface GridDims {
   cell: number;
 }
 
-type BoardMode = "demo" | "fullscreen" | "large";
-
-/** Grow the board to fill the browser window while keeping the cell size constant. */
-function computeFullScreenDims(): GridDims {
-  const cell = CELL_SIZE;
-  const gap = 16;
-  const overlayPadding = 16 * 2; // matches the overlay's p-4
-  const asideWidth = window.innerWidth >= 1400 ? 224 + gap : 0; // w-56 sidebar + gap
-  const controlsHeight = 56; // Restart row under the board
-  const availWidth = window.innerWidth - overlayPadding - asideWidth;
-  const availHeight = window.innerHeight - overlayPadding - controlsHeight;
-  return {
-    cell,
-    cols: Math.max(DEFAULT_DIMS.cols, Math.floor(availWidth / cell)),
-    rows: Math.max(DEFAULT_DIMS.rows, Math.floor(availHeight / cell)),
-  };
+interface ViewportDims {
+  width: number;
+  height: number;
+  cols: number;
+  rows: number;
 }
+
+type AppScreen = "home" | "game" | "replay" | "records" | "profiles";
 
 /**
  * A world several times bigger than the on-screen viewport, so the game plays like a
  * paper.io-style sliding window: the Phaser canvas stays viewport-sized and its camera
  * scrolls to follow the human player around the larger board.
  */
-function computeLargeMapDims(): { world: GridDims; viewportCols: number; viewportRows: number } {
-  const viewport = computeFullScreenDims();
+function computeLargeMapDims(): { world: GridDims; viewport: ViewportDims } {
+  const width = Math.max(1, window.innerWidth);
+  const height = Math.max(1, window.innerHeight);
+  const viewport = {
+    width,
+    height,
+    cols: Math.ceil(width / CELL_SIZE),
+    rows: Math.ceil(height / CELL_SIZE),
+  };
+
   return {
     world: {
       cell: CELL_SIZE,
       cols: Math.min(LARGE_MAP_MAX_COLS, viewport.cols * LARGE_MAP_SCALE),
       rows: Math.min(LARGE_MAP_MAX_ROWS, viewport.rows * LARGE_MAP_SCALE),
     },
-    viewportCols: viewport.cols,
-    viewportRows: viewport.rows,
+    viewport,
   };
 }
 
@@ -489,10 +484,6 @@ class LandGrabScene extends Phaser.Scene {
   }
 }
 
-function colorToHex(color: number): string {
-  return `#${color.toString(16).padStart(6, "0")}`;
-}
-
 /** `mm:ss` from a millisecond duration. */
 function formatDuration(ms: number): string {
   const totalSeconds = Math.round(ms / 1000);
@@ -501,22 +492,11 @@ function formatDuration(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-export interface LandGrabDemoProps {
-  hideControls?: boolean;
-}
-
-export function LandGrabDemo({ hideControls }: LandGrabDemoProps) {
+export function LandGrabDemo() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState<GridDims>(DEFAULT_DIMS);
-  const [boardMode, setBoardMode] = useState<BoardMode>("demo");
-  // Canvas size in "large map" mode, where the board (`dims`) is bigger than what's on screen. `null` elsewhere.
-  const [viewport, setViewport] = useState<{ cols: number; rows: number } | null>(null);
-
-  const [paused, setPaused] = useState(false);
-  const [speed, setSpeed] = useState(2);
-  const [showProfiles, setShowProfiles] = useState(false);
-  const [showRecords, setShowRecords] = useState(false);
-  const [showReplay, setShowReplay] = useState(false);
+  const [viewport, setViewport] = useState<ViewportDims | null>(null);
+  const [screen, setScreen] = useState<AppScreen>("home");
   // The game-over modal is showing the replay in place of the stats.
   const [replayInModal, setReplayInModal] = useState(false);
   // Frame the in-modal replay should auto-play from. Set to the last
@@ -538,10 +518,6 @@ export function LandGrabDemo({ hideControls }: LandGrabDemoProps) {
   const usernameRef = useRef(username);
   const avatarRef = useRef(avatar);
 
-  /** The human's display name, trimmed and never empty. Bots keep their fixed labels. */
-  const displayLabel = (player: Pick<PlayerState, "id" | "label">): string =>
-    player.id === HUMAN_ID ? resolveUsername(username) : player.label;
-
   const buildConfigs = (): PlayerConfig[] =>
     PLAYER_CONFIGS.map((c) => ({
       ...c,
@@ -554,25 +530,16 @@ export function LandGrabDemo({ hideControls }: LandGrabDemoProps) {
   const stateHolderRef = useRef<{ current: GameState }>({
     current: createInitialGameState(DEFAULT_DIMS.rows, DEFAULT_DIMS.cols, buildConfigs(), rulesRef.current),
   });
-  const [players, setPlayers] = useState<Record<string, PlayerState>>(stateHolderRef.current.current.players);
-  // Each player's *current* chain length — previously-captured rivals trailing them right
-  // now (`chainTrail.ts`) — keyed by player id. Resets to 0 the instant that player is
-  // themself captured, unlike `player.captures`; this is what scoring is based on.
-  const [chainLengths, setChainLengths] = useState<Record<string, number>>({});
-  const [tick, setTick] = useState(0);
   const [restartToken, setRestartToken] = useState(0);
   const [gameOver, setGameOver] = useState<LandGrabGameRecord | null>(null);
   // Frozen at game over for the replay viewer. Kept across restarts so the
   // Replay button stays useful — the next finished match overwrites it.
   const [replay, setReplay] = useState<ReplayLog | null>(null);
   // The live recording for the in-progress match; read/written only inside the
-  // Phaser tick loop. `null` on the preview card (`hideControls`), which never records.
+  // Phaser tick loop.
   const replayLogRef = useRef<ReplayLog | null>(null);
   // Guards the once-per-match record write from inside the Phaser tick loop.
   const recordedRef = useRef(false);
-  // Read inside the tick loop; the preview card (hideControls) doesn't record or pop a dialog.
-  const hideControlsRef = useRef(hideControls);
-  hideControlsRef.current = hideControls;
 
   // In-progress touch drag used to steer on mobile. Re-anchored every time it fires a
   // direction change, so a single unlifted finger can chain turns (e.g. drag down, then
@@ -606,29 +573,26 @@ export function LandGrabDemo({ hideControls }: LandGrabDemoProps) {
     if (touchDragRef.current?.pointerId === event.pointerId) touchDragRef.current = null;
   };
 
-  const restart = () => setRestartToken((n) => n + 1);
-
-  /** Dismiss the game-over modal and reset its replay sub-state. */
-  const closeGameOver = () => {
+  const startGame = () => {
+    const { world, viewport: nextViewport } = computeLargeMapDims();
+    setDims(world);
+    setViewport(nextViewport);
     setGameOver(null);
     setReplayInModal(false);
     setIntroReplayIndex(null);
+    touchDragRef.current = null;
+    setScreen("game");
+    setRestartToken((value) => value + 1);
   };
 
-  // Fixed for the whole match — players don't leave the roster on death, only `alive` flips.
-  const totalCells = dims.rows * dims.cols;
-  const playerCount = Object.keys(players).length;
-  const scoreFor = (player: Pick<PlayerState, "id" | "ownedCount">) =>
-    computeTotalScore(player.ownedCount, chainLengths[player.id] ?? 0, totalCells, playerCount);
-  const leaderboard = Object.values(players).sort((a, b) => scoreFor(b) - scoreFor(a));
-  const humanScore = players[HUMAN_ID] ? scoreFor(players[HUMAN_ID]) : 0;
+  const goHome = () => {
+    setGameOver(null);
+    setReplayInModal(false);
+    setIntroReplayIndex(null);
+    touchDragRef.current = null;
+    setScreen("home");
+  };
 
-  useEffect(() => {
-    controlRef.current.paused = paused;
-  }, [paused]);
-  useEffect(() => {
-    controlRef.current.speed = speed;
-  }, [speed]);
   useEffect(() => {
     profilesRef.current = profiles;
   }, [profiles]);
@@ -649,95 +613,18 @@ export function LandGrabDemo({ hideControls }: LandGrabDemoProps) {
     avatarRef.current = avatar;
   }, [avatar]);
 
-  // Space toggles pause, "." single-steps. Ignore while a control has focus so
-  // the panel's sliders/buttons keep their own key handling.
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && ["INPUT", "BUTTON", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
-      if (event.code === "Space") {
-        event.preventDefault();
-        setPaused((p) => !p);
-      } else if (event.key === ".") {
-        event.preventDefault();
-        controlRef.current.stepOnce = true;
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  // Switching board modes changes the cell count (and, for "large", the world/viewport
-  // split), so the game restarts on a fresh board. Picking the already-active mode exits
-  // back to the small demo board.
-  const enterMode = (mode: BoardMode) => {
-    const next = boardMode === mode ? "demo" : mode;
-    setBoardMode(next);
-    if (next === "demo") {
-      setDims(DEFAULT_DIMS);
-      setViewport(null);
-    } else if (next === "fullscreen") {
-      setDims(computeFullScreenDims());
-      setViewport(null);
-    } else {
-      const { world, viewportCols, viewportRows } = computeLargeMapDims();
-      setDims(world);
-      setViewport({ cols: viewportCols, rows: viewportRows });
-    }
-  };
-
-  useEffect(() => {
-    if (boardMode === "demo") return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setBoardMode("demo");
-        setDims(DEFAULT_DIMS);
-        setViewport(null);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [boardMode]);
-
-  // Windowed mode: once the stats view is showing (the auto-played highlight
-  // replay has finished, or there was nothing to replay), auto-dismiss the
-  // result modal and start a fresh match after 5s. Full screen (and large map)
-  // keeps the modal up so the final board stays on screen until dismissed.
-  // Suspended while a replay is playing in the modal — flipping `replayInModal`
-  // back to `false` (via the replay's `onEnded`) is what starts this timer.
-  useEffect(() => {
-    if (hideControls || boardMode !== "demo" || gameOver === null || replayInModal) return;
-    const timer = window.setTimeout(() => {
-      closeGameOver();
-      restart();
-    }, 5000);
-    return () => window.clearTimeout(timer);
-  }, [gameOver, boardMode, hideControls, replayInModal]);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
+    if (screen !== "game" || !containerRef.current || !viewport) return;
 
     stateHolderRef.current.current = createInitialGameState(dims.rows, dims.cols, buildConfigs(), rulesRef.current);
-    setPlayers(stateHolderRef.current.current.players);
-    setChainLengths({});
-    setTick(0);
-    setGameOver(null);
-    setShowReplay(false);
-    setReplayInModal(false);
-    setIntroReplayIndex(null);
-    replayLogRef.current = hideControlsRef.current
-      ? null
-      : createReplayLog(stateHolderRef.current.current);
+    replayLogRef.current = createReplayLog(stateHolderRef.current.current);
     recordedRef.current = false;
     controlRef.current.paused = false;
-    setPaused(false);
 
-    const canvasCols = viewport?.cols ?? dims.cols;
-    const canvasRows = viewport?.rows ?? dims.rows;
     const game = new Phaser.Game({
       type: Phaser.AUTO,
-      width: canvasCols * dims.cell,
-      height: canvasRows * dims.cell,
+      width: viewport.width,
+      height: viewport.height,
       parent: containerRef.current,
       backgroundColor: "#0f172a",
     });
@@ -755,13 +642,10 @@ export function LandGrabDemo({ hideControls }: LandGrabDemoProps) {
         rulesRef,
         avatarRef,
         cellSize: dims.cell,
-        isLargeMap: boardMode === "large",
+        isLargeMap: true,
         onTick: (state: GameState, chainPeaks: Record<string, number>, chainLengths: Record<string, number>) => {
           if (replayLogRef.current) recordFrame(replayLogRef.current, state);
-          setPlayers({ ...state.players });
-          setChainLengths(chainLengths);
-          setTick(state.tick);
-          if (!hideControlsRef.current && state.winnerId && !recordedRef.current) {
+          if (state.winnerId && !recordedRef.current) {
             recordedRef.current = true;
             const record = buildGameRecord(state, { chainPeaks, chainLengths });
             saveGameRecord(record);
@@ -775,7 +659,6 @@ export function LandGrabDemo({ hideControls }: LandGrabDemoProps) {
               setReplayInModal(true);
             }
             controlRef.current.paused = true;
-            setPaused(true);
           }
         },
       } satisfies SceneData
@@ -786,7 +669,7 @@ export function LandGrabDemo({ hideControls }: LandGrabDemoProps) {
     };
     // Profiles/rules/autopilot are read from refs on build, not deps — editing
     // them must not tear down and restart the match.
-  }, [restartToken, dims, viewport, boardMode]);
+  }, [restartToken, dims, viewport, screen]);
 
   const handleProfileChange = (id: string, key: keyof BotProfile, value: number) => {
     setProfiles((prev) => ({ ...prev, [id]: { ...prev[id], [key]: value } }));
@@ -801,285 +684,186 @@ export function LandGrabDemo({ hideControls }: LandGrabDemoProps) {
   };
 
   return (
-    <div
-      className={
-        (boardMode !== "demo" ? "fixed inset-0 z-50 bg-background p-4 overflow-auto " : "") + "flex flex-col gap-4"
-      }
-    >
-      <div className="flex flex-col min-[1400px]:flex-row min-[1400px]:items-start gap-4">
-        <div className="flex flex-col gap-4 min-w-0">
-          <div className="relative" style={{ maxWidth: (viewport?.cols ?? dims.cols) * dims.cell }}>
-            <div
-              ref={containerRef}
-              className="overflow-hidden border border-border w-full touch-none [&>canvas]:block [&>canvas]:h-auto [&>canvas]:max-w-full"
-              onPointerDown={handleBoardPointerDown}
-              onPointerMove={handleBoardPointerMove}
-              onPointerUp={handleBoardPointerEnd}
-              onPointerCancel={handleBoardPointerEnd}
-            />
-            {!hideControls && (
-              <div
-                className="absolute top-2 left-2 z-10 pointer-events-none flex items-center gap-1 rounded-md bg-background/80 backdrop-blur px-2 py-1 text-xs font-semibold text-foreground shadow-sm"
-                title="Score"
+    <>
+      {screen === "home" && (
+        <main className="home-screen">
+          <section className="home-card" aria-labelledby="landgrab-title">
+            <p className="home-eyebrow">Emoji App Arcade</p>
+            <h1 id="landgrab-title">LandGrab</h1>
+            <p className="home-copy">
+              Swipe to steer. Close loops to claim the map and cut rival trails to capture them.
+            </p>
+            <nav className="home-menu" aria-label="Main menu">
+              <button type="button" className="home-menu-button home-menu-button-primary" onClick={startGame}>
+                Start game
+              </button>
+              <button
+                type="button"
+                className="home-menu-button"
+                onClick={() => setScreen("replay")}
+                disabled={!replay}
+                title={replay ? undefined : "Finish a game to unlock replay"}
               >
-                <span aria-hidden>★</span>
-                {humanScore.toLocaleString()}
-              </div>
+                Replay
+              </button>
+              <button type="button" className="home-menu-button" onClick={() => setScreen("records")}>
+                Records
+              </button>
+              <button type="button" className="home-menu-button" onClick={() => setScreen("profiles")}>
+                Profiles
+              </button>
+            </nav>
+          </section>
+        </main>
+      )}
+
+      {screen === "game" && (
+        <main className="game-screen" aria-label="LandGrab game">
+          <div
+            ref={containerRef}
+            className="game-surface"
+            onPointerDown={handleBoardPointerDown}
+            onPointerMove={handleBoardPointerMove}
+            onPointerUp={handleBoardPointerEnd}
+            onPointerCancel={handleBoardPointerEnd}
+          />
+        </main>
+      )}
+
+      {(screen === "replay" || screen === "records" || screen === "profiles") && (
+        <main className="menu-screen">
+          <header className="menu-screen-header">
+            <button type="button" className="menu-back-button" onClick={goHome}>
+              <span aria-hidden>←</span>
+              Home
+            </button>
+            <h1>
+              {screen === "replay" ? "Replay" : screen === "records" ? "Records" : "Profiles"}
+            </h1>
+          </header>
+
+          <div className="menu-screen-content">
+            {screen === "replay" && replay && <LandGrabReplay log={replay} />}
+            {screen === "records" && <MatchRecordsPanel />}
+            {screen === "profiles" && (
+              <BotProfilePanel
+                configs={PLAYER_CONFIGS}
+                humanId={HUMAN_ID}
+                username={username}
+                avatar={avatar}
+                profiles={profiles}
+                autopilot={autopilot}
+                botTypes={botTypes}
+                rules={rules}
+                onUsernameChange={setUsername}
+                onAvatarChange={setAvatar}
+                onProfileChange={handleProfileChange}
+                onAutopilotChange={(id, on) => setAutopilot((prev) => ({ ...prev, [id]: on }))}
+                onBotTypeChange={(id, type) => setBotTypes((prev) => ({ ...prev, [id]: type }))}
+                onResetProfile={handleResetProfile}
+                onResetAll={handleResetAll}
+                onRulesChange={(patch) => setRules((prev) => ({ ...prev, ...patch }))}
+              />
             )}
           </div>
-          {!hideControls && (
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={restart}
-                className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-              >
-                Restart
-              </button>
-              <button
-                onClick={() => setPaused((p) => !p)}
-                disabled={!!gameOver}
-                className="px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-pressed={paused}
-              >
-                {paused ? "Resume" : "Pause"}
-              </button>
-              <button
-                onClick={() => {
-                  controlRef.current.stepOnce = true;
-                }}
-                disabled={!paused || !!gameOver}
-                className="px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Step
-              </button>
-              <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                Speed
-                <select
-                  value={speed}
-                  onChange={(e) => setSpeed(Number(e.target.value))}
-                  className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
-                >
-                  {SPEED_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}×
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                onClick={() => setShowProfiles((s) => !s)}
-                className="px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-                aria-expanded={showProfiles}
-              >
-                {showProfiles ? "Hide profiles" : "Profiles"}
-              </button>
-              <button
-                onClick={() => setShowRecords((s) => !s)}
-                className="px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-                aria-expanded={showRecords}
-              >
-                {showRecords ? "Hide records" : "Records"}
-              </button>
-              <button
-                onClick={() => setShowReplay((s) => !s)}
-                disabled={!replay}
-                className="px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-expanded={showReplay}
-              >
-                {showReplay ? "Hide replay" : "Replay"}
-              </button>
-              <ul className="flex flex-wrap gap-4 text-sm min-[1400px]:hidden">
-                {leaderboard.map((player) => (
-                  <li key={player.id} className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: colorToHex(player.color) }} />
-                    <span className="text-foreground font-medium">{displayLabel(player)}</span>
-                    <span className="text-muted-foreground">
-                      {player.ownedCount} cells · {chainLengths[player.id] ?? 0}
-                    </span>
-                    {!player.alive && <span className="text-destructive text-xs">trying to respawn…</span>}
-                  </li>
-                ))}
-              </ul>
-              <span className="text-xs text-muted-foreground ml-auto" data-testid="landgrab-tick">
-                Arrow keys / WASD (or drag the board on touch) to move · Space pauses · “.” steps · tick {tick}
-              </span>
-            </div>
-          )}
-          {/* Mode switches: kept outside the >=1400px-only aside below so they're reachable on
-              mobile too, where there's no room for a permanent sidebar. */}
-          {!hideControls && (
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => enterMode("fullscreen")}
-                className="px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-              >
-                {boardMode === "fullscreen" ? "Exit full screen" : "Full screen"}
-              </button>
-              <button
-                onClick={() => enterMode("large")}
-                className="px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-              >
-                {boardMode === "large" ? "Exit large map" : "Large map"}
-              </button>
-              {boardMode !== "demo" && (
-                <span className="text-xs text-muted-foreground">
-                  {boardMode === "large"
-                    ? `${dims.cols}×${dims.rows} world · ${viewport?.cols}×${viewport?.rows} view · press Esc to exit`
-                    : `${dims.cols}×${dims.rows} cells · press Esc to exit`}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-        {!hideControls && (
-          <aside
-            className={
-              (boardMode !== "demo" ? "block " : "hidden min-[1400px]:block ") +
-              "shrink-0 w-56 rounded-lg border border-border p-4"
-            }
-          >
-            <h3 className="text-sm font-semibold text-foreground mb-3">Leaderboard</h3>
-            <ol className="flex flex-col gap-2 text-sm">
-              {leaderboard.map((player, index) => (
-                <li key={player.id} className="flex items-center gap-2">
-                  <span className="text-muted-foreground tabular-nums w-4">{index + 1}</span>
-                  <span className="w-3 h-3 rounded-full inline-block shrink-0" style={{ backgroundColor: colorToHex(player.color) }} />
-                  <span className="text-foreground font-medium truncate">{displayLabel(player)}</span>
-                  <span className="ml-auto flex items-baseline gap-1.5" title="Cells owned · players currently captured">
-                    <span className="text-foreground tabular-nums">{player.ownedCount}</span>
-                    <span className="text-muted-foreground text-xs tabular-nums">{chainLengths[player.id] ?? 0}</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
-            <ul className="mt-3 flex flex-col gap-1">
-              {leaderboard.filter((p) => !p.alive).map((player) => (
-                <li key={player.id} className="text-destructive text-xs">{displayLabel(player)} trying to respawn…</li>
-              ))}
-            </ul>
-          </aside>
-        )}
-      </div>
-      {!hideControls && showRecords && (
-        <MatchRecordsPanel key={gameOver?.endedAt ?? "records"} />
+        </main>
       )}
-      {!hideControls && showReplay && replay && (
-        <LandGrabReplay log={replay} onClose={() => setShowReplay(false)} />
-      )}
-      {!hideControls && showProfiles && (
-        <BotProfilePanel
-          configs={PLAYER_CONFIGS}
-          humanId={HUMAN_ID}
-          username={username}
-          avatar={avatar}
-          profiles={profiles}
-          autopilot={autopilot}
-          botTypes={botTypes}
-          rules={rules}
-          onUsernameChange={setUsername}
-          onAvatarChange={setAvatar}
-          onProfileChange={handleProfileChange}
-          onAutopilotChange={(id, on) => setAutopilot((prev) => ({ ...prev, [id]: on }))}
-          onBotTypeChange={(id, type) => setBotTypes((prev) => ({ ...prev, [id]: type }))}
-          onResetProfile={handleResetProfile}
-          onResetAll={handleResetAll}
-          onRulesChange={(patch) => setRules((prev) => ({ ...prev, ...patch }))}
-        />
-      )}
-      {!hideControls && (
-        <AlertDialog open={gameOver !== null} onOpenChange={(open) => !open && closeGameOver()}>
-          <AlertDialogContent
-            data-testid="landgrab-gameover"
-            className={replayInModal ? "sm:max-w-2xl" : undefined}
-          >
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2">
-                <span
-                  className="w-3.5 h-3.5 rounded-full inline-block shrink-0"
-                  style={{ backgroundColor: gameOver?.winner.color }}
+
+      <AlertDialog
+        open={screen === "game" && gameOver !== null}
+        onOpenChange={(open) => !open && goHome()}
+      >
+        <AlertDialogContent
+          data-testid="landgrab-gameover"
+          className={`dialog ${replayInModal ? "sm:max-w-2xl" : ""}`}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <span
+                className="w-3.5 h-3.5 rounded-full inline-block shrink-0"
+                style={{ backgroundColor: gameOver?.winner.color }}
+              />
+              {gameOver?.winner.label} wins
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {replayInModal
+                ? introReplayIndex !== null
+                  ? "Replaying the final moments."
+                  : "Replaying the match from the first tick."
+                : gameOver && gameOver.winner.ownedCount >= gameOver.board.totalCells
+                  ? `${gameOver.winner.label} captured the entire board.`
+                  : `${gameOver?.winner.label} was the last boat afloat with nowhere left for the others to respawn.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {replayInModal ? (
+            <div className="space-y-3">
+              {replay && (
+                <LandGrabReplay
+                  log={replay}
+                  autoPlay
+                  startIndex={introReplayIndex ?? undefined}
+                  closeUp={introReplayIndex !== null}
+                  initialSpeed={introReplayIndex !== null ? Math.min(...REPLAY_SPEED_OPTIONS) : undefined}
+                  onEnded={() => setReplayInModal(false)}
+                  className=""
                 />
-                {gameOver?.winner.label} wins
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {replayInModal
-                  ? introReplayIndex !== null
-                    ? "Replaying the final moments."
-                    : "Replaying the match from the first tick."
-                  : gameOver && gameOver.winner.ownedCount >= gameOver.board.totalCells
-                    ? `${gameOver.winner.label} captured the entire board.`
-                    : `${gameOver?.winner.label} was the last boat afloat with nowhere left for the others to respawn.`}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-
-            {replayInModal ? (
-              <div className="space-y-3">
-                {replay && (
-                  <LandGrabReplay
-                    log={replay}
-                    autoPlay
-                    startIndex={introReplayIndex ?? undefined}
-                    closeUp={introReplayIndex !== null}
-                    initialSpeed={introReplayIndex !== null ? Math.min(...REPLAY_SPEED_OPTIONS) : undefined}
-                    onEnded={() => setReplayInModal(false)}
-                    className=""
-                  />
-                )}
-              </div>
-            ) : (
-              gameOver && (
-                <div className="space-y-3 text-sm text-muted-foreground">
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    <dt>Ticks</dt>
-                    <dd className="tabular-nums text-foreground">{gameOver.ticks}</dd>
-                    <dt>Match time</dt>
-                    <dd className="tabular-nums text-foreground">{formatDuration(gameOver.durationMs)}</dd>
-                    <dt>Board</dt>
-                    <dd className="tabular-nums text-foreground">
-                      {gameOver.board.cols}×{gameOver.board.rows} · {gameOver.board.totalCells} cells
-                    </dd>
-                    <dt>Winner score</dt>
-                    <dd className="tabular-nums text-foreground">{gameOver.winner.score.toLocaleString()}</dd>
-                    <dt>Winner cells</dt>
-                    <dd className="tabular-nums text-foreground">
-                      {gameOver.winner.ownedCount} ({Math.round(gameOver.winner.ownedFraction * 100)}%)
-                    </dd>
-                    <dt>Winner peak</dt>
-                    <dd className="tabular-nums text-foreground">
-                      {gameOver.winner.peakOwnedCount} ({Math.round(gameOver.winner.peakOwnedFraction * 100)}%)
-                    </dd>
-                    <dt>Winner captures</dt>
-                    <dd className="tabular-nums text-foreground">{gameOver.winner.captures}</dd>
-                    <dt>Winner sunk</dt>
-                    <dd className="tabular-nums text-foreground">{gameOver.winner.timesCaptured}×</dd>
-                    <dt>Winner longest chain</dt>
-                    <dd className="tabular-nums text-foreground">{gameOver.winner.peakChainLength}</dd>
-                  </dl>
-                  <p className="text-xs">
-                    Saved to this browser as a game record (<code>landgrab:game-records</code>).
-                  </p>
-                </div>
-              )
-            )}
-
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={closeGameOver}>Dismiss</AlertDialogCancel>
-              {!replayInModal && replay && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIntroReplayIndex(null); // full match, from tick 0, default speed
-                    setReplayInModal(true);
-                  }}
-                  className={`${buttonVariants({ variant: "secondary" })} mt-2 sm:mt-0`}
-                >
-                  Watch replay
-                </button>
               )}
-              <AlertDialogAction onClick={restart}>Play again</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
-    </div>
+            </div>
+          ) : (
+            gameOver && (
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  <dt>Ticks</dt>
+                  <dd className="tabular-nums text-foreground">{gameOver.ticks}</dd>
+                  <dt>Match time</dt>
+                  <dd className="tabular-nums text-foreground">{formatDuration(gameOver.durationMs)}</dd>
+                  <dt>Board</dt>
+                  <dd className="tabular-nums text-foreground">
+                    {gameOver.board.cols}×{gameOver.board.rows} · {gameOver.board.totalCells} cells
+                  </dd>
+                  <dt>Winner score</dt>
+                  <dd className="tabular-nums text-foreground">{gameOver.winner.score.toLocaleString()}</dd>
+                  <dt>Winner cells</dt>
+                  <dd className="tabular-nums text-foreground">
+                    {gameOver.winner.ownedCount} ({Math.round(gameOver.winner.ownedFraction * 100)}%)
+                  </dd>
+                  <dt>Winner peak</dt>
+                  <dd className="tabular-nums text-foreground">
+                    {gameOver.winner.peakOwnedCount} ({Math.round(gameOver.winner.peakOwnedFraction * 100)}%)
+                  </dd>
+                  <dt>Winner captures</dt>
+                  <dd className="tabular-nums text-foreground">{gameOver.winner.captures}</dd>
+                  <dt>Winner sunk</dt>
+                  <dd className="tabular-nums text-foreground">{gameOver.winner.timesCaptured}×</dd>
+                  <dt>Winner longest chain</dt>
+                  <dd className="tabular-nums text-foreground">{gameOver.winner.peakChainLength}</dd>
+                </dl>
+                <p className="text-xs">
+                  Saved to this browser as a game record (<code>landgrab:game-records</code>).
+                </p>
+              </div>
+            )
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={goHome}>Home</AlertDialogCancel>
+            {!replayInModal && replay && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIntroReplayIndex(null);
+                  setReplayInModal(true);
+                }}
+                className={`${buttonVariants({ variant: "secondary" })} mt-2 sm:mt-0`}
+              >
+                Watch replay
+              </button>
+            )}
+            <AlertDialogAction onClick={startGame}>Play again</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
