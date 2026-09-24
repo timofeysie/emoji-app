@@ -15,13 +15,14 @@ export interface LandGrabUserProfile {
 }
 
 export const USER_PROFILE_STORAGE_KEY = "landgrab:user-profile";
-export const DEFAULT_USERNAME = "You";
+export const DEFAULT_USERNAME = "Player";
 export const MAX_USERNAME_LENGTH = 24;
+const LEGACY_DEFAULT_USERNAME = "You";
 
-/** Trim, clamp length, and fall back to the default when the result is empty. */
+/** Trim, clamp length, and fall back to the player label when empty or still using the old "You" default. */
 export function resolveUsername(raw: string): string {
   const trimmed = raw.trim().slice(0, MAX_USERNAME_LENGTH);
-  return trimmed || DEFAULT_USERNAME;
+  return !trimmed || trimmed === LEGACY_DEFAULT_USERNAME ? DEFAULT_USERNAME : trimmed;
 }
 
 /** The stored profile, or a default one if storage is unavailable / corrupt / unset. */

@@ -60,16 +60,10 @@ Test the API at `http://localhost:3000/api/version`.
 
 #### LandGrab
 
-Run the browser version directly while changing game UI or simulation code:
+Run the browser version directly while changing game UI or simulation code.  The Expo app also uses generated, embedded HTML rather than the Vite development server. Rebuild that HTML after changing the web game, then start Expo:
 
 ```bash
 npm run dev:land-grab-web
-```
-
-The Expo app uses generated, embedded HTML rather than the Vite development
-server. Rebuild that HTML after changing the web game, then start Expo:
-
-```bash
 npm run sync:land-grab-mobile
 npm run dev:land-grab-mobile
 ```

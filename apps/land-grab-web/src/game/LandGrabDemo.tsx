@@ -28,7 +28,7 @@ import {
   type LandGrabGameRecord,
 } from "./gameRecord";
 import { createReplayLog, recordFrame, type ReplayLog } from "@emoji-app/land-grab-core";
-import { LandGrabReplay, SPEED_OPTIONS as REPLAY_SPEED_OPTIONS } from "./LandGrabReplay";
+import { LandGrabReplay } from "./LandGrabReplay";
 import { loadUserProfile, resolveUsername, saveUserProfile } from "./userProfile";
 import { AVATAR_SIZE, type AvatarGrid } from "@emoji-app/land-grab-core";
 import type { Direction } from "@emoji-app/land-grab-core";
@@ -37,13 +37,13 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/AlertDialog";
 import { buttonVariants } from "../components/button";
 import type { Vec2 } from "@emoji-app/land-grab-core";
+import webPackage from "../../package.json";
 
 const CELL_SIZE = 22;
 const DEFAULT_DIMS = { rows: 16, cols: 24, cell: CELL_SIZE };
@@ -104,7 +104,7 @@ function computeLargeMapDims(): { world: GridDims; viewport: ViewportDims } {
 }
 
 const PLAYER_CONFIGS: PlayerConfig[] = [
-  { id: "you", label: "You", color: 0x38bdf8, isBot: false },
+  { id: "you", label: "Player", color: 0x38bdf8, isBot: false },
   { id: "bot-red", label: "Red Invader", color: 0xf87171, isBot: true, botType: "invader" },
   { id: "bot-yellow", label: "Yellow Rambler", color: 0xfacc15, isBot: true, botType: "rambler" },
   { id: "bot-green", label: "Green Surveyor", color: 0x4ade80, isBot: true, botType: "surveyor" },
@@ -497,12 +497,8 @@ export function LandGrabDemo() {
   const [dims, setDims] = useState<GridDims>(DEFAULT_DIMS);
   const [viewport, setViewport] = useState<ViewportDims | null>(null);
   const [screen, setScreen] = useState<AppScreen>("home");
-  // The game-over modal is showing the replay in place of the stats.
-  const [replayInModal, setReplayInModal] = useState(false);
-  // Frame the in-modal replay should auto-play from. Set to the last
-  // `INTRO_REPLAY_TICKS` ticks as soon as a match ends; `null` means a
-  // full-match rewatch (from tick 0, default speed) via the "Watch replay" button.
-  const [introReplayIndex, setIntroReplayIndex] = useState<number | null>(null);
+  const [showGameReplay, setShowGameReplay] = useState(false);
+  const [gameReplayStartIndex, setGameReplayStartIndex] = useState(0);
   const [profiles, setProfiles] = useState<Record<string, BotProfile>>(makeInitialProfiles);
   const [autopilot, setAutopilot] = useState<Record<string, boolean>>(makeInitialAutopilot);
   const [botTypes, setBotTypes] = useState<Record<string, BotType>>(makeInitialBotTypes);
@@ -578,8 +574,8 @@ export function LandGrabDemo() {
     setDims(world);
     setViewport(nextViewport);
     setGameOver(null);
-    setReplayInModal(false);
-    setIntroReplayIndex(null);
+    setShowGameReplay(false);
+    setGameReplayStartIndex(0);
     touchDragRef.current = null;
     setScreen("game");
     setRestartToken((value) => value + 1);
@@ -587,8 +583,8 @@ export function LandGrabDemo() {
 
   const goHome = () => {
     setGameOver(null);
-    setReplayInModal(false);
-    setIntroReplayIndex(null);
+    setShowGameReplay(false);
+    setGameReplayStartIndex(0);
     touchDragRef.current = null;
     setScreen("home");
   };
@@ -655,8 +651,8 @@ export function LandGrabDemo() {
             // As soon as the match ends, auto-play the last few ticks so the
             // deciding move is visible before the stats replace it.
             if (log) {
-              setIntroReplayIndex(Math.max(0, log.frames.length - 1 - INTRO_REPLAY_TICKS));
-              setReplayInModal(true);
+              setGameReplayStartIndex(Math.max(0, log.frames.length - 1 - INTRO_REPLAY_TICKS));
+              setShowGameReplay(true);
             }
             controlRef.current.paused = true;
           }
@@ -682,6 +678,8 @@ export function LandGrabDemo() {
     setBotTypes(makeInitialBotTypes());
     setRules({ ...DEFAULT_GAME_RULES });
   };
+  const winnerName =
+    gameOver?.winner.id === HUMAN_ID ? resolveUsername(username) : gameOver?.winner.label;
 
   return (
     <>
@@ -689,7 +687,12 @@ export function LandGrabDemo() {
         <main className="home-screen">
           <section className="home-card" aria-labelledby="landgrab-title">
             <p className="home-eyebrow">Emoji App Arcade</p>
-            <h1 id="landgrab-title">LandGrab</h1>
+            <div className="home-title">
+              <h1 id="landgrab-title">LandGrab</h1>
+              <span className="home-version" aria-label={`Version ${webPackage.version}`}>
+                v{webPackage.version}
+              </span>
+            </div>
             <p className="home-copy">
               Swipe to steer. Close loops to claim the map and cut rival trails to capture them.
             </p>
@@ -730,20 +733,23 @@ export function LandGrabDemo() {
         </main>
       )}
 
-      {(screen === "replay" || screen === "records" || screen === "profiles") && (
+      {screen === "replay" && replay && (
+        <main className="replay-screen" aria-label="Replay">
+          <LandGrabReplay log={replay} onClose={goHome} />
+        </main>
+      )}
+
+      {(screen === "records" || screen === "profiles") && (
         <main className="menu-screen">
           <header className="menu-screen-header">
             <button type="button" className="menu-back-button" onClick={goHome}>
               <span aria-hidden>←</span>
               Home
             </button>
-            <h1>
-              {screen === "replay" ? "Replay" : screen === "records" ? "Records" : "Profiles"}
-            </h1>
+            <h1>{screen === "records" ? "Records" : "Profiles"}</h1>
           </header>
 
           <div className="menu-screen-content">
-            {screen === "replay" && replay && <LandGrabReplay log={replay} />}
             {screen === "records" && <MatchRecordsPanel />}
             {screen === "profiles" && (
               <BotProfilePanel
@@ -769,91 +775,72 @@ export function LandGrabDemo() {
         </main>
       )}
 
+      {screen === "game" && gameOver && showGameReplay && replay && (
+        <section className="replay-overlay" aria-label="Game replay">
+          <LandGrabReplay
+            log={replay}
+            autoPlay
+            startIndex={gameReplayStartIndex}
+            onEnded={() => setShowGameReplay(false)}
+            onClose={() => setShowGameReplay(false)}
+          />
+        </section>
+      )}
+
       <AlertDialog
-        open={screen === "game" && gameOver !== null}
+        open={screen === "game" && gameOver !== null && !showGameReplay}
         onOpenChange={(open) => !open && goHome()}
       >
-        <AlertDialogContent
-          data-testid="landgrab-gameover"
-          className={`dialog ${replayInModal ? "sm:max-w-2xl" : ""}`}
-        >
+        <AlertDialogContent data-testid="landgrab-gameover" className="dialog result-dialog">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <span
                 className="w-3.5 h-3.5 rounded-full inline-block shrink-0"
                 style={{ backgroundColor: gameOver?.winner.color }}
               />
-              {gameOver?.winner.label} wins
+              {winnerName} wins
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              {replayInModal
-                ? introReplayIndex !== null
-                  ? "Replaying the final moments."
-                  : "Replaying the match from the first tick."
-                : gameOver && gameOver.winner.ownedCount >= gameOver.board.totalCells
-                  ? `${gameOver.winner.label} captured the entire board.`
-                  : `${gameOver?.winner.label} was the last boat afloat with nowhere left for the others to respawn.`}
-            </AlertDialogDescription>
           </AlertDialogHeader>
 
-          {replayInModal ? (
-            <div className="space-y-3">
-              {replay && (
-                <LandGrabReplay
-                  log={replay}
-                  autoPlay
-                  startIndex={introReplayIndex ?? undefined}
-                  closeUp={introReplayIndex !== null}
-                  initialSpeed={introReplayIndex !== null ? Math.min(...REPLAY_SPEED_OPTIONS) : undefined}
-                  onEnded={() => setReplayInModal(false)}
-                  className=""
-                />
-              )}
+          {gameOver && (
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
+                <dt>Ticks</dt>
+                <dd className="tabular-nums text-foreground">{gameOver.ticks}</dd>
+                <dt>Match time</dt>
+                <dd className="tabular-nums text-foreground">{formatDuration(gameOver.durationMs)}</dd>
+                <dt>Board</dt>
+                <dd className="tabular-nums text-foreground">
+                  {gameOver.board.cols}×{gameOver.board.rows} · {gameOver.board.totalCells} cells
+                </dd>
+                <dt>Winner score</dt>
+                <dd className="tabular-nums text-foreground">{gameOver.winner.score.toLocaleString()}</dd>
+                <dt>Winner cells</dt>
+                <dd className="tabular-nums text-foreground">
+                  {gameOver.winner.ownedCount} ({Math.round(gameOver.winner.ownedFraction * 100)}%)
+                </dd>
+                <dt>Winner peak</dt>
+                <dd className="tabular-nums text-foreground">
+                  {gameOver.winner.peakOwnedCount} ({Math.round(gameOver.winner.peakOwnedFraction * 100)}%)
+                </dd>
+                <dt>Winner captures</dt>
+                <dd className="tabular-nums text-foreground">{gameOver.winner.captures}</dd>
+                <dt>Winner sunk</dt>
+                <dd className="tabular-nums text-foreground">{gameOver.winner.timesCaptured}×</dd>
+                <dt>Winner longest chain</dt>
+                <dd className="tabular-nums text-foreground">{gameOver.winner.peakChainLength}</dd>
+              </dl>
             </div>
-          ) : (
-            gameOver && (
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  <dt>Ticks</dt>
-                  <dd className="tabular-nums text-foreground">{gameOver.ticks}</dd>
-                  <dt>Match time</dt>
-                  <dd className="tabular-nums text-foreground">{formatDuration(gameOver.durationMs)}</dd>
-                  <dt>Board</dt>
-                  <dd className="tabular-nums text-foreground">
-                    {gameOver.board.cols}×{gameOver.board.rows} · {gameOver.board.totalCells} cells
-                  </dd>
-                  <dt>Winner score</dt>
-                  <dd className="tabular-nums text-foreground">{gameOver.winner.score.toLocaleString()}</dd>
-                  <dt>Winner cells</dt>
-                  <dd className="tabular-nums text-foreground">
-                    {gameOver.winner.ownedCount} ({Math.round(gameOver.winner.ownedFraction * 100)}%)
-                  </dd>
-                  <dt>Winner peak</dt>
-                  <dd className="tabular-nums text-foreground">
-                    {gameOver.winner.peakOwnedCount} ({Math.round(gameOver.winner.peakOwnedFraction * 100)}%)
-                  </dd>
-                  <dt>Winner captures</dt>
-                  <dd className="tabular-nums text-foreground">{gameOver.winner.captures}</dd>
-                  <dt>Winner sunk</dt>
-                  <dd className="tabular-nums text-foreground">{gameOver.winner.timesCaptured}×</dd>
-                  <dt>Winner longest chain</dt>
-                  <dd className="tabular-nums text-foreground">{gameOver.winner.peakChainLength}</dd>
-                </dl>
-                <p className="text-xs">
-                  Saved to this browser as a game record (<code>landgrab:game-records</code>).
-                </p>
-              </div>
-            )
           )}
 
           <AlertDialogFooter>
             <AlertDialogCancel onClick={goHome}>Home</AlertDialogCancel>
-            {!replayInModal && replay && (
+            {replay && (
               <button
                 type="button"
                 onClick={() => {
-                  setIntroReplayIndex(null);
-                  setReplayInModal(true);
+                  setGameReplayStartIndex(0);
+                  setShowGameReplay(true);
                 }}
                 className={`${buttonVariants({ variant: "secondary" })} mt-2 sm:mt-0`}
               >

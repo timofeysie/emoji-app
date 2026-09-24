@@ -61,12 +61,25 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   margin: 0 0 0.35rem;
   text-transform: uppercase;
 }
+.home-title {
+  align-items: baseline;
+  display: flex;
+  gap: 0.45rem;
+  justify-content: center;
+}
 .home-card h1 {
   color: #f8fafc;
   font-size: clamp(2.75rem, 10vw, 4.75rem);
   letter-spacing: -0.055em;
   line-height: 0.95;
   margin: 0;
+}
+.home-version {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 .home-copy {
   color: #94a3b8;
@@ -162,6 +175,84 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   touch-action: none;
   width: 100% !important;
 }
+
+.replay-screen, .replay-overlay {
+  background: #020617;
+  height: 100vh;
+  height: 100dvh;
+  inset: 0;
+  overflow: hidden;
+  padding:
+    max(0.25rem, env(safe-area-inset-top))
+    max(0.25rem, env(safe-area-inset-right))
+    max(0.25rem, env(safe-area-inset-bottom))
+    max(0.25rem, env(safe-area-inset-left));
+  position: fixed;
+  width: 100vw;
+}
+.replay-screen { z-index: 10; }
+.replay-overlay { z-index: 110; }
+.replay-player {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+  width: 100%;
+}
+.replay-board {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+.replay-board canvas {
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  display: block;
+  height: 100%;
+  image-rendering: pixelated;
+  object-fit: contain;
+  width: 100%;
+}
+.replay-controls {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 2.25rem minmax(0, 1fr) 2.25rem;
+}
+.replay-control-button {
+  align-items: center;
+  border-radius: 0.45rem;
+  display: inline-flex;
+  height: 2.25rem;
+  justify-content: center;
+  padding: 0;
+  width: 2.25rem;
+}
+.replay-toggle-button {
+  background: #0284c7;
+  border-color: #38bdf8;
+}
+.replay-control-icon {
+  fill: none;
+  height: 1rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2.25;
+  width: 1rem;
+}
+.replay-toggle-button .replay-control-icon {
+  fill: currentColor;
+  stroke: none;
+}
+.replay-scrubber {
+  accent-color: #38bdf8;
+  margin: 0;
+  min-width: 0;
+  width: 100%;
+}
+
 .dialog-backdrop {
   align-items: center;
   background: rgb(2 6 23 / 78%);
@@ -182,6 +273,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   padding: 1.25rem;
   width: 100%;
 }
+.result-dialog { max-width: 32rem; }
 .dialog-footer, .tabs-list { display: flex; gap: 0.5rem; margin-top: 1rem; }
 .tabs-list [aria-pressed="true"] { background: #0284c7; }
 canvas { max-width: 100%; touch-action: none; }

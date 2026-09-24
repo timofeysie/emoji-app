@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { BotProfile } from "@emoji-app/land-grab-core";
 import { BOT_STRATEGIES, strategyFor, type BotType } from "@emoji-app/land-grab-core";
 import type { GameRules, PlayerConfig } from "@emoji-app/land-grab-core";
-import { MAX_USERNAME_LENGTH, resolveUsername } from "./userProfile";
+import { DEFAULT_USERNAME, MAX_USERNAME_LENGTH, resolveUsername } from "./userProfile";
 import { PixelAvatarEditor } from "./PixelAvatarEditor";
 import { AVATAR_SIZE, type AvatarGrid } from "@emoji-app/land-grab-core";
 
@@ -163,7 +163,7 @@ export function BotProfilePanel({
                     value={username}
                     onChange={(e) => onUsernameChange(e.target.value)}
                     maxLength={MAX_USERNAME_LENGTH}
-                    placeholder="You"
+                    placeholder={DEFAULT_USERNAME}
                     className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
                   />
                   <span className="text-[11px] text-muted-foreground">

@@ -19,6 +19,10 @@ describe("resolveUsername", () => {
     expect(resolveUsername("   ")).toBe(DEFAULT_USERNAME);
   });
 
+  it("migrates the old second-person default to the player label", () => {
+    expect(resolveUsername("You")).toBe(DEFAULT_USERNAME);
+  });
+
   it("clamps to the max length", () => {
     const long = "x".repeat(MAX_USERNAME_LENGTH + 10);
     expect(resolveUsername(long)).toHaveLength(MAX_USERNAME_LENGTH);
