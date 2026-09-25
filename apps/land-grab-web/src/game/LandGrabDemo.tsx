@@ -30,8 +30,16 @@ import {
 import { createReplayLog, recordFrame, type ReplayLog } from "@emoji-app/land-grab-core";
 import { LandGrabReplay } from "./LandGrabReplay";
 import { loadUserProfile, resolveUsername, saveUserProfile } from "./userProfile";
+import { PlayerProfileEditor } from "./PlayerProfileEditor";
 import { AVATAR_SIZE, type AvatarGrid } from "@emoji-app/land-grab-core";
 import type { Direction } from "@emoji-app/land-grab-core";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/Dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -111,6 +119,7 @@ const PLAYER_CONFIGS: PlayerConfig[] = [
 ];
 
 const HUMAN_ID = "you";
+const HUMAN_AVATAR_COLOR = "#38bdf8";
 const AVATAR_TEXTURE_KEY = "land-grab-human-avatar";
 /** Physical pixels per avatar cell in the baked texture — kept blocky/crisp rather than smoothed on scale-up. */
 const AVATAR_TEXTURE_PIXEL_SIZE = 4;
@@ -503,8 +512,10 @@ export function LandGrabDemo() {
   const [autopilot, setAutopilot] = useState<Record<string, boolean>>(makeInitialAutopilot);
   const [botTypes, setBotTypes] = useState<Record<string, BotType>>(makeInitialBotTypes);
   const [rules, setRules] = useState<GameRules>({ ...DEFAULT_GAME_RULES });
-  const [username, setUsername] = useState<string>(() => loadUserProfile().username);
-  const [avatar, setAvatar] = useState<AvatarGrid | null>(() => loadUserProfile().avatar ?? null);
+  const [initialUserProfile] = useState(loadUserProfile);
+  const [username, setUsername] = useState<string>(initialUserProfile.username);
+  const [avatar, setAvatar] = useState<AvatarGrid | null>(initialUserProfile.avatar ?? null);
+  const [profileSetupComplete, setProfileSetupComplete] = useState(initialUserProfile.setupComplete === true);
 
   const controlRef = useRef<SceneControl>({ paused: false, speed: 2, stepOnce: false });
   const profilesRef = useRef(profiles);
@@ -570,6 +581,7 @@ export function LandGrabDemo() {
   };
 
   const startGame = () => {
+    if (!profileSetupComplete) return;
     const { world, viewport: nextViewport } = computeLargeMapDims();
     setDims(world);
     setViewport(nextViewport);
@@ -603,8 +615,10 @@ export function LandGrabDemo() {
   }, [rules]);
   useEffect(() => {
     usernameRef.current = username;
-    saveUserProfile({ schemaVersion: 1, username, avatar });
-  }, [username, avatar]);
+    if (profileSetupComplete) {
+      saveUserProfile({ schemaVersion: 1, username, avatar, setupComplete: true });
+    }
+  }, [username, avatar, profileSetupComplete]);
   useEffect(() => {
     avatarRef.current = avatar;
   }, [avatar]);
@@ -678,6 +692,17 @@ export function LandGrabDemo() {
     setBotTypes(makeInitialBotTypes());
     setRules({ ...DEFAULT_GAME_RULES });
   };
+  const handleCompleteProfileSetup = () => {
+    const resolvedUsername = resolveUsername(username);
+    setUsername(resolvedUsername);
+    saveUserProfile({
+      schemaVersion: 1,
+      username: resolvedUsername,
+      avatar,
+      setupComplete: true,
+    });
+    setProfileSetupComplete(true);
+  };
   const winnerName =
     gameOver?.winner.id === HUMAN_ID ? resolveUsername(username) : gameOver?.winner.label;
 
@@ -720,6 +745,30 @@ export function LandGrabDemo() {
         </main>
       )}
 
+      <Dialog open={!profileSetupComplete} onOpenChange={() => undefined}>
+        <DialogContent className="dialog profile-setup-dialog" data-testid="player-profile-setup">
+          <DialogHeader>
+            <DialogTitle>Set up your profile</DialogTitle>
+          </DialogHeader>
+          <PlayerProfileEditor
+            username={username}
+            avatar={avatar}
+            seedColor={HUMAN_AVATAR_COLOR}
+            onUsernameChange={setUsername}
+            onAvatarChange={setAvatar}
+          />
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={handleCompleteProfileSetup}
+              className="min-h-11 w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:ml-auto sm:w-auto"
+            >
+              Continue
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {screen === "game" && (
         <main className="game-screen" aria-label="LandGrab game">
           <div
@@ -742,9 +791,13 @@ export function LandGrabDemo() {
       {(screen === "records" || screen === "profiles") && (
         <main className="menu-screen">
           <header className="menu-screen-header">
-            <button type="button" className="menu-back-button" onClick={goHome}>
+            <button
+              type="button"
+              className="menu-back-button"
+              aria-label="Back to main menu"
+              onClick={goHome}
+            >
               <span aria-hidden>←</span>
-              Home
             </button>
             <h1>{screen === "records" ? "Records" : "Profiles"}</h1>
           </header>

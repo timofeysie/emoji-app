@@ -33,7 +33,27 @@ describe("loadUserProfile / saveUserProfile", () => {
   beforeEach(() => window.localStorage.clear());
 
   it("returns the default profile when nothing is stored", () => {
-    expect(loadUserProfile()).toEqual({ schemaVersion: 1, username: DEFAULT_USERNAME, avatar: null });
+    expect(loadUserProfile()).toEqual({
+      schemaVersion: 1,
+      username: DEFAULT_USERNAME,
+      avatar: null,
+      setupComplete: false,
+    });
+  });
+
+  it("round-trips profile setup confirmation through localStorage", () => {
+    saveUserProfile({ schemaVersion: 1, username: DEFAULT_USERNAME, avatar: null, setupComplete: true });
+    expect(loadUserProfile().setupComplete).toBe(true);
+  });
+
+  it("recognizes a legacy profile with a custom name and avatar as complete", () => {
+    const avatar = new Array(AVATAR_CELL_COUNT).fill(null);
+    avatar[0] = "#ff0000";
+    window.localStorage.setItem(
+      USER_PROFILE_STORAGE_KEY,
+      JSON.stringify({ schemaVersion: 1, username: "Skipper", avatar }),
+    );
+    expect(loadUserProfile().setupComplete).toBe(true);
   });
 
   it("round-trips a username through localStorage", () => {

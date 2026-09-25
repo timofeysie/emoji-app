@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { BotProfile } from "@emoji-app/land-grab-core";
 import { BOT_STRATEGIES, strategyFor, type BotType } from "@emoji-app/land-grab-core";
 import type { GameRules, PlayerConfig } from "@emoji-app/land-grab-core";
-import { DEFAULT_USERNAME, MAX_USERNAME_LENGTH, resolveUsername } from "./userProfile";
-import { PixelAvatarEditor } from "./PixelAvatarEditor";
-import { AVATAR_SIZE, type AvatarGrid } from "@emoji-app/land-grab-core";
+import { resolveUsername } from "./userProfile";
+import { PlayerAvatarPreview, PlayerProfileEditor } from "./PlayerProfileEditor";
+import type { AvatarGrid } from "@emoji-app/land-grab-core";
 
 function colorToHex(color: number): string {
   return `#${color.toString(16).padStart(6, "0")}`;
@@ -14,30 +14,68 @@ function formatValue(value: number): string {
   return Number.isInteger(value) ? String(value) : String(parseFloat(value.toFixed(2)));
 }
 
-/** One-liner under the archetype picker on each driven card. `Record<BotType, …>` so a new archetype can't skip it. */
+/** Archetype help shown from the picker question button. `Record<BotType, …>` keeps every archetype covered. */
 const ARCHETYPE_BLURB: Record<BotType, string> = {
   rambler: "Greedy roamer — strikes out into open water, then beelines home to bank a small loop.",
   surveyor: "Territory farmer — hugs its own frontier one cell out and folds in short, chunky loops.",
   invader: "Raider — hunts a rival into a head-on stand-off, then jukes aside and cuts their wake as they pass.",
 };
 
-/** The fixed rules a keyboard-controlled human plays by — shown read-only. */
-const HUMAN_RULES = [
-  "Buffered input: a key press sets the facing used on the next tick.",
-  "No 180° flip back onto your own live wake.",
-  "Start gate: your boat holds on its base until your first key press (re-arms after a respawn).",
-];
+function HintPopover({ id, label, hint }: { id: string; label: string; hint: string }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-/** A tiny live preview of the 8x8 avatar grid, shown wherever the plain color dot would otherwise go. */
-function AvatarThumbnail({ avatar, size = 24 }: { avatar: AvatarGrid; size?: number }) {
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
   return (
-    <div
-      className="grid rounded-sm overflow-hidden shrink-0"
-      style={{ width: size, height: size, gridTemplateColumns: `repeat(${AVATAR_SIZE}, 1fr)` }}
-    >
-      {avatar.map((color, i) => (
-        <div key={i} style={{ backgroundColor: color ?? "transparent" }} />
-      ))}
+    <div ref={containerRef} className="contents">
+      <button
+        type="button"
+        aria-label={`About ${label}`}
+        aria-expanded={open}
+        aria-controls={id}
+        aria-describedby={open ? id : undefined}
+        onClick={() => setOpen((value) => !value)}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-secondary p-0 text-xs font-bold text-muted-foreground hover:text-foreground sm:h-6 sm:w-6"
+      >
+        <span aria-hidden="true">?</span>
+      </button>
+      {open && (
+        <>
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 z-40 bg-background/60 sm:hidden"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            id={id}
+            role="tooltip"
+            className="fixed inset-x-4 top-1/2 z-50 -translate-y-1/2 rounded-lg border border-border bg-card p-3 text-left text-xs leading-relaxed text-foreground shadow-xl sm:absolute sm:inset-x-0 sm:top-full sm:mt-2 sm:w-auto sm:translate-y-0"
+          >
+            {hint}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -82,187 +120,176 @@ export function BotProfilePanel({
   onResetAll,
   onRulesChange,
 }: BotProfilePanelProps) {
-  const [avatarEditorOpen, setAvatarEditorOpen] = useState(false);
   return (
-    <div className="rounded-lg border border-border bg-card/40 p-4" data-testid="bot-profile-panel">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4">
-        <h3 className="text-sm font-semibold text-foreground">Profiles &amp; tuning</h3>
-        <p className="text-xs text-muted-foreground">
-          Every bot scores its four moves with these numbers each tick. Changes apply on the next tick — pause first if
-          you want to line up an experiment.
-        </p>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground ml-auto">
-          <span className="text-foreground font-medium">Respawn delay</span>
-          <input
-            type="range"
-            min={0}
-            max={60}
-            step={1}
-            value={rules.respawnDelayTicks}
-            onChange={(e) => onRulesChange({ respawnDelayTicks: Number(e.target.value) })}
-            className="w-28 accent-primary"
-          />
-          <span className="tabular-nums text-foreground w-8">{rules.respawnDelayTicks}</span>
-          <span>ticks</span>
-        </label>
-        <button
-          onClick={onResetAll}
-          className="px-2.5 py-1 rounded-md bg-secondary text-secondary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
-        >
-          Reset all
-        </button>
+    <div className="rounded-lg border border-border bg-card/40 p-3 sm:p-4" data-testid="bot-profile-panel">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
+        <h3 className="min-w-0 flex-1 text-sm font-semibold text-foreground">Profiles &amp; tuning</h3>
+        <div className="grid gap-2 sm:grid-cols-[minmax(20rem,1fr)_auto] lg:flex lg:items-center">
+          <label className="grid min-h-11 grid-cols-[auto_minmax(5rem,1fr)_2rem_auto] items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Respawn delay</span>
+            <input
+              type="range"
+              min={0}
+              max={60}
+              step={1}
+              value={rules.respawnDelayTicks}
+              onChange={(e) => onRulesChange({ respawnDelayTicks: Number(e.target.value) })}
+              className="min-w-0 accent-primary"
+            />
+            <span className="w-8 tabular-nums text-foreground">{rules.respawnDelayTicks}</span>
+            <span>ticks</span>
+          </label>
+          <button
+            type="button"
+            onClick={onResetAll}
+            className="min-h-11 w-full rounded-md bg-secondary px-3 py-2 text-xs font-medium text-secondary-foreground transition-opacity hover:opacity-90 sm:w-auto"
+          >
+            Reset all
+          </button>
+        </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         {configs.map((config) => {
           const isHuman = config.id === humanId;
           const driven = !isHuman || autopilot[config.id];
           const profile = profiles[config.id];
           const archetype = strategyFor(botTypes[config.id]);
           return (
-            <div
+            <details
               key={config.id}
               data-testid={`bot-card-${config.id}`}
-              className="rounded-lg border border-border bg-background/40 p-3"
+              className="group rounded-lg border border-border bg-background/40"
             >
-              <div className="flex items-center gap-2 mb-2">
-                {isHuman && avatar ? (
-                  <AvatarThumbnail avatar={avatar} size={16} />
+              <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 p-3 select-none [&::-webkit-details-marker]:hidden">
+                {isHuman ? (
+                  <PlayerAvatarPreview avatar={avatar} seedColor={colorToHex(config.color)} size={28} />
                 ) : (
                   <span
-                    className="w-3 h-3 rounded-full inline-block shrink-0"
+                    className="inline-block h-4 w-4 shrink-0 rounded-full"
                     style={{ backgroundColor: colorToHex(config.color) }}
                   />
                 )}
-                <span className="text-sm font-medium text-foreground">
-                  {isHuman ? resolveUsername(username) : config.label}
-                </span>
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground border border-border rounded px-1 py-px">
-                  {isHuman ? "you" : "bot"}
-                </span>
-                {driven && (
-                  <span className="text-[10px] uppercase tracking-wide text-primary border border-primary/40 rounded px-1 py-px">
-                    {archetype.label}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-foreground">
+                    {isHuman ? resolveUsername(username) : config.label}
                   </span>
-                )}
-                {driven && (
-                  <button
-                    onClick={() => onResetProfile(config.id)}
-                    className="ml-auto text-xs text-primary hover:underline"
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-
-              {isHuman && (
-                <label className="flex flex-col gap-1 text-xs text-foreground mb-2">
-                  <span className="font-medium">Your name</span>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => onUsernameChange(e.target.value)}
-                    maxLength={MAX_USERNAME_LENGTH}
-                    placeholder={DEFAULT_USERNAME}
-                    className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
-                  />
-                  <span className="text-[11px] text-muted-foreground">
-                    Shown on the leaderboard and saved to this browser.
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    <span className="rounded border border-border px-1 py-px text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {isHuman ? "you" : "bot"}
+                    </span>
+                    {driven && (
+                      <span className="rounded border border-primary/40 px-1 py-px text-[10px] uppercase tracking-wide text-primary">
+                        {archetype.label}
+                      </span>
+                    )}
                   </span>
-                </label>
-              )}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground transition-transform group-open:rotate-180"
+                >
+                  <svg viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-current" strokeWidth="2">
+                    <path d="m5 7.5 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+              </summary>
 
-              {isHuman && (
-                <div className="flex items-center gap-2 mb-2">
-                  <AvatarThumbnail avatar={avatar ?? Array(AVATAR_SIZE * AVATAR_SIZE).fill(colorToHex(config.color))} size={28} />
-                  <div className="flex flex-col gap-1">
+              <div className="border-t border-border p-3 sm:p-4">
+                {driven && (
+                  <div className="mb-3 flex justify-end">
                     <button
                       type="button"
-                      onClick={() => setAvatarEditorOpen(true)}
-                      className="self-start px-2.5 py-1 rounded-md bg-secondary text-secondary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
+                      onClick={() => onResetProfile(config.id)}
+                      className="min-h-10 w-full rounded-md bg-secondary px-3 py-2 text-xs font-medium text-secondary-foreground transition-opacity hover:opacity-90 sm:w-auto"
                     >
-                      {avatar ? "Edit avatar" : "Design avatar"}
+                      Reset profile
                     </button>
-                    <span className="text-[11px] text-muted-foreground">
-                      Replaces your head marker in-game with this 8×8 sprite.
-                    </span>
                   </div>
-                  <PixelAvatarEditor
-                    open={avatarEditorOpen}
-                    onOpenChange={setAvatarEditorOpen}
-                    value={avatar}
+                )}
+
+                {isHuman && (
+                  <PlayerProfileEditor
+                    username={username}
+                    avatar={avatar}
                     seedColor={colorToHex(config.color)}
-                    onSave={onAvatarChange}
+                    onUsernameChange={onUsernameChange}
+                    onAvatarChange={onAvatarChange}
+                    className="mb-3"
                   />
-                </div>
-              )}
+                )}
 
-              {isHuman && (
-                <label className="flex items-center gap-2 text-xs text-foreground mb-2">
-                  <input
-                    type="checkbox"
-                    checked={!!autopilot[config.id]}
-                    onChange={(e) => onAutopilotChange(config.id, e.target.checked)}
-                    className="accent-primary"
-                  />
-                  Autopilot — hand this boat to the bot scorer
-                </label>
-              )}
-
-              {isHuman && !autopilot[config.id] ? (
-                <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
-                  {HUMAN_RULES.map((rule) => (
-                    <li key={rule}>{rule}</li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="flex flex-col gap-2.5">
-                  <label className="flex items-center justify-between gap-2 text-xs text-foreground">
-                    <span className="font-medium">Archetype</span>
-                    <select
-                      value={botTypes[config.id] ?? archetype.type}
-                      onChange={(e) => onBotTypeChange(config.id, e.target.value as BotType)}
-                      className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
-                    >
-                      {Object.values(BOT_STRATEGIES).map((s) => (
-                        <option key={s.type} value={s.type}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
+                {isHuman && (
+                  <label className="mb-3 flex min-h-11 items-center gap-3 text-xs text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={!!autopilot[config.id]}
+                      onChange={(e) => onAutopilotChange(config.id, e.target.checked)}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    Autopilot — hand this boat to the bot scorer
                   </label>
-                  <p className="text-[11px] leading-snug text-muted-foreground -mt-1">
-                    {ARCHETYPE_BLURB[archetype.type]}
-                  </p>
-                  {archetype.fields.map((field) => {
-                    const inputId = `${config.id}-${field.key}`;
-                    return (
-                      <div key={field.key}>
-                        <div className="flex items-center justify-between gap-2">
-                          <label htmlFor={inputId} className="text-xs text-foreground">
-                            {field.label}
-                          </label>
-                          <span className="text-xs tabular-nums text-muted-foreground">
-                            {formatValue(profile[field.key])}
-                          </span>
-                        </div>
-                        <input
-                          id={inputId}
-                          type="range"
-                          min={field.min}
-                          max={field.max}
-                          step={field.step}
-                          value={profile[field.key]}
-                          onChange={(e) => onProfileChange(config.id, field.key, Number(e.target.value))}
-                          className="w-full accent-primary"
+                )}
+
+                {driven && (
+                  <div className="flex flex-col gap-3">
+                    <div className="relative flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-foreground">Archetype</span>
+                        <HintPopover
+                          id={`${config.id}-archetype-hint`}
+                          label="archetype"
+                          hint={ARCHETYPE_BLURB[archetype.type]}
                         />
-                        <p className="text-[11px] leading-snug text-muted-foreground">{field.hint}</p>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      <select
+                        value={botTypes[config.id] ?? archetype.type}
+                        onChange={(e) => onBotTypeChange(config.id, e.target.value as BotType)}
+                        className="min-h-11 w-full rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground sm:w-auto"
+                      >
+                        {Object.values(BOT_STRATEGIES).map((strategy) => (
+                          <option key={strategy.type} value={strategy.type}>
+                            {strategy.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {archetype.fields.map((field) => {
+                      const inputId = `${config.id}-${field.key}`;
+                      return (
+                        <div key={field.key} className="relative">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <label htmlFor={inputId} className="text-xs text-foreground">
+                                {field.label}
+                              </label>
+                              <HintPopover
+                                id={`${inputId}-hint`}
+                                label={field.label}
+                                hint={field.hint}
+                              />
+                            </div>
+                            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                              {formatValue(profile[field.key])}
+                            </span>
+                          </div>
+                          <input
+                            id={inputId}
+                            type="range"
+                            min={field.min}
+                            max={field.max}
+                            step={field.step}
+                            value={profile[field.key]}
+                            onChange={(e) => onProfileChange(config.id, field.key, Number(e.target.value))}
+                            className="h-10 w-full accent-primary"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </details>
           );
         })}
       </div>

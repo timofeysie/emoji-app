@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -72,12 +71,9 @@ export function PixelAvatarEditor({ open, onOpenChange, value, seedColor, onSave
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="dialog avatar-editor-dialog">
         <DialogHeader>
           <DialogTitle>Design your avatar</DialogTitle>
-          <DialogDescription>
-            Paint an 8×8 sprite for your boat's head marker in the game. Leave a pixel blank to keep it transparent.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col items-center gap-3">
