@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Phaser from "phaser";
 import {
+  computeTotalScore,
   createInitialGameState,
   setPlayerFacing,
   stepGame,
@@ -30,8 +31,8 @@ import {
 import { createReplayLog, recordFrame, type ReplayLog } from "@emoji-app/land-grab-core";
 import { LandGrabReplay } from "./LandGrabReplay";
 import { loadUserProfile, resolveUsername, saveUserProfile } from "./userProfile";
-import { PlayerProfileEditor } from "./PlayerProfileEditor";
-import { AVATAR_SIZE, type AvatarGrid } from "@emoji-app/land-grab-core";
+import { PlayerAvatarPreview, PlayerProfileEditor } from "./PlayerProfileEditor";
+import { AVATAR_SIZE, createDefaultAvatar, type AvatarGrid } from "@emoji-app/land-grab-core";
 import type { Direction } from "@emoji-app/land-grab-core";
 import {
   Dialog,
@@ -68,8 +69,8 @@ const LARGE_MAP_MAX_ROWS = 120;
 /** Longest edge of the lower-left overview map, in screen pixels. */
 const MINIMAP_MAX_SIZE = 140;
 const MINIMAP_MARGIN = 12;
-/** Fixed on-screen radius for player/bot dots on the minimap, regardless of world size. */
-const MINIMAP_MARKER_SCREEN_RADIUS = 4;
+/** Fixed on-screen size for player/bot avatars on the minimap, regardless of world size. */
+const MINIMAP_AVATAR_SCREEN_SIZE = 8;
 
 interface GridDims {
   rows: number;
@@ -120,7 +121,7 @@ const PLAYER_CONFIGS: PlayerConfig[] = [
 
 const HUMAN_ID = "you";
 const HUMAN_AVATAR_COLOR = "#38bdf8";
-const AVATAR_TEXTURE_KEY = "land-grab-human-avatar";
+const AVATAR_TEXTURE_KEY_PREFIX = "land-grab-avatar";
 /** Physical pixels per avatar cell in the baked texture — kept blocky/crisp rather than smoothed on scale-up. */
 const AVATAR_TEXTURE_PIXEL_SIZE = 4;
 
@@ -162,7 +163,7 @@ interface SceneData {
   autopilotRef: { current: Record<string, boolean> };
   botTypesRef: { current: Record<string, BotType> };
   rulesRef: { current: GameRules };
-  /** The human's custom head-marker sprite, or `null` to draw the plain color circle. */
+  /** The human's custom head-marker sprite, or `null` to draw the tinted default avatar. */
   avatarRef: { current: AvatarGrid | null };
   /**
    * `chainPeaks` is each player's high-water mark for the display-only captured-avatar
@@ -190,9 +191,9 @@ class LandGrabScene extends Phaser.Scene {
   private isLargeMap = false;
   private graphics!: Phaser.GameObjects.Graphics;
   private headMarkers: Phaser.GameObjects.GameObject[] = [];
-  /** Serialized form of the avatar grid last baked into `AVATAR_TEXTURE_KEY`, so a same-avatar tick skips regenerating it. */
-  private bakedAvatarSignature: string | null = null;
-  private chainMarkers: Phaser.GameObjects.Arc[] = [];
+  /** Serialized avatar grids keyed by player id, so unchanged textures are reused each tick. */
+  private bakedAvatarSignatures: Record<string, string> = {};
+  private chainMarkers: Phaser.GameObjects.GameObject[] = [];
   /** The lower-left overview camera in "large map" mode, `null` otherwise. */
   private minimapCamera: Phaser.Cameras.Scene2D.Camera | null = null;
   /**
@@ -201,10 +202,10 @@ class LandGrabScene extends Phaser.Scene {
    * `startFollow`), which is what turns the once-per-160ms cell jump into a smooth glide.
    */
   private cameraTarget: Phaser.GameObjects.Zone | null = null;
-  /** World units per minimap screen pixel — used to size the fixed-screen-size player dots. */
+  /** World units per minimap screen pixel — used to size the fixed-screen-size player avatars. */
   private minimapZoom = 1;
-  /** Player/bot dots drawn only for the minimap (the normal head markers are too small to read at that zoom). */
-  private minimapMarkers: Phaser.GameObjects.Arc[] = [];
+  /** Player/bot avatars drawn only for the minimap (the normal head markers are too small to read at that zoom). */
+  private minimapMarkers: Phaser.GameObjects.GameObject[] = [];
   /** Display-only: who's currently trailing whom, built from each tick's `captureEvents`. */
   private chains: ChainMap = {};
   /** Recent head positions per player, used to lay the trailing chain out along consecutive cells like a snake body. Reset on death. */
@@ -352,16 +353,24 @@ class LandGrabScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.cameraTarget, false, 0.12, 0.12);
   }
 
-  /** (Re)bake `grid` into the shared avatar canvas texture, skipping the redraw when it's unchanged since last tick. */
-  private ensureAvatarTexture(grid: AvatarGrid): string {
+  private avatarFor(playerId: string, color: number): AvatarGrid {
+    return playerId === HUMAN_ID && this.avatarRef.current
+      ? this.avatarRef.current
+      : createDefaultAvatar(colorToHex(color));
+  }
+
+  /** (Re)bake one player's grid, skipping the redraw when their avatar has not changed. */
+  private ensureAvatarTexture(playerId: string, grid: AvatarGrid): string {
+    const textureKey = `${AVATAR_TEXTURE_KEY_PREFIX}:${playerId}`;
     const signature = grid.join(",");
-    if (this.bakedAvatarSignature === signature && this.textures.exists(AVATAR_TEXTURE_KEY)) {
-      return AVATAR_TEXTURE_KEY;
+    if (this.bakedAvatarSignatures[playerId] === signature && this.textures.exists(textureKey)) {
+      return textureKey;
     }
-    this.bakedAvatarSignature = signature;
+    this.bakedAvatarSignatures[playerId] = signature;
     const side = AVATAR_SIZE * AVATAR_TEXTURE_PIXEL_SIZE;
-    if (this.textures.exists(AVATAR_TEXTURE_KEY)) this.textures.remove(AVATAR_TEXTURE_KEY);
-    const canvasTexture = this.textures.createCanvas(AVATAR_TEXTURE_KEY, side, side)!;
+    if (this.textures.exists(textureKey)) this.textures.remove(textureKey);
+    const canvasTexture = this.textures.createCanvas(textureKey, side, side)!;
+    canvasTexture.setFilter(Phaser.Textures.FilterMode.NEAREST);
     const ctx = canvasTexture.getContext();
     for (let row = 0; row < AVATAR_SIZE; row++) {
       for (let col = 0; col < AVATAR_SIZE; col++) {
@@ -372,7 +381,7 @@ class LandGrabScene extends Phaser.Scene {
       }
     }
     canvasTexture.refresh();
-    return AVATAR_TEXTURE_KEY;
+    return textureKey;
   }
 
   private draw() {
@@ -448,44 +457,44 @@ class LandGrabScene extends Phaser.Scene {
       const positions = chainPositions(this.headHistory[player.id] ?? [], chain.length);
       for (let i = 0; i < positions.length; i++) {
         const pos = positions[i];
+        const capturedPlayer = state.players[chain[i]];
+        if (!capturedPlayer) continue;
         const cx = pos.col * cell + cell / 2;
         const cy = pos.row * cell + cell / 2;
-        const capturedColor = state.players[chain[i]]?.color ?? player.color;
-        const marker = this.add.circle(cx, cy, cell * 0.22, capturedColor, CHAIN_TRAIL_ALPHA);
-        marker.setStrokeStyle(1.5, 0xffffff, CHAIN_TRAIL_ALPHA);
+        const avatar = this.avatarFor(capturedPlayer.id, capturedPlayer.color);
+        const key = this.ensureAvatarTexture(capturedPlayer.id, avatar);
+        const marker = this.add.image(cx, cy, key);
+        marker.setDisplaySize(cell * 0.5, cell * 0.5);
+        marker.setAlpha(CHAIN_TRAIL_ALPHA);
         this.chainMarkers.push(marker);
       }
     }
 
     for (const marker of this.headMarkers) marker.destroy();
     this.headMarkers = [];
-    const humanAvatar = this.avatarRef.current;
     for (const player of Object.values(state.players)) {
       if (!player.alive) continue;
       const cx = player.head.col * cell + cell / 2;
       const cy = player.head.row * cell + cell / 2;
-      if (player.id === HUMAN_ID && humanAvatar) {
-        const key = this.ensureAvatarTexture(humanAvatar);
-        const sprite = this.add.image(cx, cy, key);
-        sprite.setDisplaySize(cell * 0.9, cell * 0.9);
-        this.headMarkers.push(sprite);
-      } else {
-        const marker = this.add.circle(cx, cy, cell * 0.28, 0xffffff);
-        marker.setStrokeStyle(2, player.color);
-        this.headMarkers.push(marker);
-      }
+      const avatar = this.avatarFor(player.id, player.color);
+      const key = this.ensureAvatarTexture(player.id, avatar);
+      const marker = this.add.image(cx, cy, key);
+      marker.setDisplaySize(cell * 0.9, cell * 0.9);
+      this.headMarkers.push(marker);
     }
 
     for (const marker of this.minimapMarkers) marker.destroy();
     this.minimapMarkers = [];
     if (this.isLargeMap && this.minimapCamera) {
-      const worldRadius = MINIMAP_MARKER_SCREEN_RADIUS / this.minimapZoom;
+      const worldSize = MINIMAP_AVATAR_SCREEN_SIZE / this.minimapZoom;
       for (const player of Object.values(state.players)) {
         if (!player.alive) continue;
         const cx = player.head.col * cell + cell / 2;
         const cy = player.head.row * cell + cell / 2;
-        const marker = this.add.circle(cx, cy, worldRadius, player.color);
-        marker.setStrokeStyle(Math.max(1, worldRadius * 0.25), 0xffffff, 0.9);
+        const avatar = this.avatarFor(player.id, player.color);
+        const key = this.ensureAvatarTexture(player.id, avatar);
+        const marker = this.add.image(cx, cy, key);
+        marker.setDisplaySize(worldSize, worldSize);
         this.cameras.main.ignore(marker);
         this.minimapMarkers.push(marker);
       }
@@ -499,6 +508,10 @@ function formatDuration(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function colorToHex(color: number): string {
+  return `#${(color & 0xffffff).toString(16).padStart(6, "0")}`;
 }
 
 export function LandGrabDemo() {
@@ -537,6 +550,8 @@ export function LandGrabDemo() {
   const stateHolderRef = useRef<{ current: GameState }>({
     current: createInitialGameState(DEFAULT_DIMS.rows, DEFAULT_DIMS.cols, buildConfigs(), rulesRef.current),
   });
+  const [livePlayers, setLivePlayers] = useState(stateHolderRef.current.current.players);
+  const [chainLengths, setChainLengths] = useState<Record<string, number>>({});
   const [restartToken, setRestartToken] = useState(0);
   const [gameOver, setGameOver] = useState<LandGrabGameRecord | null>(null);
   // Frozen at game over for the replay viewer. Kept across restarts so the
@@ -626,8 +641,11 @@ export function LandGrabDemo() {
   useEffect(() => {
     if (screen !== "game" || !containerRef.current || !viewport) return;
 
-    stateHolderRef.current.current = createInitialGameState(dims.rows, dims.cols, buildConfigs(), rulesRef.current);
-    replayLogRef.current = createReplayLog(stateHolderRef.current.current);
+    const initialState = createInitialGameState(dims.rows, dims.cols, buildConfigs(), rulesRef.current);
+    stateHolderRef.current.current = initialState;
+    setLivePlayers(initialState.players);
+    setChainLengths({});
+    replayLogRef.current = createReplayLog(initialState);
     recordedRef.current = false;
     controlRef.current.paused = false;
 
@@ -655,6 +673,8 @@ export function LandGrabDemo() {
         isLargeMap: true,
         onTick: (state: GameState, chainPeaks: Record<string, number>, chainLengths: Record<string, number>) => {
           if (replayLogRef.current) recordFrame(replayLogRef.current, state);
+          setLivePlayers(state.players);
+          setChainLengths(chainLengths);
           if (state.winnerId && !recordedRef.current) {
             recordedRef.current = true;
             const record = buildGameRecord(state, { chainPeaks, chainLengths });
@@ -705,6 +725,25 @@ export function LandGrabDemo() {
   };
   const winnerName =
     gameOver?.winner.id === HUMAN_ID ? resolveUsername(username) : gameOver?.winner.label;
+  const totalCells = dims.rows * dims.cols;
+  const playerCount = Object.keys(livePlayers).length;
+  const leaderboard = Object.values(livePlayers)
+    .map((player, rosterIndex) => ({
+      player,
+      rosterIndex,
+      score: computeTotalScore(
+        player.ownedCount,
+        chainLengths[player.id] ?? 0,
+        totalCells,
+        playerCount,
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.player.ownedCount - a.player.ownedCount ||
+        a.rosterIndex - b.rosterIndex,
+    );
 
   return (
     <>
@@ -779,6 +818,47 @@ export function LandGrabDemo() {
             onPointerUp={handleBoardPointerEnd}
             onPointerCancel={handleBoardPointerEnd}
           />
+          <aside
+            className="game-leaderboard"
+            aria-labelledby="game-leaderboard-title"
+            data-testid="landgrab-live-leaderboard"
+          >
+            <header className="game-leaderboard-header">
+              <h2 id="game-leaderboard-title">Leaderboard</h2>
+              <span>Score</span>
+            </header>
+            <ol className="game-leaderboard-list">
+              {leaderboard.map(({ player, score }, index) => {
+                const isHuman = player.id === HUMAN_ID;
+                return (
+                  <li
+                    key={player.id}
+                    className={[
+                      "game-leaderboard-row",
+                      isHuman ? "game-leaderboard-row-current" : "",
+                      !player.alive ? "game-leaderboard-row-respawning" : "",
+                    ].filter(Boolean).join(" ")}
+                    aria-current={isHuman ? "true" : undefined}
+                  >
+                    <span className="game-leaderboard-rank" aria-hidden="true">
+                      {index + 1}
+                    </span>
+                    <span className="game-leaderboard-icon">
+                      <PlayerAvatarPreview
+                        avatar={isHuman ? avatar : null}
+                        seedColor={colorToHex(player.color)}
+                        size={24}
+                      />
+                    </span>
+                    <span className="game-leaderboard-name">{player.label}</span>
+                    <span className="game-leaderboard-score" aria-label={`${score} points`}>
+                      {score.toLocaleString()}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </aside>
         </main>
       )}
 
@@ -847,10 +927,13 @@ export function LandGrabDemo() {
         <AlertDialogContent data-testid="landgrab-gameover" className="dialog result-dialog">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <span
-                className="w-3.5 h-3.5 rounded-full inline-block shrink-0"
-                style={{ backgroundColor: gameOver?.winner.color }}
-              />
+              {gameOver && (
+                <PlayerAvatarPreview
+                  avatar={gameOver.winner.id === HUMAN_ID ? avatar : null}
+                  seedColor={gameOver.winner.color}
+                  size={20}
+                />
+              )}
               {winnerName} wins
             </AlertDialogTitle>
           </AlertDialogHeader>

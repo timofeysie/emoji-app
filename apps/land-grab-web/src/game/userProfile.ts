@@ -10,7 +10,7 @@ export interface LandGrabUserProfile {
   schemaVersion: 1;
   /** What the human player is called in the UI. Never empty — see `resolveUsername`. */
   username: string;
-  /** Custom 8x8 pixel-art avatar, or `null` to use the plain color marker. Added after schemaVersion 1 shipped, so it's optional/absent on old blobs rather than forcing a version bump. */
+  /** Custom 8x8 pixel-art avatar, or `null` to use the tinted default avatar. Added after schemaVersion 1 shipped, so it's optional/absent on old blobs rather than forcing a version bump. */
   avatar?: AvatarGrid | null;
   /** True after the player has reviewed and accepted the profile setup, including the defaults. */
   setupComplete?: boolean;

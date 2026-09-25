@@ -12,11 +12,31 @@ export const AVATAR_CELL_COUNT = AVATAR_SIZE * AVATAR_SIZE;
  * Row-major flattened 8x8 grid, length `AVATAR_CELL_COUNT`. Each cell is either
  * a `#rrggbb` hex color or `null` for "leave transparent, show nothing here".
  * `null` in `userProfile` (not this array) means "no custom avatar at all —
- * fall back to the plain color circle".
+ * fall back to the default avatar in the player's color".
  */
 export type AvatarGrid = (string | null)[];
 
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+
+/** The default hollow pixel ring, read left-to-right and top-to-bottom. */
+export const DEFAULT_AVATAR_MASK = [
+  false, false, true, true, true, true, false, false,
+  false, true, false, false, false, false, true, false,
+  true, false, false, false, false, false, false, true,
+  true, false, false, false, false, false, false, true,
+  true, false, false, false, false, false, false, true,
+  true, false, false, false, false, false, false, true,
+  false, true, false, false, false, false, true, false,
+  false, false, true, true, true, true, false, false,
+] as const;
+
+/** Create the default 8x8 avatar, tinted with a player's `#rrggbb` color. */
+export function createDefaultAvatar(color: string): AvatarGrid {
+  if (!HEX_COLOR_RE.test(color)) {
+    throw new Error(`Invalid avatar color: ${color}`);
+  }
+  return DEFAULT_AVATAR_MASK.map((filled) => (filled ? color : null));
+}
 
 /** An all-transparent starting grid for a brand-new avatar. */
 export function createEmptyAvatar(): AvatarGrid {

@@ -1,11 +1,43 @@
 import { describe, it, expect } from "vitest";
 import {
   AVATAR_CELL_COUNT,
+  createDefaultAvatar,
   createEmptyAvatar,
+  DEFAULT_AVATAR_MASK,
   isValidAvatarGrid,
   isBlankAvatar,
   resolveAvatar,
 } from "../src/pixelAvatar";
+
+describe("createDefaultAvatar", () => {
+  it("creates the hollow 8x8 ring in the supplied color", () => {
+    const grid = createDefaultAvatar("#38bdf8");
+    expect(grid).toHaveLength(AVATAR_CELL_COUNT);
+    expect(DEFAULT_AVATAR_MASK).toHaveLength(AVATAR_CELL_COUNT);
+    expect(
+      Array.from({ length: 8 }, (_, row) =>
+        grid
+          .slice(row * 8, row * 8 + 8)
+          .map((cell) => (cell ? "#" : "."))
+          .join(""),
+      ),
+    ).toEqual([
+      "..####..",
+      ".#....#.",
+      "#......#",
+      "#......#",
+      "#......#",
+      "#......#",
+      ".#....#.",
+      "..####..",
+    ]);
+    expect(grid.filter(Boolean).every((cell) => cell === "#38bdf8")).toBe(true);
+  });
+
+  it("rejects colors that cannot be stored in an avatar grid", () => {
+    expect(() => createDefaultAvatar("cyan")).toThrow("Invalid avatar color");
+  });
+});
 
 describe("createEmptyAvatar", () => {
   it("is all-null and the right length", () => {

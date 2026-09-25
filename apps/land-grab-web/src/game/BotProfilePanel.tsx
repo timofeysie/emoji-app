@@ -85,7 +85,7 @@ export interface BotProfilePanelProps {
   humanId: string;
   /** The human player's chosen name (raw, as typed). */
   username: string;
-  /** The human player's custom pixel-art avatar, or `null` to use the plain color marker. */
+  /** The human player's custom pixel-art avatar, or `null` to use the tinted default. */
   avatar: AvatarGrid | null;
   profiles: Record<string, BotProfile>;
   autopilot: Record<string, boolean>;
@@ -162,14 +162,11 @@ export function BotProfilePanel({
               className="group rounded-lg border border-border bg-background/40"
             >
               <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 p-3 select-none [&::-webkit-details-marker]:hidden">
-                {isHuman ? (
-                  <PlayerAvatarPreview avatar={avatar} seedColor={colorToHex(config.color)} size={28} />
-                ) : (
-                  <span
-                    className="inline-block h-4 w-4 shrink-0 rounded-full"
-                    style={{ backgroundColor: colorToHex(config.color) }}
-                  />
-                )}
+                <PlayerAvatarPreview
+                  avatar={isHuman ? avatar : null}
+                  seedColor={colorToHex(config.color)}
+                  size={28}
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-foreground">
                     {isHuman ? resolveUsername(username) : config.label}

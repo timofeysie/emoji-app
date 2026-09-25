@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { AVATAR_SIZE, type AvatarGrid } from "@emoji-app/land-grab-core";
+import { AVATAR_SIZE, createDefaultAvatar, type AvatarGrid } from "@emoji-app/land-grab-core";
 import { PixelAvatarEditor } from "./PixelAvatarEditor";
 import { DEFAULT_USERNAME, MAX_USERNAME_LENGTH } from "./userProfile";
 
@@ -9,27 +9,18 @@ export interface PlayerAvatarPreviewProps {
   size?: number;
 }
 
-/** The avatar currently used in-game, including the default circle when no sprite has been saved. */
+/** The custom avatar, or the shared default pattern tinted with this player's color. */
 export function PlayerAvatarPreview({ avatar, seedColor, size = 48 }: PlayerAvatarPreviewProps) {
-  if (!avatar) {
-    return (
-      <span
-        role="img"
-        aria-label="Current default avatar"
-        className="inline-block shrink-0 rounded-full border-[3px] bg-white"
-        style={{ width: size, height: size, borderColor: seedColor }}
-      />
-    );
-  }
+  const displayedAvatar = avatar ?? createDefaultAvatar(seedColor);
 
   return (
     <div
       role="img"
-      aria-label="Current custom avatar"
+      aria-label={avatar ? "Current custom avatar" : "Current default avatar"}
       className="grid shrink-0 overflow-hidden rounded-md border border-border bg-background"
       style={{ width: size, height: size, gridTemplateColumns: `repeat(${AVATAR_SIZE}, 1fr)` }}
     >
-      {avatar.map((color, index) => (
+      {displayedAvatar.map((color, index) => (
         <span key={index} style={{ backgroundColor: color ?? "transparent" }} />
       ))}
     </div>

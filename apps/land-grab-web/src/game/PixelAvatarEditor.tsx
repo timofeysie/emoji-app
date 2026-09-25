@@ -6,7 +6,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/Dialog";
-import { AVATAR_SIZE, createEmptyAvatar, isBlankAvatar, type AvatarGrid } from "@emoji-app/land-grab-core";
+import {
+  AVATAR_SIZE,
+  createDefaultAvatar,
+  isBlankAvatar,
+  type AvatarGrid,
+} from "@emoji-app/land-grab-core";
 
 /** Quick-pick swatches shown above the custom color input. */
 const PALETTE = [
@@ -34,25 +39,25 @@ const TRANSPARENT_CELL_STYLE: CSSProperties = {
 export interface PixelAvatarEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The saved avatar, or `null` if the player hasn't designed one yet. */
+  /** The saved avatar, or `null` to start from the tinted default. */
   value: AvatarGrid | null;
   /** Player's plain marker color (as `#rrggbb`), used to seed the first pixel painted. */
   seedColor: string;
-  /** Called on Save with the drawn grid, or `null` if it was cleared back to blank (falls back to the color circle). */
+  /** Called on Save with the drawn grid, or `null` if every pixel was erased (falls back to the default). */
   onSave: (grid: AvatarGrid | null) => void;
 }
 
 /** A small 8x8 pixel-art editor for the human player's in-game head marker. */
 export function PixelAvatarEditor({ open, onOpenChange, value, seedColor, onSave }: PixelAvatarEditorProps) {
-  const [draft, setDraft] = useState<AvatarGrid>(() => value ?? createEmptyAvatar());
+  const [draft, setDraft] = useState<AvatarGrid>(() => value ?? createDefaultAvatar(seedColor));
   const [paintColor, setPaintColor] = useState(seedColor);
   const [erasing, setErasing] = useState(false);
   const isPointerDownRef = useRef(false);
 
-  // Re-seed the draft from the saved value (or a blank grid) each time the editor opens.
+  // Re-seed the draft from the saved value (or the tinted default) each time the editor opens.
   useEffect(() => {
-    if (open) setDraft(value ?? createEmptyAvatar());
-  }, [open, value]);
+    if (open) setDraft(value ?? createDefaultAvatar(seedColor));
+  }, [open, seedColor, value]);
 
   const paintCell = (index: number) => {
     setDraft((prev) => {
@@ -67,7 +72,7 @@ export function PixelAvatarEditor({ open, onOpenChange, value, seedColor, onSave
     onOpenChange(false);
   };
 
-  const handleClear = () => setDraft(createEmptyAvatar());
+  const handleReset = () => setDraft(createDefaultAvatar(seedColor));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -144,11 +149,11 @@ export function PixelAvatarEditor({ open, onOpenChange, value, seedColor, onSave
               Eraser
             </button>
             <button
-              onClick={handleClear}
+              onClick={handleReset}
               type="button"
               className="px-2.5 py-1 rounded-md bg-secondary text-secondary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
             >
-              Clear
+              Reset
             </button>
           </div>
         </div>

@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { frameChainsAt, frameGridAt, frameHeadHistoryAt, type ReplayLog } from "@emoji-app/land-grab-core";
-import { chainPositions, CHAIN_TRAIL_ALPHA } from "@emoji-app/land-grab-core";
+import {
+  AVATAR_SIZE,
+  chainPositions,
+  CHAIN_TRAIL_ALPHA,
+  createDefaultAvatar,
+  type AvatarGrid,
+} from "@emoji-app/land-grab-core";
 import { TICK_MS } from "@emoji-app/land-grab-core";
 
 /** How long playback holds on the final frame before `onEnded` fires. */
@@ -17,6 +23,30 @@ function rgba(color: number, alpha: number): string {
 
 function hex(color: number): string {
   return `#${(color & 0xffffff).toString(16).padStart(6, "0")}`;
+}
+
+function drawAvatar(
+  ctx: CanvasRenderingContext2D,
+  avatar: AvatarGrid,
+  centerX: number,
+  centerY: number,
+  size: number,
+  alpha = 1,
+): void {
+  const pixelSize = size / AVATAR_SIZE;
+  const left = centerX - size / 2;
+  const top = centerY - size / 2;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  for (let row = 0; row < AVATAR_SIZE; row++) {
+    for (let col = 0; col < AVATAR_SIZE; col++) {
+      const color = avatar[row * AVATAR_SIZE + col];
+      if (!color) continue;
+      ctx.fillStyle = color;
+      ctx.fillRect(left + col * pixelSize, top + row * pixelSize, pixelSize, pixelSize);
+    }
+  }
+  ctx.restore();
 }
 
 /** Redraw the complete board at `index` — mirrors `LandGrabScene.draw()`, minus Phaser. */
@@ -57,13 +87,14 @@ function drawFrame(canvas: HTMLCanvasElement, log: ReplayLog, index: number): vo
       const capturedColor = log.playerMeta[chain[i]]?.color ?? log.playerMeta[id]?.color ?? 0xffffff;
       const cx = pos.col * cell + cell / 2;
       const cy = pos.row * cell + cell / 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, cell * 0.22, 0, Math.PI * 2);
-      ctx.fillStyle = rgba(capturedColor, CHAIN_TRAIL_ALPHA);
-      ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = rgba(0xffffff, CHAIN_TRAIL_ALPHA);
-      ctx.stroke();
+      drawAvatar(
+        ctx,
+        createDefaultAvatar(hex(capturedColor)),
+        cx,
+        cy,
+        cell * 0.5,
+        CHAIN_TRAIL_ALPHA,
+      );
     }
   }
 
@@ -73,13 +104,7 @@ function drawFrame(canvas: HTMLCanvasElement, log: ReplayLog, index: number): vo
     const color = log.playerMeta[id]?.color ?? 0xffffff;
     const cx = player.head.col * cell + cell / 2;
     const cy = player.head.row * cell + cell / 2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, cell * 0.28, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = hex(color);
-    ctx.stroke();
+    drawAvatar(ctx, createDefaultAvatar(hex(color)), cx, cy, cell * 0.9);
   }
 }
 
