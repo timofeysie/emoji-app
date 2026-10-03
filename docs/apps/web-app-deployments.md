@@ -169,9 +169,13 @@ Commit `eas.json` and the `app.json` changes.
 
 ## 4. Build for Android
 
-From `apps/land-grab-mobile`:
+Run this from `apps/land-grab-mobile`, not the repository root. The root
+`package.json` is the emoji web API workspace and does not include Expo.
+A root build uploads `@timofeysie/emoji-app` and fails in Prebuild with
+`SDK < 41` because `expo` is not installed there.
 
 ```powershell
+cd apps/land-grab-mobile
 eas build --platform android --profile preview
 ```
 
@@ -186,13 +190,34 @@ finishes, the CLI prints a build URL and a QR code. Builds are also listed at
 
 ## 5. Install on the Android test device
 
-1. Open the build URL or scan the QR code on the device.
-2. Download the `.apk`.
-3. Allow the browser or file manager to install unknown apps when Android
-   asks.
-4. Open **LandGrab**. It launches in landscape and shows
-   "Loading offline practice…" before the game appears.
-5. Confirm the version on the home screen matches the web package version.
+Android Studio is not required for the cloud build or a phone install.
+The EAS CLI only needs Android Studio (or the standalone Android SDK
+platform-tools) if you answer **yes** to installing on a local emulator.
+That path uses `adb`. Without `ANDROID_HOME`, the CLI still downloads
+the APK, then exits with `spawn adb ENOENT`. The cloud build itself
+already succeeded.
+
+On the phone, use the camera or Chrome, not Expo Go. Expo Go is only
+for the Metro QR from `npm run dev:land-grab-mobile`.
+
+1. Open the build URL from the CLI, or scan that QR code with the
+   camera.
+2. On the Expo build page, tap **Download** rather than **Install** if
+   **Install** hangs.
+3. Open the `.apk` from the device **Downloads** folder.
+4. Allow the browser or Files app to install unknown apps when Android
+   asks. The system dialog is a second prompt; dismissing it leaves no
+   icon.
+5. Search the app drawer for **LandGrab**. There is no custom icon yet,
+   so look for the name, not a branded graphic. Some launchers do not
+   add a home-screen shortcut.
+6. Confirm the version on the game home screen matches the web package
+   version.
+
+If **Install** on the Expo page times out, the APK is often already in
+Downloads and the browser lacks "install unknown apps" permission.
+Enable it under **Settings → Apps → Special app access → Install
+unknown apps**, then open the downloaded file.
 
 If an install fails with a signature conflict, uninstall the existing
 LandGrab app first. This happens when the old install was signed with a
@@ -249,3 +274,8 @@ unless you intend to maintain native code by hand.
 | Server URL missing in build | Set in `eas.json` `env`, not `.env.local` |
 | APK will not install over old app | Different signing keystore |
 | Expo Go refuses the project | Expo Go does not support SDK 57 |
+| Prebuild fails, `SDK < 41` | `eas` was run from the repo root |
+| Build URL is `projects/emoji-app` | Wrong project; use `projects/land-grab` |
+| `spawn adb ENOENT` after download | Needs `adb`; use the phone instead |
+| No LandGrab icon after scanning QR | Install unfinished, or check the drawer |
+| Expo **Install** button times out | Open the `.apk` from Downloads |

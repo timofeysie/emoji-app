@@ -12,22 +12,20 @@ the account owns after `eas init`.
 
 ## When you need an account
 
-
-| Task                                             | Expo account |
-| ------------------------------------------------ | ------------ |
-| Run the game in Expo Go over Metro               | Not required |
-| Local Android build with Android Studio          | Not required |
-| Cloud EAS preview APK or iOS build               | Required     |
-| View builds at [expo.dev](https://expo.dev)      | Required     |
-| Store the Android keystore for later APK updates | Required     |
-
+| Task | Expo account |
+| --- | --- |
+| Run the game in Expo Go over Metro | Not required |
+| Local Android build with Android Studio | Not required |
+| Cloud EAS preview APK or iOS build | Required |
+| View builds at [expo.dev](https://expo.dev) | Required |
+| Store the Android keystore for later APK updates | Required |
 
 For a test-device install from this Windows machine, use a Free Expo
 account and EAS. The machine does not have an Android SDK.
 
 ## Create the account
 
-1. Open [expo.dev/signsignup](https://expo.dev/signup).
+1. Open [expo.dev/signup](https://expo.dev/signup).
 2. Register with email and password, or sign in with GitHub or Google.
 3. Confirm the email if Expo asks.
 4. Optional but recommended: turn on two-factor authentication under
@@ -91,9 +89,13 @@ Session credentials stay on the machine, not in the repo.
 The mobile app is not linked yet. `apps/land-grab-mobile/app.json` has a
 `slug` of `land-grab` but no `owner` or `extra.eas.projectId`.
 
-From `apps/land-grab-mobile`:
+From `apps/land-grab-mobile` only. Do not run `eas init` or `eas build`
+from the repository root. That links and builds `@timofeysie/emoji-app`
+instead of LandGrab, then fails in Prebuild because the root workspace
+does not install `expo`.
 
 ```powershell
+cd apps/land-grab-mobile
 eas init
 ```
 
@@ -133,14 +135,12 @@ uninstalled.
 Invite collaborators from **Organization settings > Members**. Roles
 from Expo's access model:
 
-
-| Role      | Can do for LandGrab                               |
-| --------- | ------------------------------------------------- |
-| Owner     | Any action, including delete                      |
-| Admin     | Settings, paid services, tokens, permissions      |
+| Role | Can do for LandGrab |
+| --- | --- |
+| Owner | Any action, including delete |
+| Admin | Settings, paid services, tokens, permissions |
 | Developer | Create projects, start builds, manage credentials |
-| Viewer    | View the project only                             |
-
+| Viewer | View the project only |
 
 A Personal account cannot grant those roles. Convert it to an
 organization or create a new organization first.

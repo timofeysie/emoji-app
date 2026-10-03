@@ -14,6 +14,12 @@
     },
     "ios": {
       "bundleIdentifier": "com.emojiapp.landgrab"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "9780d782-bd24-44ea-a582-3b654960e063"
+      }
+    },
+    "owner": "timofeysie"
   }
 }

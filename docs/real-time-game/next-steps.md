@@ -467,14 +467,16 @@ from a dropdown of existing groups.
 
 ## Step 10 — Multi-badge Mode 2 (planned)
 
-See `game-modes.md` for the full design. This step is not required for the
-current demo. Key changes when needed:
+Detailed plan: [`multi-badge-plan.md`](./multi-badge-plan.md).
 
-- Zero: extend scan loop to connect to all `Pico-Client-<PAIR_NAME>` devices
-  simultaneously, using a `dict[address, BleakClient]`.
-- Zero: per-badge `_on_pico_tx_notify` carrying `badgeId`.
-- Dashboard: badge cards are already keyed `controllerId::badgeId` so N
-  badges from one controller already render as N cards.
+One Zero commands several named Picos. The controller keeps `PAIR_NAME` as
+the station id (bind / join / score) and adds a `BADGE_NAMES` roster of Pico
+`PAIR_NAME` values it may auto-connect. Buttonless badges follow the
+controller's emoji and `GAME:*` state. The dashboard shows one station card
+with a slot per roster name (including **not connected**).
+
+See `game-modes.md` for the older same-name sketch; the roster model in
+`multi-badge-plan.md` is the implementation path.
 
 ---
 
