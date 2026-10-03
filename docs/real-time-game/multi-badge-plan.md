@@ -46,12 +46,12 @@ controller instead.
 
 | Milestone | Title | Layer | Status |
 | --- | --- | --- | --- |
-| 0 | Lock identity and `pair_config` shape | Config / docs | 🔲 planned |
-| 1 | Zero multi-connect to named badges | Zero BLE | 🔲 planned |
-| 2 | Fan-out emoji and `GAME:*` commands | Zero | 🔲 planned |
-| 3 | Per-badge status posts + game follow | Zero → server | 🔲 planned |
-| 4 | Server station + badge-slot model | NestJS | 🔲 planned |
-| 5 | React station component | React | 🔲 planned |
+| 0 | Lock identity and `pair_config` shape | Config / docs | ✅ done |
+| 1 | Zero multi-connect to named badges | Zero BLE | ✅ done |
+| 2 | Fan-out emoji and `GAME:*` commands | Zero | ✅ done |
+| 3 | Per-badge status posts + game follow | Zero → server | ✅ done |
+| 4 | Server station + badge-slot model | NestJS | ✅ done |
+| 5 | React station component | React | ✅ done |
 | 6 | Game / referee surfaces + NFC attribution | Server + React | 🔲 planned |
 | 7 | Docs, setup, hardware verification | Docs + devices | 🔲 planned |
 
@@ -221,11 +221,11 @@ above the repo root, same path as today):
 
 ### Acceptance criteria — Milestone 0
 
-- [ ] Documented config examples for Mode 1 (`PAIR_NAME` only) and Mode 2
+- [x] Documented config examples for Mode 1 (`PAIR_NAME` only) and Mode 2
       (roster of 2+ names).
-- [ ] Zero boot log prints controller `PAIR_NAME` and the resolved
+- [x] Zero boot log prints controller `PAIR_NAME` and the resolved
       `BADGE_NAMES` list.
-- [ ] Missing `BADGE_NAMES` keeps current 1:1 behaviour.
+- [x] Missing `BADGE_NAMES` keeps current 1:1 behaviour.
 
 ---
 
@@ -281,13 +281,15 @@ does not go offline.
 
 ### Acceptance criteria — Milestone 1
 
-- [ ] Two Picos with distinct `PAIR_NAME`s in `BADGE_NAMES` both stay
+- [x] Two Picos with distinct `PAIR_NAME`s in `BADGE_NAMES` both stay
       connected at once.
-- [ ] Handshake uses each badge's own name (`PAIR:white-2` for that Pico).
-- [ ] A third nearby Pico whose name is **not** in the roster is ignored.
-- [ ] Dropping one badge reconnects only that slot.
-- [ ] `BADGE_NAMES` omitted → identical to today's single-target scan.
-- [ ] No overlapping BlueZ scans in the logs.
+- [x] Handshake uses each badge's own name (`PAIR:white-2` for that Pico).
+- [x] A third nearby Pico whose name is **not** in the roster is ignored.
+- [x] Dropping one badge reconnects only that slot.
+- [x] `BADGE_NAMES` omitted → identical to today's single-target scan.
+- [x] No overlapping BlueZ scans in the logs.
+
+Hardware confirmation is still required on the `power-cable` / `black` pair.
 
 ---
 
@@ -329,13 +331,15 @@ Milestone 6.
 
 ### Acceptance criteria — Milestone 2
 
-- [ ] Choosing an emoji on the Zero updates every connected Pico matrix.
-- [ ] `GAME:lobby` / `GAME:question_open` / `GAME:correct` reach all
+- [x] Choosing an emoji on the Zero updates every connected Pico matrix.
+- [x] `GAME:lobby` / `GAME:question_open` / `GAME:correct` reach all
       connected badges.
-- [ ] Connecting a second badge during an open question shows `?` without
+- [x] Connecting a second badge during an open question shows `?` without
       another `KEY1`.
-- [ ] A write failure on one badge does not drop the other links.
-- [ ] Mode 1 (single badge) still shows emoji and game states as today.
+- [x] A write failure on one badge does not drop the other links.
+- [x] Mode 1 (single badge) still shows emoji and game states as today.
+
+Hardware confirmation is still required on the `power-cable` / `black` pair.
 
 ---
 
@@ -390,13 +394,13 @@ No extra join API. Confirm these Zero paths already fan out after Milestone 2:
 
 ### Acceptance criteria — Milestone 3
 
-- [ ] Server receives `badgeNames` and a `badgeName` on each status post.
-- [ ] Three configured names produce three status identities even if only
+- [x] Server receives `badgeNames` and a `badgeName` on each status post.
+- [x] Three configured names produce three status identities even if only
       one Pico is on.
-- [ ] Battery and `controllerVersion` still belong to the station (same
+- [x] Battery and `controllerVersion` still belong to the station (same
       values on every slot post is fine).
-- [ ] `picoVersion` is per slot (from that badge's `PAIR_OK`).
-- [ ] Existing Mode 1 posts remain valid (`badgeName` may equal `pairName`).
+- [x] `picoVersion` is per slot (from that badge's `PAIR_OK`).
+- [x] Existing Mode 1 posts remain valid (`badgeName` may equal `pairName`).
 
 ---
 
@@ -472,6 +476,25 @@ can render Mode 1 as a one-slot station.
 `status.changed` gains `badgeName` and `badgeNames` when present. Dashboards
 update the matching station slot in place.
 
+### As implemented (Milestone 4)
+
+- Stations are keyed by `pairName` (`controllerId` if a client sends no
+  `pairName`). Slots are keyed by `badgeName`, defaulting to the station
+  name, so a Mode 1 client is a one-slot station. A dashboard applying
+  `status.changed` uses the same rule: station `pairName ?? controllerId`,
+  slot `badgeName ?? station`.
+- `badgeNames` comes from the latest post that carried it. Without one, the
+  roster is the slots seen so far.
+- `badgeId` and `picoVersion` of `"unknown"` are returned as `null`.
+- Battery and `controllerVersion` keep their last non-null value, so a post
+  without battery does not blank the station.
+- Emoji stays station-scoped: `stations[].emoji` is the last selection, and
+  each slot's `emoji` repeats it only while that slot is `connected` (the
+  Zero wrote it to every connected badge).
+- The server does not synthesize `offline`. As today, the client marks a
+  stale `connected` slot offline by comparing its `timestamp` (server time).
+- Tests: `server/src/badges.controller.spec.ts`.
+
 ### Tests
 
 Extend `badges` / `badge-state` specs:
@@ -483,10 +506,10 @@ Extend `badges` / `badge-state` specs:
 
 ### Acceptance criteria — Milestone 4
 
-- [ ] Existing status/emoji tests still pass.
-- [ ] `GET /api/badges` includes `stations` with roster order preserved.
-- [ ] Missing roster names appear as disconnected / not-connected slots.
-- [ ] `status.changed` is enough for the dashboard to update one slot
+- [x] Existing status/emoji tests still pass.
+- [x] `GET /api/badges` includes `stations` with roster order preserved.
+- [x] Missing roster names appear as disconnected / not-connected slots.
+- [x] `status.changed` is enough for the dashboard to update one slot
       without a full refetch.
 
 ---
@@ -534,13 +557,35 @@ patch the matching `pairName` + `badgeName`. If `stations` is absent
 - Keep `BadgeCardHeader` pieces for slot chrome; do not show controller
   battery on every inner badge
 
+### As implemented (Milestone 5)
+
+- `client/src/app/views/badge-stations.ts` holds the station model: the
+  status / emoji event types, `stationsFromSnapshot` (prefers `stations`,
+  falls back to replaying flat `badges` in time order), and the
+  `applyStatusToStations` / `applyEmojiToStations` WebSocket patches. They
+  use the server's slot rule: station `pairName ?? controllerId`, slot
+  `badgeName ?? station`.
+- The card (`StationCardHeader`, `StationSlotCard`, `StationCardBody`) lives
+  in `BadgesView.tsx`, because it reuses the BLE row, primary visual, game
+  section, battery and version helpers already in that file.
+- Station header: `pairName`, `controllerId`, controller version, battery,
+  `n/m badges` (only for rosters of 2+), and the game section.
+- Slot: name, status label, BLE row, Pico version, `badgeId`, and the
+  primary visual (station emoji or game icon) only while connected.
+- A slot with no `badgeId` reads **not connected** unless it is connecting.
+  The Zero posts `scanning` for every name at boot and an unpowered badge
+  never posts again. A badge that connected and then dropped reads
+  `disconnected` / `offline`.
+- Verified in the browser against a live `power-cable` Zero (one connected,
+  one never-seen slot) plus simulated Mode 1 and three-name stations.
+
 ### Acceptance criteria — Milestone 5
 
-- [ ] A 3-name roster always renders 3 badge components.
-- [ ] Unpowered badges show **not connected**.
-- [ ] A connecting / connected / disconnected update changes only that slot.
-- [ ] Mode 1 still reads as one station with one badge.
-- [ ] Game join / result chips stay on the station header (one player), not
+- [x] A 3-name roster always renders 3 badge components.
+- [x] Unpowered badges show **not connected**.
+- [x] A connecting / connected / disconnected update changes only that slot.
+- [x] Mode 1 still reads as one station with one badge.
+- [x] Game join / result chips stay on the station header (one player), not
       duplicated as three joined players.
 
 ---

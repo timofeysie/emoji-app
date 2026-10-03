@@ -21,6 +21,10 @@ export const statusBodySchema = z.object({
   timestamp: clientTimestampHintSchema,
   /** Shared pair label from pair_config.py (e.g. "white"). */
   pairName: z.string().optional(),
+  /** Roster slot this post describes (that Pico's PAIR_NAME). Defaults in Milestone 4. */
+  badgeName: z.string().min(1).optional(),
+  /** Full controller roster; present on every Mode 2 status post. */
+  badgeNames: z.array(z.string().min(1)).optional(),
   /** Normalized Zero script version, e.g. "0.5.8". */
   controllerVersion: z.string().optional(),
   /** Pico badge script version parsed from PAIR_OK:<version>, e.g. "0.3.2". */
@@ -39,6 +43,8 @@ export const emojiBodySchema = z.object({
   timestamp: clientTimestampHintSchema,
   /** Shared pair label from pair_config.py (e.g. "white"). */
   pairName: z.string().optional(),
+  /** Station slot for the emoji echo; station-scoped posts use pairName. */
+  badgeName: z.string().min(1).optional(),
 });
 
 export type StatusDto = {
@@ -48,6 +54,8 @@ export type StatusDto = {
   timestamp: string;
   clientTimestamp?: string;
   pairName?: string;
+  badgeName?: string;
+  badgeNames?: string[];
   controllerVersion?: string;
   picoVersion?: string;
   batteryLevel?: number | null;
@@ -63,6 +71,7 @@ export type EmojiDto = {
   timestamp: string;
   clientTimestamp?: string;
   pairName?: string;
+  badgeName?: string;
 };
 
 type BadgeStateDto = {
@@ -73,11 +82,70 @@ type BadgeStateDto = {
   emoji: EmojiDto | null;
 };
 
+/** One roster slot inside a station. `bleStatus` is `disconnected` until a status is seen. */
+export type StationBadgeDto = {
+  badgeName: string;
+  badgeId: string | null;
+  bleStatus: z.infer<typeof deviceBleStatusSchema>;
+  picoVersion: string | null;
+  /** Server UTC of the last status for this slot; null if never seen. */
+  timestamp: string | null;
+  emoji: EmojiDto | null;
+};
+
+/** One controller (`pairName`) and its badge roster in `badgeNames` order. */
+export type StationDto = {
+  pairName: string;
+  controllerId: string;
+  controllerVersion: string | null;
+  batteryLevel: number | null;
+  badgeNames: string[];
+  /** Last station-scoped emoji (fanned out to every connected badge). */
+  emoji: EmojiDto | null;
+  badges: StationBadgeDto[];
+};
+
+type SlotState = {
+  status: StatusDto | null;
+};
+
+type StationState = {
+  pairName: string;
+  controllerId: string;
+  controllerVersion: string | null;
+  batteryLevel: number | null;
+  /** Roster from the latest post that carried `badgeNames`; null until one does. */
+  reportedBadgeNames: string[] | null;
+  slots: Map<string, SlotState>;
+  emoji: EmojiDto | null;
+};
+
 function serverTimestamp(): string {
   return new Date().toISOString();
 }
 
-function getBadgeKey(controllerId: string, badgeId: string): string {
+/** Station id: controller `pairName`, or `controllerId` for clients that predate pair names. */
+export function resolveStationName(event: { pairName?: string; controllerId: string }): string {
+  return event.pairName || event.controllerId;
+}
+
+/** Slot id: `badgeName`, else the station name (Mode 1 is a one-slot station). */
+export function resolveSlotName(event: {
+  badgeName?: string;
+  pairName?: string;
+  controllerId: string;
+}): string {
+  return event.badgeName || resolveStationName(event);
+}
+
+function knownOrNull(value: string | undefined): string | null {
+  return value && value !== 'unknown' ? value : null;
+}
+
+function getBadgeKey(controllerId: string, badgeId: string, badgeName?: string): string {
+  if (badgeName) {
+    return `${controllerId}::${badgeName}`;
+  }
   return `${controllerId}::${badgeId}`;
 }
 
@@ -90,6 +158,8 @@ export class BadgeStateService {
   private readonly lastEmojiByBadgeKey = new Map<string, EmojiDto>();
 
   private readonly emojiEventHistory: EmojiDto[] = [];
+
+  private readonly stationsByName = new Map<string, StationState>();
 
   private wsServer: WebSocketServer | null = null;
 
@@ -134,7 +204,8 @@ export class BadgeStateService {
           msg !== null &&
           (msg as Record<string, unknown>)['type'] === 'controller.hello'
         ) {
-          const { pairName, controllerId, controllerVersion, picoVersion, token } = msg as Record<string, unknown>;
+          const { pairName, controllerId, controllerVersion, picoVersion, token, badgeNames } =
+            msg as Record<string, unknown>;
           if (typeof pairName === 'string' && pairName.length > 0) {
             // Move from dashboards to the pair room
             this.dashboards.delete(socket);
@@ -142,6 +213,10 @@ export class BadgeStateService {
             const room = this.pairRooms.get(pairName) ?? new Set<WebSocket>();
             room.add(socket);
             this.pairRooms.set(pairName, room);
+
+            const roster = Array.isArray(badgeNames)
+              ? badgeNames.filter((name): name is string => typeof name === 'string' && name.length > 0)
+              : undefined;
 
             // Reply with a welcome snapshot (game state will be populated by the controller after
             // calling GET /api/pairs/:pairName — the welcome here is a lightweight acknowledgement)
@@ -151,6 +226,7 @@ export class BadgeStateService {
               controllerId: typeof controllerId === 'string' ? controllerId : undefined,
               controllerVersion: typeof controllerVersion === 'string' ? controllerVersion : undefined,
               picoVersion: typeof picoVersion === 'string' ? picoVersion : undefined,
+              ...(roster != null ? { badgeNames: roster } : {}),
               token: token ?? null,
               serverTime: new Date().toISOString(),
             });
@@ -209,14 +285,93 @@ export class BadgeStateService {
         ? { clientTimestamp: body.timestamp }
         : {}),
       ...(body.pairName != null ? { pairName: body.pairName } : {}),
+      ...(body.badgeName != null ? { badgeName: body.badgeName } : {}),
+      ...(body.badgeNames != null ? { badgeNames: body.badgeNames } : {}),
       ...(body.controllerVersion != null ? { controllerVersion: body.controllerVersion } : {}),
       ...(body.picoVersion != null ? { picoVersion: body.picoVersion } : {}),
       ...(body.batteryLevel != null ? { batteryLevel: body.batteryLevel } : {}),
     };
 
-    const badgeKey = getBadgeKey(statusEvent.controllerId, statusEvent.badgeId);
+    const badgeKey = getBadgeKey(
+      statusEvent.controllerId,
+      statusEvent.badgeId,
+      statusEvent.badgeName,
+    );
     this.bleStatusByBadgeKey.set(badgeKey, statusEvent);
+    this.recordStationStatus(statusEvent);
     this.broadcastDashboard({ type: 'status.changed', ...statusEvent });
+  }
+
+  private ensureStation(stationName: string, controllerId: string): StationState {
+    let station = this.stationsByName.get(stationName);
+    if (!station) {
+      station = {
+        pairName: stationName,
+        controllerId,
+        controllerVersion: null,
+        batteryLevel: null,
+        reportedBadgeNames: null,
+        slots: new Map(),
+        emoji: null,
+      };
+      this.stationsByName.set(stationName, station);
+    }
+    station.controllerId = controllerId;
+    return station;
+  }
+
+  private recordStationStatus(statusEvent: StatusDto): void {
+    const station = this.ensureStation(
+      resolveStationName(statusEvent),
+      statusEvent.controllerId,
+    );
+    if (statusEvent.controllerVersion != null) {
+      station.controllerVersion = statusEvent.controllerVersion;
+    }
+    if (statusEvent.batteryLevel != null) {
+      station.batteryLevel = statusEvent.batteryLevel;
+    }
+    if (statusEvent.badgeNames != null && statusEvent.badgeNames.length > 0) {
+      station.reportedBadgeNames = [...new Set(statusEvent.badgeNames)];
+    }
+    station.slots.set(resolveSlotName(statusEvent), { status: statusEvent });
+  }
+
+  /** Roster order: reported `badgeNames`, else slots seen so far (Mode 1 → `[pairName]`). */
+  private stationRoster(station: StationState): string[] {
+    if (station.reportedBadgeNames) {
+      return station.reportedBadgeNames;
+    }
+    const seen = [...station.slots.keys()];
+    return seen.length > 0 ? seen : [station.pairName];
+  }
+
+  private toStationDto(station: StationState): StationDto {
+    const badgeNames = this.stationRoster(station);
+    return {
+      pairName: station.pairName,
+      controllerId: station.controllerId,
+      controllerVersion: station.controllerVersion,
+      batteryLevel: station.batteryLevel,
+      badgeNames,
+      emoji: station.emoji,
+      badges: badgeNames.map((badgeName) => {
+        const status = station.slots.get(badgeName)?.status ?? null;
+        const bleStatus = status?.bleStatus ?? 'disconnected';
+        return {
+          badgeName,
+          badgeId: knownOrNull(status?.badgeId),
+          bleStatus,
+          picoVersion: knownOrNull(status?.picoVersion),
+          timestamp: status?.timestamp ?? null,
+          emoji: bleStatus === 'connected' ? station.emoji : null,
+        };
+      }),
+    };
+  }
+
+  getStations(): StationDto[] {
+    return [...this.stationsByName.values()].map((station) => this.toStationDto(station));
   }
 
   recordEmoji(body: z.infer<typeof emojiBodySchema>): void {
@@ -232,10 +387,17 @@ export class BadgeStateService {
         ? { clientTimestamp: body.timestamp }
         : {}),
       ...(body.pairName != null ? { pairName: body.pairName } : {}),
+      ...(body.badgeName != null ? { badgeName: body.badgeName } : {}),
     };
 
-    const badgeKey = getBadgeKey(emojiEvent.controllerId, emojiEvent.badgeId);
+    const badgeKey = getBadgeKey(
+      emojiEvent.controllerId,
+      emojiEvent.badgeId,
+      emojiEvent.badgeName,
+    );
     this.lastEmojiByBadgeKey.set(badgeKey, emojiEvent);
+    this.ensureStation(resolveStationName(emojiEvent), emojiEvent.controllerId).emoji =
+      emojiEvent;
     this.emojiEventHistory.push(emojiEvent);
 
     if (this.emojiEventHistory.length > MAX_EMOJI_HISTORY) {

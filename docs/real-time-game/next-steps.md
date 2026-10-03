@@ -468,6 +468,9 @@ from a dropdown of existing groups.
 ## Step 10 — Multi-badge Mode 2 (planned)
 
 Detailed plan: [`multi-badge-plan.md`](./multi-badge-plan.md).
+Milestones 0–5 are done (config, multi-connect, command fan-out, per-badge
+status posts, server `stations` grouping, React station card). Referee
+surfaces and NFC attribution are next.
 
 One Zero commands several named Picos. The controller keeps `PAIR_NAME` as
 the station id (bind / join / score) and adds a `BADGE_NAMES` roster of Pico

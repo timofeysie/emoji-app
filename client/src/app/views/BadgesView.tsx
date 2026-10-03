@@ -51,6 +51,19 @@ import {
   type QuestionResultEntry,
 } from '../shared/game-state-icon';
 import { getWsUrl } from '../shared/ws-url';
+import {
+  applyEmojiToStations,
+  applyStatusToStations,
+  sortedStations,
+  stationsFromSnapshot,
+  type BadgesSnapshotResponse,
+  type DeviceBleStatus,
+  type EmojiSentEvent,
+  type StationRecord,
+  type StationSlot,
+  type StationsByName,
+  type StatusChangedEvent,
+} from './badge-stations';
 
 const FRESH_HIGHLIGHT_MS = 1800;
 
@@ -58,47 +71,8 @@ const cardSpring = { type: 'spring' as const, stiffness: 120, damping: 18, mass:
 const crossfadeSpring = { type: 'spring' as const, stiffness: 500, damping: 35 };
 const cardEntranceTimes = [0, 0.48, 0.82, 1];
 
-/** Values accepted by `POST /api/status` (device-reported). */
-type DeviceBleStatus =
-  | 'startup'
-  | 'scanning'
-  | 'connecting'
-  | 'connected'
-  | 'disconnected';
-
 /** After `connected` goes stale (no recent liveness), UI shows offline. */
 type DisplayBleStatus = DeviceBleStatus | 'offline' | 'unknown';
-
-type StatusChangedEvent = {
-  controllerId: string;
-  badgeId: string;
-  bleStatus: DeviceBleStatus;
-  /** Server UTC (canonical). */
-  timestamp: string;
-  /** Optional device hint when clock was wrong; not used for ordering. */
-  clientTimestamp?: string;
-  /** Shared pair label from pair_config.py, e.g. "white". */
-  pairName?: string;
-  /** Zero script version, e.g. "0.5.8". */
-  controllerVersion?: string;
-  /** Pico badge script version parsed from PAIR_OK handshake, e.g. "0.3.2". */
-  picoVersion?: string;
-  /** Controller battery level 0–100 from INA219; absent when unavailable. */
-  batteryLevel?: number | null;
-};
-
-type EmojiSentEvent = {
-  controllerId: string;
-  badgeId: string;
-  menu: number;
-  pos: number;
-  neg: number;
-  label: string;
-  /** Server UTC (canonical). */
-  timestamp: string;
-  clientTimestamp?: string;
-  pairName?: string;
-};
 
 type WsEnvelope =
   | { type: 'status.changed'; payload: StatusChangedEvent }
@@ -160,14 +134,6 @@ type WsEnvelope =
       serverTime: string;
     };
 
-type BadgeRecord = {
-  key: string;
-  controllerId: string;
-  badgeId: string;
-  status?: StatusChangedEvent;
-  emoji?: EmojiSentEvent;
-};
-
 type GameEventState = {
   gameId: string;
   gameTitle?: string;
@@ -201,33 +167,46 @@ type VersionInfo = {
   expectedPicoVersion: string;
 };
 
-// TODO: To re-enable the dummy badge for local layout development, uncomment the block below
-// and restore the `devExampleBadgeRecord` reference in the `badgeRecords` useMemo further down
-// (look for the comment "DEV DUMMY BADGE"). Do not commit with this re-enabled.
+// TODO: To re-enable the dummy station for local layout development, uncomment the block below
+// and restore the `devExampleStation` reference in the `stations` useMemo further down
+// (look for the comment "DEV DUMMY STATION"). Do not commit with this re-enabled.
 //
-// /** Shown in dev when there is no server/WebSocket data so badge card layout can be exercised. */
-// const devExampleBadgeRecord: BadgeRecord = (() => {
+// /** Shown in dev when there is no server/WebSocket data so station card layout can be exercised. */
+// const devExampleStation: StationRecord = (() => {
 //   const controllerId = 'dev-local';
-//   const badgeId = 'example-badge';
-//   const key = `${controllerId}::${badgeId}`;
+//   const pairName = 'example';
+//   const badgeNames = [pairName, `${pairName}-2`, `${pairName}-3`];
 //   return {
-//     key,
+//     pairName,
 //     controllerId,
-//     badgeId,
-//     status: {
-//       controllerId,
-//       badgeId,
-//       bleStatus: 'connected',
-//       timestamp: '2026-04-05T10:00:00.000Z',
+//     controllerVersion: '0.7.15',
+//     batteryLevel: 82,
+//     badgeNames,
+//     rosterReported: true,
+//     slots: {
+//       [pairName]: {
+//         badgeName: pairName,
+//         status: {
+//           controllerId,
+//           badgeId: 'example-badge',
+//           bleStatus: 'connected',
+//           timestamp: new Date().toISOString(),
+//           pairName,
+//           badgeName: pairName,
+//           badgeNames,
+//           picoVersion: '0.4.0',
+//         },
+//       },
 //     },
 //     emoji: {
 //       controllerId,
-//       badgeId,
+//       badgeId: 'example-badge',
 //       menu: 0,
 //       pos: 2,
 //       neg: 1,
 //       label: 'happy_dev',
 //       timestamp: '2026-04-05T10:05:30.000Z',
+//       pairName,
 //     },
 //   };
 // })();
@@ -606,30 +585,20 @@ function BadgePrimaryVisual({
   );
 }
 
-type BadgesSnapshotResponse = {
-  badges: Array<{
-    key: string;
-    controllerId: string;
-    badgeId: string;
-    status: StatusChangedEvent | null;
-    emoji: EmojiSentEvent | null;
-  }>;
-};
-
-function snapshotToRecords(
-  badges: BadgesSnapshotResponse['badges'],
-): Record<string, BadgeRecord> {
-  const next: Record<string, BadgeRecord> = {};
-  for (const b of badges) {
-    next[b.key] = {
-      key: b.key,
-      controllerId: b.controllerId,
-      badgeId: b.badgeId,
-      status: b.status ?? undefined,
-      emoji: b.emoji ?? undefined,
-    };
+function unwrapBadgeWsPayload<T extends { controllerId?: string; badgeId?: string }>(
+  message: Record<string, unknown>,
+): T | null {
+  const nested = message['payload'];
+  const raw = nested && typeof nested === 'object' ? nested : message;
+  if (
+    typeof raw === 'object' &&
+    raw !== null &&
+    typeof (raw as T).controllerId === 'string' &&
+    typeof (raw as T).badgeId === 'string'
+  ) {
+    return raw as T;
   }
-  return next;
+  return null;
 }
 
 const POLL_MS = 10_000;
@@ -684,42 +653,66 @@ function OutdatedChip() {
   );
 }
 
-function BadgeCardHeader({
-  record,
+/** Live game state shared by every station (one player per `pairName`). */
+type StationGameProps = {
+  activeGame: GameEventState | null;
+  joinsByPair: Record<string, JoinEvent>;
+  nfcByPair: Record<string, NfcTagEvent>;
+  answerByPair: Record<string, boolean>;
+  questionPhase: QuestionPhase;
+  resultsByPair: Record<string, QuestionResultEntry>;
+  winnerPairNames: Set<string> | null;
+};
+
+const SLOT_STATUS_LABELS: Record<DisplayBleStatus, string> = {
+  connected: 'connected',
+  connecting: 'connecting',
+  scanning: 'scanning',
+  startup: 'starting',
+  disconnected: 'disconnected',
+  offline: 'offline',
+  unknown: 'not connected',
+};
+
+function connectedSlotCount(station: StationRecord): number {
+  return station.badgeNames.filter(
+    (name) => resolveBleDisplay(station.slots[name]?.status) === 'connected',
+  ).length;
+}
+
+function StationCardHeader({
+  station,
   versionInfo,
 }: {
-  record: BadgeRecord;
+  station: StationRecord;
   versionInfo: VersionInfo | null;
 }) {
-  const pairName = record.status?.pairName;
-  const controllerVersion = record.status?.controllerVersion;
-  const picoVersion = record.status?.picoVersion;
-  const batteryLevel = record.status?.batteryLevel;
-
+  const { controllerVersion, batteryLevel } = station;
   const controllerOutdated =
     versionInfo != null &&
     controllerVersion != null &&
     isVersionOutdated(controllerVersion, versionInfo.expectedControllerVersion);
-  const picoOutdated =
-    versionInfo != null &&
-    picoVersion != null &&
-    picoVersion !== 'unknown' &&
-    isVersionOutdated(picoVersion, versionInfo.expectedPicoVersion);
+  const total = station.badgeNames.length;
 
   return (
     <div className="flex flex-col gap-0.5 border-b bg-muted/40 px-1.5 py-1">
-      {pairName ? (
+      <div className="flex items-baseline justify-between gap-2">
         <p className="break-words text-sm font-bold leading-tight text-foreground">
-          {pairName}
+          {station.pairName}
         </p>
-      ) : null}
-      <p className={cn('break-words leading-tight', pairName ? 'text-[11px] text-muted-foreground' : 'text-sm font-semibold')}>
-        {record.badgeId}
-      </p>
+        {total > 1 && (
+          <span
+            className="shrink-0 text-[10px] tabular-nums text-muted-foreground"
+            title="Connected badges"
+          >
+            {connectedSlotCount(station)}/{total} badges
+          </span>
+        )}
+      </div>
       <p className="break-words text-[10px] leading-tight text-muted-foreground">
-        {record.controllerId}
+        {station.controllerId}
       </p>
-      {(controllerVersion || picoVersion || batteryLevel != null) && (
+      {(controllerVersion || batteryLevel != null) && (
         <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           {controllerVersion && (
             <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground" title="Zero controller version">
@@ -728,17 +721,133 @@ function BadgeCardHeader({
               {controllerOutdated && <OutdatedChip />}
             </span>
           )}
-          {picoVersion && picoVersion !== 'unknown' && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground" title="Pico badge version">
-              <Cpu className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
-              {picoVersion}
-              {picoOutdated && <OutdatedChip />}
-            </span>
-          )}
           <BatteryIcon level={batteryLevel} />
         </div>
       )}
     </div>
+  );
+}
+
+function StationSlotCard({
+  station,
+  slot,
+  nfcCardMap,
+  versionInfo,
+  game,
+}: {
+  station: StationRecord;
+  slot: StationSlot;
+  nfcCardMap: NfcCardMap;
+  versionInfo: VersionInfo | null;
+  game: StationGameProps;
+}) {
+  const status = slot.status;
+  const display = resolveBleDisplay(status);
+  const live = display === 'connected';
+  const picoVersion = status?.picoVersion;
+  const knownPico = picoVersion && picoVersion !== 'unknown' ? picoVersion : null;
+  const picoOutdated =
+    versionInfo != null &&
+    knownPico != null &&
+    isVersionOutdated(knownPico, versionInfo.expectedPicoVersion);
+  const badgeId = status?.badgeId && status.badgeId !== 'unknown' ? status.badgeId : null;
+  // The Zero posts `scanning` for every roster name at boot; an unpowered badge never
+  // posts again, so a slot with no badgeId reads as not connected rather than scanning.
+  const label =
+    live || display === 'connecting' || badgeId
+      ? SLOT_STATUS_LABELS[display]
+      : SLOT_STATUS_LABELS.unknown;
+
+  return (
+    <div
+      className={cn(
+        'flex w-[9.5rem] min-w-0 flex-col gap-1 rounded-md border p-1.5',
+        live ? 'bg-background' : 'bg-muted/20',
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-1">
+        <p
+          className={cn(
+            'min-w-0 break-words text-xs font-semibold leading-tight',
+            !live && 'text-muted-foreground',
+          )}
+        >
+          {slot.badgeName}
+        </p>
+        <TextReveal
+          revealKey={label}
+          className={cn(
+            'shrink-0 text-[10px] leading-tight',
+            live ? 'text-primary' : 'text-muted-foreground',
+          )}
+        >
+          {label}
+        </TextReveal>
+      </div>
+      <BleConnectionRow status={status} />
+      {(knownPico || badgeId) && (
+        <div className="flex flex-col gap-0.5 text-[10px] leading-tight text-muted-foreground">
+          {knownPico && (
+            <span className="inline-flex items-center gap-0.5" title="Pico badge version">
+              <Cpu className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
+              {knownPico}
+              {picoOutdated && <OutdatedChip />}
+            </span>
+          )}
+          {badgeId && <span className="break-all">{badgeId}</span>}
+        </div>
+      )}
+      {live ? (
+        <BadgePrimaryVisual
+          emoji={station.emoji}
+          nfcCardMap={nfcCardMap}
+          pairName={station.pairName}
+          activeGame={game.activeGame}
+          joinsByPair={game.joinsByPair}
+          answerByPair={game.answerByPair}
+          questionPhase={game.questionPhase}
+          resultsByPair={game.resultsByPair}
+          winnerPairNames={game.winnerPairNames}
+        />
+      ) : (
+        <div className="rounded border border-dashed bg-muted/20 px-1.5 py-1 text-center text-[11px] leading-tight text-muted-foreground">
+          —
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StationCardBody({
+  station,
+  nfcCardMap,
+  versionInfo,
+  game,
+}: {
+  station: StationRecord;
+  nfcCardMap: NfcCardMap;
+  versionInfo: VersionInfo | null;
+  game: StationGameProps;
+}) {
+  return (
+    <>
+      <StationCardHeader station={station} versionInfo={versionInfo} />
+      <div className="flex flex-col gap-1.5 p-1.5">
+        <BadgeCardGameSection pairName={station.pairName} {...game} />
+        <div className="flex flex-wrap gap-1.5">
+          {station.badgeNames.map((badgeName) => (
+            <StationSlotCard
+              key={badgeName}
+              station={station}
+              slot={station.slots[badgeName] ?? { badgeName }}
+              nfcCardMap={nfcCardMap}
+              versionInfo={versionInfo}
+              game={game}
+            />
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -858,9 +967,7 @@ function BadgeCardGameSection({
 export const BadgesView = () => {
   /** Re-render periodically so stale `connected` can flip to offline without waiting for poll. */
   const [, bumpStaleCheck] = useState(0);
-  const [recordsByKey, setRecordsByKey] = useState<Record<string, BadgeRecord>>(
-    {},
-  );
+  const [stationsByName, setStationsByName] = useState<StationsByName>({});
   const [freshKeys, setFreshKeys] = useState<Set<string>>(() => new Set());
   const knownKeysRef = useRef<Set<string>>(new Set());
   const freshTimeoutsRef = useRef<Map<string, number>>(new Map());
@@ -932,8 +1039,7 @@ export const BadgesView = () => {
 
   useEffect(() => {
     const newcomers: string[] = [];
-    for (const [key, record] of Object.entries(recordsByKey)) {
-      if (record.badgeId === 'unknown') continue;
+    for (const key of Object.keys(stationsByName)) {
       if (!knownKeysRef.current.has(key)) {
         newcomers.push(key);
         knownKeysRef.current.add(key);
@@ -941,7 +1047,7 @@ export const BadgesView = () => {
     }
     if (!snapshotDoneRef.current || newcomers.length === 0) return;
     markFreshKeys(newcomers);
-  }, [recordsByKey, markFreshKeys]);
+  }, [stationsByName, markFreshKeys]);
 
   const loadWinnerPairs = useCallback(async (gameId: string) => {
     try {
@@ -977,19 +1083,17 @@ export const BadgesView = () => {
         return;
       }
       const data = (await res.json()) as BadgesSnapshotResponse;
-      if (!Array.isArray(data.badges)) {
+      if (!Array.isArray(data.badges) && !Array.isArray(data.stations)) {
         return;
       }
-      const fromServer = snapshotToRecords(data.badges);
+      const fromServer = stationsFromSnapshot(data);
       // First snapshot only: seed baseline keys so the initial grid is not "fresh".
       if (!snapshotDoneRef.current) {
-        for (const [key, record] of Object.entries(fromServer)) {
-          if (record.badgeId !== 'unknown') {
-            knownKeysRef.current.add(key);
-          }
+        for (const key of Object.keys(fromServer)) {
+          knownKeysRef.current.add(key);
         }
       }
-      setRecordsByKey((prev) => ({ ...prev, ...fromServer }));
+      setStationsByName((prev) => ({ ...prev, ...fromServer }));
     } catch {
       // Snapshot is optional; WebSocket may still deliver events.
     } finally {
@@ -1274,40 +1378,23 @@ export const BadgesView = () => {
         }
 
         if (message.type === 'status.changed') {
-          const payload = message.payload;
-          const key = `${payload.controllerId}::${payload.badgeId}`;
-
-          setRecordsByKey((current) => {
-            const previous = current[key];
-            const baseRecord: BadgeRecord = previous ?? {
-              key,
-              controllerId: payload.controllerId,
-              badgeId: payload.badgeId,
-            };
-
-            return {
-              ...current,
-              [key]: { ...baseRecord, status: payload },
-            };
-          });
+          const payload = unwrapBadgeWsPayload<StatusChangedEvent>(
+            message as unknown as Record<string, unknown>,
+          );
+          if (!payload) {
+            return;
+          }
+          setStationsByName((current) => applyStatusToStations(current, payload));
           return;
         }
 
-        const payload = message.payload;
-        const key = `${payload.controllerId}::${payload.badgeId}`;
-        setRecordsByKey((current) => {
-          const previous = current[key];
-          const baseRecord: BadgeRecord = previous ?? {
-            key,
-            controllerId: payload.controllerId,
-            badgeId: payload.badgeId,
-          };
-
-          return {
-            ...current,
-            [key]: { ...baseRecord, emoji: payload },
-          };
-        });
+        const payload = unwrapBadgeWsPayload<EmojiSentEvent>(
+          message as unknown as Record<string, unknown>,
+        );
+        if (!payload) {
+          return;
+        }
+        setStationsByName((current) => applyEmojiToStations(current, payload));
       } catch {
         // Ignore malformed websocket payloads.
       }
@@ -1318,36 +1405,38 @@ export const BadgesView = () => {
     };
   }, [loadWinnerPairs]);
 
-  const badgeRecords = useMemo(() => {
-    // DEV DUMMY BADGE: to inject a static example badge for layout development without a physical
-    // device, uncomment the block below and uncomment devExampleBadgeRecord near the top of this
-    // file. Do not commit with this enabled.
+  const stations = useMemo(() => {
+    // DEV DUMMY STATION: to inject a static example station for layout development without a
+    // physical device, uncomment the block below and uncomment devExampleStation near the top of
+    // this file. Do not commit with this enabled.
     //
-    // const hasRealBadges = Object.keys(recordsByKey).length > 0;
+    // const hasRealStations = Object.keys(stationsByName).length > 0;
     // const source =
-    //   import.meta.env.DEV && !hasRealBadges
-    //     ? { [devExampleBadgeRecord.key]: devExampleBadgeRecord }
-    //     : recordsByKey;
-    const source = recordsByKey;
+    //   import.meta.env.DEV && !hasRealStations
+    //     ? { [devExampleStation.pairName]: devExampleStation }
+    //     : stationsByName;
+    const source = stationsByName;
+    return sortedStations(source);
+  }, [stationsByName]);
 
-    let records = Object.values(source);
-
-    // Hide "pre-connection" entries: the Zero posts status events with bleStatus
-    // "startup" / "scanning" before the Pico BLE address is known, producing a
-    // badgeId of "unknown". These entries have no useful information for the dashboard.
-    records = records.filter((r) => r.badgeId !== 'unknown');
-
-    return records.sort((a, b) => a.badgeId.localeCompare(b.badgeId));
-  }, [recordsByKey]);
+  const game: StationGameProps = {
+    activeGame,
+    joinsByPair,
+    nfcByPair,
+    answerByPair,
+    questionPhase,
+    resultsByPair,
+    winnerPairNames,
+  };
 
   const skipStaggerRef = useRef(false);
   const useStagger = !skipStaggerRef.current;
 
   useEffect(() => {
-    if (badgeRecords.length > 0) {
+    if (stations.length > 0) {
       skipStaggerRef.current = true;
     }
-  }, [badgeRecords.length]);
+  }, [stations.length]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -1362,7 +1451,7 @@ export const BadgesView = () => {
         </p>
       </div>
 
-      {badgeRecords.length === 0 ? (
+      {stations.length === 0 ? (
         <div className="p-4 border rounded-lg text-sm text-gray-600">
           No badge data yet. POST to <code className="text-xs">/api/status</code> or{' '}
           <code className="text-xs">/api/emoji</code>, then wait for polling or open
@@ -1372,14 +1461,14 @@ export const BadgesView = () => {
         <LayoutGroup>
           <motion.div
             layout
-            className="relative mx-1 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2"
+            className="relative mx-1 flex flex-wrap items-start gap-2"
           >
             <AnimatePresence mode="popLayout">
-              {badgeRecords.map((record, index) => {
-                const isFresh = freshKeys.has(record.key);
+              {stations.map((station, index) => {
+                const isFresh = freshKeys.has(station.pairName);
                 return (
                   <motion.div
-                    key={record.key}
+                    key={station.pairName}
                     layout
                     initial={{ opacity: 0, scale: 0.08, rotate: 0 }}
                     animate={{
@@ -1400,35 +1489,16 @@ export const BadgesView = () => {
                       boxShadow: cardSpring,
                     }}
                     className={cn(
-                      'min-w-0 overflow-hidden rounded-lg border bg-background',
+                      'min-w-0 max-w-full overflow-hidden rounded-lg border bg-background',
                       isFresh && 'border-primary/70',
                     )}
                   >
-                    <BadgeCardHeader record={record} versionInfo={versionInfo} />
-                    <div className="flex flex-col items-center gap-1 p-1.5">
-                      <BleConnectionRow status={record.status} />
-                      <BadgePrimaryVisual
-                        emoji={record.emoji}
-                        nfcCardMap={nfcCardMap}
-                        pairName={record.status?.pairName}
-                        activeGame={activeGame}
-                        joinsByPair={joinsByPair}
-                        answerByPair={answerByPair}
-                        questionPhase={questionPhase}
-                        resultsByPair={resultsByPair}
-                        winnerPairNames={winnerPairNames}
-                      />
-                      <BadgeCardGameSection
-                        pairName={record.status?.pairName}
-                        activeGame={activeGame}
-                        joinsByPair={joinsByPair}
-                        nfcByPair={nfcByPair}
-                        answerByPair={answerByPair}
-                        questionPhase={questionPhase}
-                        resultsByPair={resultsByPair}
-                        winnerPairNames={winnerPairNames}
-                      />
-                    </div>
+                    <StationCardBody
+                      station={station}
+                      nfcCardMap={nfcCardMap}
+                      versionInfo={versionInfo}
+                      game={game}
+                    />
                   </motion.div>
                 );
               })}
