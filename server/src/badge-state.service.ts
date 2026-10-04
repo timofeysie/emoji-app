@@ -151,6 +151,12 @@ function getBadgeKey(controllerId: string, badgeId: string, badgeName?: string):
 
 export type RealtimeEvent = Record<string, unknown> & { type: string };
 
+export type RosterChangedListener = (stationName: string, badgeNames: string[]) => void;
+
+function sameNames(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((name) => b.includes(name));
+}
+
 @Injectable()
 export class BadgeStateService {
   private readonly bleStatusByBadgeKey = new Map<string, StatusDto>();
@@ -171,6 +177,28 @@ export class BadgeStateService {
 
   /** Reverse lookup: socket → pairName (for cleanup on close). */
   private readonly socketToPair = new Map<WebSocket, string>();
+
+  private readonly rosterListeners: RosterChangedListener[] = [];
+
+  /** Called when a station reports a roster that differs (order ignored) from the last one. */
+  onRosterChanged(listener: RosterChangedListener): void {
+    this.rosterListeners.push(listener);
+  }
+
+  private updateReportedRoster(station: StationState, badgeNames: string[]): void {
+    const next = [...new Set(badgeNames)];
+    if (next.length === 0) {
+      return;
+    }
+    const previous = station.reportedBadgeNames;
+    station.reportedBadgeNames = next;
+    if (previous && sameNames(previous, next)) {
+      return;
+    }
+    for (const listener of this.rosterListeners) {
+      listener(station.pairName, next);
+    }
+  }
 
   setWebSocketServer(wsServer: WebSocketServer): void {
     this.wsServer = wsServer;
@@ -217,6 +245,15 @@ export class BadgeStateService {
             const roster = Array.isArray(badgeNames)
               ? badgeNames.filter((name): name is string => typeof name === 'string' && name.length > 0)
               : undefined;
+            if (roster != null && roster.length > 0) {
+              const station = this.ensureStation(
+                pairName,
+                typeof controllerId === 'string' && controllerId.length > 0
+                  ? controllerId
+                  : (this.stationsByName.get(pairName)?.controllerId ?? pairName),
+              );
+              this.updateReportedRoster(station, roster);
+            }
 
             // Reply with a welcome snapshot (game state will be populated by the controller after
             // calling GET /api/pairs/:pairName — the welcome here is a lightweight acknowledgement)
@@ -331,10 +368,10 @@ export class BadgeStateService {
     if (statusEvent.batteryLevel != null) {
       station.batteryLevel = statusEvent.batteryLevel;
     }
-    if (statusEvent.badgeNames != null && statusEvent.badgeNames.length > 0) {
-      station.reportedBadgeNames = [...new Set(statusEvent.badgeNames)];
-    }
     station.slots.set(resolveSlotName(statusEvent), { status: statusEvent });
+    if (statusEvent.badgeNames != null) {
+      this.updateReportedRoster(station, statusEvent.badgeNames);
+    }
   }
 
   /** Roster order: reported `badgeNames`, else slots seen so far (Mode 1 → `[pairName]`). */

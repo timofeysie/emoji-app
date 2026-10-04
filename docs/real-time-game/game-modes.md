@@ -82,18 +82,20 @@ backoff.
 
 Implementation plan and as-built notes:
 [`multi-badge-plan.md`](./multi-badge-plan.md). Hardware verification is
-tracked in that plan's Milestone 7 checklist.
+tracked in that plan's Milestone 7 and Milestone 8 checklists.
 
 ### Multi-badge station overview
 
 One Pi Zero controller keeps simultaneous BLE links to **several Pico badges**.
 Each Pico has its **own** `PAIR_NAME`; the Zero connects only to the names in
-its `BADGE_NAMES` roster. The station still plays as **one player**: one bind,
-one join, one guess per question, one score row.
+its `BADGE_NAMES` roster. **Each badge is a separate player**, keyed by its
+`badgeName`: each has its own binding, join, guess per question, score row,
+and winner / loser outcome. This is not a team mode.
 
 Badges can be buttonless. The Zero is the only input device: emoji choices,
-join, and readiness all come from the Zero and are written to every connected
-badge.
+join, and readiness all come from the Zero. The referee binds the station
+once and one `KEY1` join covers every connected badge, but the server records
+each badge as its own player.
 
 ```text
 ┌──────────────────────────────┐  BLE  ┌──────────────────────────────┐
@@ -113,14 +115,17 @@ badge.
 
 | Field | Holds | Example |
 | --- | --- | --- |
-| `pairName` | Controller / station id. Bind, join, readiness, guesses, scores | `"green"` |
+| `pairName` / `stationName` | Controller / station id. WS room, referee bind target, roster owner. Not a player | `"green"` |
 | `badgeNames` | Ordered roster from the Zero's `BADGE_NAMES` (dashboard slot order) | `["green", "green-2", "green-3"]` |
-| `badgeName` | One roster slot; equals that Pico's `PAIR_NAME` | `"green-2"` |
+| `badgeName` | One roster slot; equals that Pico's `PAIR_NAME`. The player key: binding, join, readiness, guess, score | `"green-2"` |
 | `badgeId` | Pico MAC-derived id. Diagnostics only | `"badge-aa-bb…"` |
 | `controllerId` | Zero's logical id | `"zero-1"` |
 
 `badgeName` is the stable badge identity. `badgeId` changes if a Pico is
-swapped, so nothing is keyed on it.
+swapped, so nothing is keyed on it. In Mode 1 the only badge's name equals
+`PAIR_NAME`, so the station and the player share one name. Badge names must
+be unique across all stations; binding a station whose roster name belongs
+to another live station returns `409`.
 
 ### Multi-badge station configuration
 
@@ -166,13 +171,16 @@ Zero boots → logs PAIR_NAME and BADGE_NAMES
 | Controller event | Badge result |
 | --- | --- |
 | Emoji selection on the Zero | `MENU:POS:NEG` written to every connected badge; one `POST /api/emoji` for the station |
+| Referee binds the station `pairName` | Server creates one player binding per roster badge |
 | `game.opened` | Every connected badge shows `GAME:lobby` |
-| `KEY1` join (`POST /api/games/:id/join` once) | Every badge shows `GAME:lobby_joined` |
-| Badge connects mid-game | That badge alone receives the current `GAME:*` command |
-| Question / result / end events | Every connected badge gets the matching `GAME:*` |
+| `KEY1` join (`POST /api/games/:id/join` with `badgeNames`) | Every connected badge joins as a player and shows `GAME:lobby_joined` |
+| Badge connects while the station is joined | The Zero auto-joins that badge and sends it the current `GAME:*` command |
+| Question open / closed, ready prompt | Every connected badge gets the matching `GAME:*` |
+| `question.result` | Each badge shows its own correct / wrong |
+| `game.ended` | Each badge shows its own winner / loser |
 
-NFC: any connected badge can scan. The Zero posts the guess for the station
-`pairName` and adds the scanning slot as `badgeName`:
+NFC: any connected badge can scan. The Zero posts the guess with the station
+`pairName` and the scanning badge as `badgeName` (the player):
 
 ```json
 {
@@ -185,9 +193,12 @@ NFC: any connected badge can scan. The Zero posts the guess for the station
 }
 ```
 
-The first scan of a question counts. The server keeps one guess per
-`pairName` per question, so a later scan from a sibling badge is rejected the
-same way a repeat scan is. `nfc.tagged` echoes `badgeName`.
+The server keeps one guess per badge per question. A scan from a sibling
+badge is that badge's own guess; a repeat scan from the same badge is
+rejected. The question closes automatically once every joined player has
+guessed, so an unpowered roster badge does not hold it open. `nfc.tagged`,
+`question.result` rows, and scores carry `badgeName` (the player) and
+`stationName`.
 
 ### Multi-badge server and dashboard
 
@@ -195,11 +206,14 @@ same way a repeat scan is. `nfc.tagged` echoes `badgeName`.
 - `GET /api/badges` returns a `stations[]` view: one station per `pairName`
   with one slot per roster name, including never-connected names.
 - The Badges view renders a **station card** (controller version, battery,
-  `n/m badges`, the station's game state) with one slot per roster name.
-  The slot that scanned shows a `green-2 · B` chip.
+  `n/m badges`, and a `Joined x/m · answered y/x` summary) with one slot per
+  roster name. Each slot shows its own joined state, NFC chip
+  (`NFC · B`), and result.
 - The referee panel binds the station `pairName` once and shows
-  `n/m badges` on the bound-pair chip and the invite list.
-- Player views, scores, and `question.result` keep one row per `pairName`.
+  `n/m badges` on the invite list. Bound players are grouped under their
+  station, each with its own joined / ready chip.
+- Player views, scores, the guess chart, and `question.result` have one row
+  per badge, with a station subtitle when it differs from the badge name.
 
 ### Multi-badge Pico changes
 
@@ -213,11 +227,11 @@ None. Each Pico advertises `Pico-Client-<PAIR_NAME>`, accepts only
 | --- | --- | --- |
 | Individual player station | 1 | Mode 1 |
 | Learning-sport station with buttonless badges | 2–4 | Mode 2 |
-| Team buzzer | 2–4 | Mode 2; one team score, not per-badge scores |
+| Several players sharing one controller | 2–4 | Mode 2; one score per badge |
 | Larger sets | 5+ | Limited by the Zero's concurrent BLE connections |
 
-Badges scored as separate players are out of scope: give each player its own
-Zero (Mode 1) instead.
+A team mode (several badges sharing one team score) is not implemented. It
+may be added later as a separate mode.
 
 ---
 
@@ -362,7 +376,8 @@ Referee (app)              Server             Zero               Pico
 
 - Start Game automatically opens only the first round.
 - Later questions stay hidden from the player view until the referee opens them.
-- The server automatically closes a round after every bound pair submits a guess.
+- The server automatically closes a round after every joined player submits a
+  guess.
 - Ready and wait responses are persisted on `pairBindings` and broadcast to the
   player and referee views.
 - Only one question can be open at a time.
@@ -374,12 +389,14 @@ Referee (app)              Server             Zero               Pico
 | Aspect | Mode 1 | Mode 2 |
 | --- | --- | --- |
 | Badges per controller | 1 | Roster of N (2–4 tested target) |
-| `pairName` meaning | Controller + badge station | Controller station (one player) |
+| `pairName` meaning | Controller + badge station (one player) | Controller station (not a player) |
+| Player key | `pairName` (equals the badge name) | `badgeName`, one player per badge |
 | Individual badge id | Not needed | `badgeName` (roster slot); `badgeId` diagnostic |
 | Zero config | `PAIR_NAME` only | `PAIR_NAME` + `BADGE_NAMES` |
 | Pico config | Same `PAIR_NAME` as the Zero | Own `PAIR_NAME`, listed in `BADGE_NAMES` |
 | Zero BLE clients | 1 | One per connected roster name |
-| Bind / join / score | Once per `pairName` | Once per `pairName` (unchanged) |
+| Referee bind / `KEY1` join | Once per `pairName` | Once per station; expands to every badge |
+| Guess / score / outcome | One per `pairName` | One per badge |
 | Guess payload | `pairName` | `pairName` + `badgeName` |
 | Dashboard | One-slot station card | Station card with one slot per roster name |
 | Pico code changes | None | None |

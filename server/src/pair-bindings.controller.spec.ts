@@ -39,19 +39,32 @@ describe('PairBindingsController', () => {
   const repository: jest.Mocked<
     Pick<
       GameDataRepository,
-      'bindStation' | 'getBinding' | 'markJoined' | 'setPairReadyForNextQuestion'
+      | 'bindStation'
+      | 'getBinding'
+      | 'markJoined'
+      | 'setPairReadyForNextQuestion'
+      | 'unbindStation'
+      | 'getOpenQuestionId'
+      | 'haveAllJoinedPlayersGuessed'
     >
   > = {
     bindStation: jest.fn(),
     getBinding: jest.fn(),
     markJoined: jest.fn(),
     setPairReadyForNextQuestion: jest.fn(),
+    unbindStation: jest.fn(),
+    getOpenQuestionId: jest.fn(),
+    haveAllJoinedPlayersGuessed: jest.fn(),
   };
 
   const badgeStateService: jest.Mocked<
-    Pick<BadgeStateService, 'broadcastDashboard' | 'getStationRoster' | 'findRosterConflicts'>
+    Pick<
+      BadgeStateService,
+      'broadcastDashboard' | 'sendToPairNames' | 'getStationRoster' | 'findRosterConflicts'
+    >
   > = {
     broadcastDashboard: jest.fn(),
+    sendToPairNames: jest.fn(),
     getStationRoster: jest.fn(),
     findRosterConflicts: jest.fn(),
   };
@@ -65,6 +78,69 @@ describe('PairBindingsController', () => {
     jest.clearAllMocks();
     badgeStateService.getStationRoster.mockReturnValue(null);
     badgeStateService.findRosterConflicts.mockReturnValue([]);
+    repository.getOpenQuestionId.mockResolvedValue(null);
+  });
+
+  describe('DELETE /api/games/:gameId/stations/:stationName', () => {
+    it('unbinds the station, tells its Zero, and tells dashboards', async () => {
+      const res = createResponseMock();
+      repository.unbindStation.mockResolvedValue(['power-cable', 'black']);
+
+      await controller.unbindStation(GAME_ID, 'power-cable', res as unknown as Response);
+
+      expect(repository.unbindStation).toHaveBeenCalledWith({
+        gameId: GAME_ID,
+        stationName: 'power-cable',
+      });
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['power-cable'],
+        expect.objectContaining({ type: 'pair.unbound', pairName: 'power-cable', gameId: GAME_ID }),
+      );
+      expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'game.bindings.changed',
+          gameId: GAME_ID,
+          stationName: 'power-cable',
+          removed: ['power-cable', 'black'],
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ok: true, removed: ['power-cable', 'black'] });
+    });
+
+    it('returns 404 when the station is not bound to the game', async () => {
+      const res = createResponseMock();
+      repository.unbindStation.mockResolvedValue([]);
+
+      await controller.unbindStation(GAME_ID, 'orange', res as unknown as Response);
+
+      expect(badgeStateService.sendToPairNames).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+
+    it('checks auto-close when a question is open', async () => {
+      const res = createResponseMock();
+      repository.unbindStation.mockResolvedValue(['orange']);
+      repository.getOpenQuestionId.mockResolvedValue('507f1f77bcf86cd799439015');
+      repository.haveAllJoinedPlayersGuessed.mockResolvedValue(false);
+
+      await controller.unbindStation(GAME_ID, 'orange', res as unknown as Response);
+
+      expect(repository.haveAllJoinedPlayersGuessed).toHaveBeenCalledWith(
+        GAME_ID,
+        '507f1f77bcf86cd799439015',
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('returns 400 for an invalid gameId', async () => {
+      const res = createResponseMock();
+
+      await controller.unbindStation('nope', 'white', res as unknown as Response);
+
+      expect(repository.unbindStation).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
   });
 
   describe('POST /api/games/:gameId/pairs', () => {

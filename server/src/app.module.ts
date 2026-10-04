@@ -9,6 +9,7 @@ import { NfcCardsController } from './nfc-cards.controller';
 import { NfcCardService } from './nfc-card.service';
 import { VersionController } from './version.controller';
 import { PairBindingsController } from './pair-bindings.controller';
+import { StationRosterSync } from './station-roster-sync';
 
 @Module({
   controllers: [
@@ -19,7 +20,13 @@ import { PairBindingsController } from './pair-bindings.controller';
     VersionController,
     PairBindingsController,
   ],
-  providers: [BadgeStateService, MongoService, GameDataRepository, NfcCardService],
+  providers: [
+    BadgeStateService,
+    MongoService,
+    GameDataRepository,
+    NfcCardService,
+    StationRosterSync,
+  ],
   exports: [MongoService, GameDataRepository],
 })
 export class AppModule {}

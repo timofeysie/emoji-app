@@ -245,6 +245,14 @@ export function isLiveConnected(status?: StatusChangedEvent): boolean {
   return !Number.isNaN(t) && Date.now() - t <= STALE_CONNECTED_MS;
 }
 
+/** The controller posted any status recently (connected badges post liveness). */
+export function isStationLive(station: StationRecord): boolean {
+  return Object.values(station.slots).some((slot) => {
+    const t = slot.status ? new Date(slot.status.timestamp).getTime() : Number.NaN;
+    return !Number.isNaN(t) && Date.now() - t <= STALE_CONNECTED_MS;
+  });
+}
+
 export function connectedSlotCount(station: StationRecord): number {
   return station.badgeNames.filter((name) => isLiveConnected(station.slots[name]?.status)).length;
 }

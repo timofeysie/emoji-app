@@ -25,6 +25,7 @@ describe('GameDataRepository', () => {
     Game: {
       create: jest.fn(),
       findById: jest.fn(),
+      updateOne: jest.fn(),
       db: {
         startSession: jest.fn().mockResolvedValue(session),
       },
@@ -36,6 +37,7 @@ describe('GameDataRepository', () => {
       create: jest.fn(),
       findOne: jest.fn(),
       countDocuments: jest.fn(),
+      updateMany: jest.fn(),
     },
     AnswerOption: {
       insertMany: jest.fn(),
@@ -45,6 +47,7 @@ describe('GameDataRepository', () => {
     Guess: {
       create: jest.fn(),
       find: jest.fn(),
+      deleteMany: jest.fn(),
     },
     PairBinding: {
       find: jest.fn(),
@@ -436,5 +439,139 @@ describe('GameDataRepository', () => {
         { pairName: 'white', stationName: 'black', badgeName: 'white', correct: 0, total: 4 },
       ],
     });
+  });
+
+  it('keeps a removed badge that guessed in scores and results', async () => {
+    models.Game.findById.mockReturnValue(createLeanQuery({}));
+    models.Question.countDocuments.mockResolvedValue(2);
+    models.Guess.find.mockReturnValue(
+      createLeanQuery([
+        {
+          pairName: 'black',
+          stationName: 'power-cable',
+          slotLabel: 'A',
+          answerOptionId: { toString: () => '507f1f77bcf86cd799439030' },
+        },
+      ]),
+    );
+    models.AnswerOption.find.mockReturnValue(
+      createLeanQuery([{ _id: { toString: () => '507f1f77bcf86cd799439030' }, isCorrect: true }]),
+    );
+    models.AnswerOption.findOne.mockReturnValue(createLeanQuery({ slotLabel: 'A', isCorrect: true }));
+    models.PairBinding.find.mockReturnValue(
+      createLeanQuery([{ pairName: 'power-cable', stationName: 'power-cable' }]),
+    );
+
+    const scores = await repository.getGameScores('507f1f77bcf86cd799439024');
+    const result = await repository.computeQuestionResult(
+      '507f1f77bcf86cd799439024',
+      '507f1f77bcf86cd799439025',
+    );
+
+    expect(scores.scores).toEqual([
+      { pairName: 'black', stationName: 'power-cable', badgeName: 'black', correct: 1, total: 2 },
+      { pairName: 'power-cable', stationName: 'power-cable', badgeName: 'power-cable', correct: 0, total: 2 },
+    ]);
+    expect(result.results.map((r) => r.badgeName)).toEqual(['power-cable', 'black']);
+  });
+
+  describe('syncStationRoster', () => {
+    const gameId = '507f1f77bcf86cd799439024';
+
+    it('binds new roster badges and unbinds badges that left, keeping existing players', async () => {
+      models.PairBinding.find
+        .mockReturnValueOnce(
+          createLeanQuery([
+            { pairName: 'power-cable', stationName: 'power-cable', gameId, joined: true },
+            { pairName: 'white-2', stationName: 'power-cable', gameId, joined: false },
+          ]),
+        )
+        .mockReturnValueOnce(createLeanQuery([]));
+      models.Game.findById.mockReturnValue(createLeanQuery({ state: 'lobby' }));
+
+      const changes = await repository.syncStationRoster({
+        stationName: 'power-cable',
+        badgeNames: ['power-cable', 'black'],
+      });
+
+      expect(changes).toEqual([
+        { gameId, stationName: 'power-cable', added: ['black'], removed: ['white-2'], skipped: [] },
+      ]);
+      expect(models.PairBinding.deleteMany).toHaveBeenCalledWith(
+        expect.objectContaining({ pairName: { $in: ['white-2'] } }),
+      );
+      expect(models.PairBinding.updateOne).toHaveBeenCalledTimes(1);
+      expect(models.PairBinding.updateOne).toHaveBeenCalledWith(
+        { pairName: 'black' },
+        expect.objectContaining({
+          $set: expect.objectContaining({ stationName: 'power-cable', joined: false }),
+        }),
+        { upsert: true },
+      );
+    });
+
+    it('skips a roster name bound to another station', async () => {
+      models.PairBinding.find
+        .mockReturnValueOnce(createLeanQuery([{ pairName: 'white', stationName: 'white', gameId }]))
+        .mockReturnValueOnce(
+          createLeanQuery([{ pairName: 'black', stationName: 'power-cable', gameId }]),
+        );
+      models.Game.findById.mockReturnValue(createLeanQuery({ state: 'active' }));
+
+      const changes = await repository.syncStationRoster({
+        stationName: 'white',
+        badgeNames: ['white', 'black'],
+      });
+
+      expect(changes).toEqual([
+        { gameId, stationName: 'white', added: [], removed: [], skipped: ['black'] },
+      ]);
+      expect(models.PairBinding.updateOne).not.toHaveBeenCalled();
+    });
+
+    it('leaves finished games alone', async () => {
+      models.PairBinding.find.mockReturnValueOnce(
+        createLeanQuery([{ pairName: 'white', stationName: 'white', gameId }]),
+      );
+      models.Game.findById.mockReturnValue(createLeanQuery({ state: 'completed' }));
+
+      await expect(
+        repository.syncStationRoster({ stationName: 'white', badgeNames: ['white-2'] }),
+      ).resolves.toEqual([]);
+      expect(models.PairBinding.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  it("unbinds only that station's players for the game", async () => {
+    models.PairBinding.find.mockReturnValue(
+      createLeanQuery([{ pairName: 'power-cable' }, { pairName: 'black' }]),
+    );
+
+    const removed = await repository.unbindStation({
+      gameId: '507f1f77bcf86cd799439024',
+      stationName: 'power-cable',
+    });
+
+    expect(removed).toEqual(['power-cable', 'black']);
+    expect(models.PairBinding.deleteMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        $or: [
+          { stationName: 'power-cable' },
+          { stationName: null, pairName: 'power-cable' },
+        ],
+      }),
+    );
+  });
+
+  it('clears every binding on Play Again', async () => {
+    models.Game.findById.mockReturnValue(createLeanQuery({ state: 'completed' }));
+
+    await repository.setGameState({ gameId: '507f1f77bcf86cd799439024', state: 'ready' });
+
+    expect(models.PairBinding.deleteMany).toHaveBeenCalledWith({
+      gameId: expect.anything(),
+    });
+    expect(models.PairBinding.updateMany).not.toHaveBeenCalled();
+    expect(models.Guess.deleteMany).toHaveBeenCalled();
   });
 });

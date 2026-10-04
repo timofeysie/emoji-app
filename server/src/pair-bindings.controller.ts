@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { GameDataRepository } from './persistence/game-data.repository';
 import { BadgeStateService } from './badge-state.service';
+import { QuestionCloser } from './question-closer';
+import { broadcastBindingsChanged } from './station-roster-sync';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 
@@ -38,10 +40,14 @@ function getValidationErrors(error: ZodError): Array<{ path: string; message: st
 
 @Controller('api')
 export class PairBindingsController {
+  private readonly questionCloser: QuestionCloser;
+
   constructor(
     private readonly gameDataRepository: GameDataRepository,
     private readonly badgeStateService: BadgeStateService,
-  ) {}
+  ) {
+    this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService);
+  }
 
   @Post('games/:gameId/pairs')
   async bindPair(
@@ -81,9 +87,53 @@ export class PairBindingsController {
         gameId,
         controllerId,
       });
+      broadcastBindingsChanged(this.badgeStateService, {
+        gameId,
+        stationName: pairName,
+        added: badgeNames,
+      });
       res.status(201).json({ ok: true, badgeNames });
     } catch (error) {
       res.status(500).json({ error: 'Failed to bind pair', message: String(error) });
+    }
+  }
+
+  /** Referee removes a station: unbind all its players; their guesses stay. */
+  @Delete('games/:gameId/stations/:stationName')
+  async unbindStation(
+    @Param('gameId') gameId: string,
+    @Param('stationName') stationName: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success || !stationName || stationName.trim().length === 0) {
+      const details = [
+        ...(!gameIdResult.success ? getValidationErrors(gameIdResult.error) : []),
+        ...(!stationName || stationName.trim().length === 0
+          ? [{ path: 'stationName', message: 'must not be empty' }]
+          : []),
+      ];
+      res.status(400).json({ error: 'Validation failed', details });
+      return;
+    }
+
+    try {
+      const removed = await this.gameDataRepository.unbindStation({ gameId, stationName });
+      if (removed.length === 0) {
+        res.status(404).json({ error: 'Station is not bound to this game', stationName });
+        return;
+      }
+      this.badgeStateService.sendToPairNames([stationName], {
+        type: 'pair.unbound',
+        pairName: stationName,
+        gameId,
+        serverTime: new Date().toISOString(),
+      });
+      broadcastBindingsChanged(this.badgeStateService, { gameId, stationName, removed });
+      await this.questionCloser.closeIfAllAnswered(gameId);
+      res.status(200).json({ ok: true, removed });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to unbind station', message: String(error) });
     }
   }
 

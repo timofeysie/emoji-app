@@ -52,6 +52,16 @@ export type BindStationInput = {
   controllerId?: string;
 };
 
+/** Bindings changed for one game by a live roster sync. */
+export type StationRosterChange = {
+  gameId: string;
+  stationName: string;
+  added: string[];
+  removed: string[];
+  /** Roster names already bound to another station; left untouched. */
+  skipped: string[];
+};
+
 export type GameSummary = {
   id: string;
   title: string;
@@ -193,6 +203,26 @@ function stationOf(row: { pairName?: string | null; stationName?: string | null 
 /** Bindings owned by a station, including legacy rows keyed only by `pairName`. */
 function stationFilter(stationName: string): Record<string, unknown> {
   return { $or: [{ stationName }, { stationName: null, pairName: stationName }] };
+}
+
+/**
+ * Players of a game: every binding, then every player that guessed but is no
+ * longer bound (removed mid-game), so scores and results keep them.
+ */
+function gamePlayers(
+  bindings: Array<{ pairName: string; stationName?: string | null }>,
+  guesses: Array<{ pairName?: string | null; stationName?: string | null }>,
+): Array<{ pairName: string; stationName: string }> {
+  const players = new Map<string, string>();
+  for (const binding of bindings) {
+    players.set(binding.pairName, stationOf(binding));
+  }
+  for (const guess of guesses) {
+    if (guess.pairName && !players.has(guess.pairName)) {
+      players.set(guess.pairName, stationOf(guess));
+    }
+  }
+  return [...players].map(([pairName, stationName]) => ({ pairName, stationName }));
 }
 
 @Injectable()
@@ -571,8 +601,6 @@ export class GameDataRepository {
       }).lean(),
     ]);
 
-    const pairs = bindings.map((b) => b.pairName);
-    const pairStations = Object.fromEntries(bindings.map((b) => [b.pairName, stationOf(b)]));
     const questionIds = questions.map((q) => q._id as Types.ObjectId);
 
     const guessFilter: Record<string, unknown> = { gameId: asObjectId(gameId) };
@@ -592,6 +620,10 @@ export class GameDataRepository {
         ? AnswerOption.find({ questionId: { $in: questionIds } }).lean()
         : Promise.resolve([]),
     ]);
+
+    const players = gamePlayers(bindings, guesses);
+    const pairs = players.map((p) => p.pairName);
+    const pairStations = Object.fromEntries(players.map((p) => [p.pairName, p.stationName]));
 
     const cardNameByUid = new Map(
       groupCards.map((c) => [c.cardUid as string, c.displayName as string]),
@@ -678,16 +710,8 @@ export class GameDataRepository {
         { $set: { state: 'closed' }, $unset: { openedAt: '', closedAt: '' } },
       );
 
-      await PairBinding.updateMany(
-        { gameId: gid },
-        {
-          $set: {
-            joined: false,
-            readyForNextQuestion: null,
-            updatedAt: new Date(),
-          },
-        },
-      );
+      // Each run starts unbound; the referee binds the live stations again.
+      await PairBinding.deleteMany({ gameId: gid });
 
       // Clear prior-run guesses so uniq_guess_per_pair does not block replay.
       await Guess.deleteMany({ gameId: gid });
@@ -745,6 +769,101 @@ export class GameDataRepository {
       ),
     );
     return badgeNames;
+  }
+
+  /**
+   * Make a bound station's player bindings match its live roster. New badges
+   * are bound (not joined); badges that left the roster are unbound, keeping
+   * their guesses. Existing players keep their join / readiness state.
+   * Finished games and unbound stations are left alone.
+   */
+  async syncStationRoster(input: {
+    stationName: string;
+    badgeNames: string[];
+  }): Promise<StationRosterChange[]> {
+    const { PairBinding, Game } = this.mongoService.getModels();
+    const roster = [...new Set(input.badgeNames)];
+    if (roster.length === 0) {
+      return [];
+    }
+
+    const owned = await PairBinding.find({
+      ...stationFilter(input.stationName),
+      gameId: { $ne: null },
+    }).lean();
+    const gameIds = [...new Set(owned.map((b) => String(b.gameId)))];
+    const changes: StationRosterChange[] = [];
+
+    for (const gameId of gameIds) {
+      const game = await Game.findById(asObjectId(gameId), { state: 1 }).lean();
+      if (!game || game.state === 'completed' || game.state === 'cancelled') {
+        continue;
+      }
+
+      const bound = owned.filter((b) => String(b.gameId) === gameId);
+      const boundNames = new Set(bound.map((b) => b.pairName));
+      const removed = [...boundNames].filter((name) => !roster.includes(name));
+      const candidates = roster.filter((name) => !boundNames.has(name));
+
+      const others = candidates.length
+        ? await PairBinding.find({ pairName: { $in: candidates } }).lean()
+        : [];
+      const skipped = others
+        .filter((b) => b.gameId != null && stationOf(b) !== input.stationName)
+        .map((b) => b.pairName);
+      const added = candidates.filter((name) => !skipped.includes(name));
+      const controllerId = bound.find((b) => b.controllerId)?.controllerId;
+
+      if (removed.length > 0) {
+        await PairBinding.deleteMany({
+          ...stationFilter(input.stationName),
+          gameId: asObjectId(gameId),
+          pairName: { $in: removed },
+        });
+      }
+      await Promise.all(
+        added.map((badgeName) =>
+          PairBinding.updateOne(
+            { pairName: badgeName },
+            {
+              $set: {
+                stationName: input.stationName,
+                gameId: asObjectId(gameId),
+                joined: false,
+                readyForNextQuestion: null,
+                updatedAt: new Date(),
+                ...(controllerId ? { controllerId } : {}),
+              },
+              $setOnInsert: { pairName: badgeName },
+            },
+            { upsert: true },
+          ),
+        ),
+      );
+
+      if (added.length > 0 || removed.length > 0 || skipped.length > 0) {
+        changes.push({ gameId, stationName: input.stationName, added, removed, skipped });
+      }
+    }
+    return changes;
+  }
+
+  /** Remove a station's player bindings for a game. Guesses stay. Returns the names removed. */
+  async unbindStation(input: { gameId: string; stationName: string }): Promise<string[]> {
+    const { PairBinding } = this.mongoService.getModels();
+    const filter = { ...stationFilter(input.stationName), gameId: asObjectId(input.gameId) };
+    const rows = await PairBinding.find(filter, { pairName: 1 }).lean();
+    if (rows.length > 0) {
+      await PairBinding.deleteMany(filter);
+    }
+    return rows.map((b) => b.pairName);
+  }
+
+  /** The game's open question, or null. */
+  async getOpenQuestionId(gameId: string): Promise<string | null> {
+    const { Question } = this.mongoService.getModels();
+    const open = await Question.findOne({ gameId: asObjectId(gameId), state: 'open' }, { _id: 1 }).lean();
+    return open ? (open._id as Types.ObjectId).toString() : null;
   }
 
   /**
@@ -942,7 +1061,8 @@ export class GameDataRepository {
 
   /**
    * Build per-player correct/wrong outcomes for a closed question.
-   * Includes every bound player; `slotLabel: null` means no guess was submitted.
+   * Includes every bound player plus any unbound player that guessed;
+   * `slotLabel: null` means no guess was submitted.
    */
   async computeQuestionResult(gameId: string, questionId: string): Promise<QuestionResultPayload> {
     const { AnswerOption, Guess, PairBinding } = this.mongoService.getModels();
@@ -972,14 +1092,12 @@ export class GameDataRepository {
     ).lean();
 
     const correctSlotLabel = correct.slotLabel as string;
-    const results = bindings.map((binding) => {
-      const slotLabel = guessByPair.has(binding.pairName)
-        ? guessByPair.get(binding.pairName) ?? null
-        : null;
+    const results = gamePlayers(bindings, guesses).map((player) => {
+      const slotLabel = guessByPair.get(player.pairName) ?? null;
       return {
-        pairName: binding.pairName,
-        stationName: stationOf(binding),
-        badgeName: binding.pairName,
+        pairName: player.pairName,
+        stationName: player.stationName,
+        badgeName: player.pairName,
         slotLabel,
         isCorrect: slotLabel === correctSlotLabel,
       };
@@ -994,7 +1112,8 @@ export class GameDataRepository {
   }
 
   /**
-   * Cumulative correct-guess counts per bound player (badge).
+   * Cumulative correct-guess counts per player (badge): every bound player plus
+   * any player removed after guessing.
    * Guesses are scoped to `game.startedAt` when present so Play Again does not
    * inflate scores with prior runs.
    */
@@ -1044,12 +1163,12 @@ export class GameDataRepository {
       { pairName: 1, stationName: 1 },
     ).lean();
 
-    const scores = bindings
-      .map((binding) => ({
-        pairName: binding.pairName,
-        stationName: stationOf(binding),
-        badgeName: binding.pairName,
-        correct: correctByPair.get(binding.pairName) ?? 0,
+    const scores = gamePlayers(bindings, guesses)
+      .map((player) => ({
+        pairName: player.pairName,
+        stationName: player.stationName,
+        badgeName: player.pairName,
+        correct: correctByPair.get(player.pairName) ?? 0,
         total,
       }))
       .sort(

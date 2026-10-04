@@ -468,18 +468,22 @@ from a dropdown of existing groups.
 ## Step 10 — Multi-badge Mode 2 (done)
 
 Detailed plan and as-built notes:
-[`multi-badge-plan.md`](./multi-badge-plan.md). Milestones 0–7 are done
+[`multi-badge-plan.md`](./multi-badge-plan.md). Milestones 0–9 are done
 (config, multi-connect, command fan-out, per-badge status posts, server
-`stations` grouping, React station card, referee / NFC attribution, docs).
-The Milestone 7 hardware checklist still has to be run on devices.
+`stations` grouping, React station card, referee / NFC attribution, docs,
+each badge as a separate player, and the doc fixes for it). The Milestone 7
+and Milestone 8 hardware checklists still have to be run on devices.
 
 One Zero commands several named Picos. The controller keeps `PAIR_NAME` as
-the station id (bind / join / score) and adds a `BADGE_NAMES` roster of Pico
-`PAIR_NAME` values it may auto-connect. Buttonless badges follow the
-controller's emoji and `GAME:*` state. The dashboard shows one station card
-with a slot per roster name (including **not connected**). Any badge can
-scan; the first scan per question is the station's guess, attributed by
-`badgeName`.
+the station id (WS room and referee bind target) and adds a `BADGE_NAMES`
+roster of Pico `PAIR_NAME` values it may auto-connect. **Each badge is a
+separate player**, keyed by `badgeName`: the station bind expands to one
+binding per badge, one `KEY1` joins every connected badge, and each badge
+has its own guess per question, score row, and winner / loser. Buttonless
+badges follow the controller's emoji and station-wide `GAME:*` phases. The
+dashboard shows one station card with a slot per roster name (including
+**not connected**). Team scoring is not implemented; it may be added later
+as a separate mode.
 
 User-facing summary: `game-modes.md` Mode 2. Device setup:
 `rainbow-connection/python/emoji-os/project/controller-setup.md` and

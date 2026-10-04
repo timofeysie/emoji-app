@@ -7,6 +7,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  X,
   XCircle,
 } from 'lucide-react';
 import { Button } from '../../shared/button';
@@ -27,6 +28,8 @@ import {
 } from '../../shared/game-state-log';
 import {
   connectedSlotCount,
+  isLiveConnected,
+  isStationLive,
   sortedStations,
   stationsFromSnapshot,
   type BadgesSnapshotResponse,
@@ -65,10 +68,21 @@ type KnownPair = {
   pairName: string;
   connected: number;
   total: number;
+  /** The controller posted status recently. */
+  live: boolean;
+  connectedBadges: string[];
 };
+
+/** Overrides the join / ready state when the player cannot take part. */
+type ChipConnection = 'offline' | 'not_connected' | null;
 
 function badgeCountLabel(known: KnownPair | undefined): string | null {
   return known && known.total > 1 ? `${known.connected}/${known.total} badges` : null;
+}
+
+function chipConnection(known: KnownPair | undefined, badgeName: string): ChipConnection {
+  if (!known?.live) return 'offline';
+  return known.connectedBadges.includes(badgeName) ? null : 'not_connected';
 }
 
 type LifecycleButton = {
@@ -114,6 +128,8 @@ export function GameRefereePanel({
   // Live stations from GET /api/badges (Zeros that have posted status with pairName).
   const [knownPairs, setKnownPairs] = useState<KnownPair[]>([]);
   const [badgesLoading, setBadgesLoading] = useState(true);
+  const [badgesLoaded, setBadgesLoaded] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   const loadKnownPairs = useCallback(async () => {
     setBadgesLoading(true);
@@ -126,8 +142,13 @@ export function GameRefereePanel({
           pairName: station.pairName,
           connected: connectedSlotCount(station),
           total: station.badgeNames.length,
+          live: isStationLive(station),
+          connectedBadges: station.badgeNames.filter((name) =>
+            isLiveConnected(station.slots[name]?.status),
+          ),
         })),
       );
+      setBadgesLoaded(true);
     } catch {
       // suggestions are optional
     } finally {
@@ -240,6 +261,29 @@ export function GameRefereePanel({
     }
   };
 
+  const removeStation = async (stationName: string) => {
+    if (!window.confirm(`Remove ${stationName} and all its badges from this game?`)) return;
+    setRemoving(stationName);
+    setBindError(null);
+    try {
+      const res = await fetch(
+        `/api/games/${game.id}/stations/${encodeURIComponent(stationName)}`,
+        { method: 'DELETE', credentials: 'same-origin' },
+      );
+      if (!res.ok && res.status !== 404) {
+        const body = (await res.json()) as { error?: string; message?: string };
+        setBindError(body.error ?? body.message ?? `Server error ${res.status}`);
+        return;
+      }
+      onRefresh();
+      void loadKnownPairs();
+    } catch {
+      setBindError('Network error — could not remove station.');
+    } finally {
+      setRemoving(null);
+    }
+  };
+
   const transitionState = async (targetState: GameState) => {
     setLifecycleLoading(targetState);
     setLifecycleError(null);
@@ -311,7 +355,8 @@ export function GameRefereePanel({
           <div className="relative flex flex-col gap-1">
             <AnimatePresence mode="popLayout" initial={false}>
               {boundStations.map(({ stationName, players }) => {
-                const badgeCount = badgeCountLabel(knownByName.get(stationName));
+                const known = knownByName.get(stationName);
+                const badgeCount = badgeCountLabel(known);
                 const grouped = players.length > 1 || players[0]?.pairName !== stationName;
                 return (
                   <motion.div
@@ -329,7 +374,12 @@ export function GameRefereePanel({
                       </span>
                     )}
                     {players.map((bp) => (
-                      <PlayerChip key={bp.pairName} bp={bp} isBetweenRounds={isBetweenRounds} />
+                      <PlayerChip
+                        key={bp.pairName}
+                        bp={bp}
+                        isBetweenRounds={isBetweenRounds}
+                        connection={badgesLoaded ? chipConnection(known, bp.pairName) : null}
+                      />
                     ))}
                     {badgeCount && (
                       <span
@@ -339,6 +389,22 @@ export function GameRefereePanel({
                         {badgeCount}
                       </span>
                     )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => void removeStation(stationName)}
+                      disabled={removing !== null}
+                      title={`Remove ${stationName} from this game`}
+                      aria-label={`Remove ${stationName} from this game`}
+                    >
+                      {removing === stationName ? (
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                      ) : (
+                        <X className="h-3 w-3" aria-hidden />
+                      )}
+                    </Button>
                   </motion.div>
                 );
               })}
@@ -518,8 +584,38 @@ export function GameRefereePanel({
   );
 }
 
-/** One player (badge): joined before the game, readiness between rounds. */
-function PlayerChip({ bp, isBetweenRounds }: { bp: BoundPair; isBetweenRounds: boolean }) {
+/**
+ * One player (badge): offline / not connected first, then joined before the
+ * game and readiness between rounds.
+ */
+function PlayerChip({
+  bp,
+  isBetweenRounds,
+  connection,
+}: {
+  bp: BoundPair;
+  isBetweenRounds: boolean;
+  connection: ChipConnection;
+}) {
+  if (connection) {
+    const label = connection === 'offline' ? 'offline' : 'not connected';
+    return (
+      <motion.span
+        layout
+        className="inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-muted/30 px-2.5 py-0.5 text-xs text-muted-foreground"
+        title={
+          connection === 'offline'
+            ? 'Controller has not posted status recently'
+            : 'Badge is in the roster but not connected to the controller'
+        }
+      >
+        {bp.pairName}
+        <TextReveal revealKey={connection} className="text-[10px]">
+          · {label}
+        </TextReveal>
+      </motion.span>
+    );
+  }
   return (
     <motion.span
       layout

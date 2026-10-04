@@ -138,6 +138,7 @@ export function GamePlayView() {
             message.type === 'question.opened' ||
             message.type === 'question.closed' ||
             message.type === 'question.result' ||
+            message.type === 'game.bindings.changed' ||
             message.type === 'controller.readiness.changed')
         ) {
           void loadGame({ silent: true });

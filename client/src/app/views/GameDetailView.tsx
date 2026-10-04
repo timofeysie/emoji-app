@@ -687,12 +687,14 @@ export function GameDetailView() {
         if (
           message.type === 'question.result' ||
           message.type === 'game.state.changed' ||
+          message.type === 'game.bindings.changed' ||
           message.type === 'nfc.tagged'
         ) {
           void loadGuessChart();
         }
         if (
           message.type === 'game.state.changed' ||
+          message.type === 'game.bindings.changed' ||
           message.type === 'controller.joined' ||
           message.type === 'controller.readiness.changed' ||
           message.type === 'nfc.tagged'

@@ -5,6 +5,8 @@ import { GameDataRepository } from './persistence/game-data.repository';
 import { BadgeStateService } from './badge-state.service';
 import { NfcCardService, shortCardLabel } from './nfc-card.service';
 import type { SlotLabel } from './persistence/domain-types';
+import { QuestionCloser } from './question-closer';
+import { broadcastBindingsChanged, reportRosterChange } from './station-roster-sync';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 const slotLabelSchema = z.enum(['A', 'B', 'C', 'D', 'E']);
@@ -117,73 +119,14 @@ const controllerEventForState: Partial<Record<string, string>> = {
 
 @Controller('api')
 export class GameFlowController {
+  private readonly questionCloser: QuestionCloser;
+
   constructor(
     private readonly gameDataRepository: GameDataRepository,
     private readonly badgeStateService: BadgeStateService,
     private readonly nfcCardService: NfcCardService,
-  ) {}
-
-  /** Close a question and broadcast question.closed + question.result. */
-  private async closeQuestionAndNotify(
-    gameId: string,
-    questionId: string,
-    options: { reason: 'referee' | 'all_pairs_answered' },
-  ): Promise<void> {
-    const { reason } = options;
-    await this.gameDataRepository.setQuestionState({
-      gameId,
-      questionId,
-      state: 'closed',
-    });
-    await this.gameDataRepository.resetPairReadiness(gameId);
-
-    const serverTime = new Date().toISOString();
-    const stationNames = await this.gameDataRepository.getStationNamesByGameId(gameId);
-    const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
-    const gameTitle = gameDetail?.title;
-    const closedQuestion = gameDetail?.questions.find(
-      (question) => question.id === questionId,
-    );
-    const isFinalRound =
-      closedQuestion != null &&
-      !gameDetail?.questions.some(
-        (question) =>
-          question.sequence > closedQuestion.sequence &&
-          question.state !== 'archived',
-      );
-    const questionEvent = {
-      type: 'question.closed' as const,
-      gameId,
-      ...(gameTitle ? { gameTitle } : {}),
-      questionId,
-      isFinalRound,
-      serverTime,
-    };
-
-    console.log(
-      `[GAME] server | question_closed | Question closed | questionId=${questionId}${
-        gameTitle ? ` game="${gameTitle}"` : ''
-      } reason=${reason}`,
-    );
-
-    this.badgeStateService.broadcastDashboard(questionEvent);
-    if (stationNames.length > 0) {
-      this.badgeStateService.sendToPairNames(stationNames, questionEvent);
-    }
-
-    const result = await this.gameDataRepository.computeQuestionResult(gameId, questionId);
-    const resultEvent = {
-      type: 'question.result' as const,
-      ...result,
-      serverTime,
-    };
-    console.log(
-      `[GAME] server | question_closed | Question closed | question.result players=${result.results.length} correctSlot=${result.correctSlotLabel}`,
-    );
-    this.badgeStateService.broadcastDashboard(resultEvent);
-    if (stationNames.length > 0) {
-      this.badgeStateService.sendToPairNames(stationNames, resultEvent);
-    }
+  ) {
+    this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService);
   }
 
   @Get('games')
@@ -454,7 +397,26 @@ export class GameFlowController {
 
     try {
       const { state } = payloadResult.data;
+      // Read before the transition: Play Again / Restart deletes the bindings.
+      const stationNames = await this.gameDataRepository.getStationNamesByGameId(gameId);
       await this.gameDataRepository.setGameState({ gameId, state });
+
+      if (state === 'lobby') {
+        // Backstop for missed roster posts: bound stations match their live roster.
+        for (const stationName of stationNames) {
+          const roster = this.badgeStateService.getStationRoster(stationName);
+          if (!roster) continue;
+          const changes = await this.gameDataRepository.syncStationRoster({
+            stationName,
+            badgeNames: roster,
+          });
+          for (const change of changes) {
+            reportRosterChange(this.badgeStateService, change, console);
+          }
+        }
+      } else if (state === 'ready' && stationNames.length > 0) {
+        broadcastBindingsChanged(this.badgeStateService, { gameId });
+      }
 
       const serverTime = new Date().toISOString();
       const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
@@ -468,8 +430,6 @@ export class GameFlowController {
         state,
         serverTime,
       });
-
-      const stationNames = await this.gameDataRepository.getStationNamesByGameId(gameId);
 
       if (state === 'completed' && stationNames.length > 0) {
         // Enriched per-player game.ended (rank / score / isWinner), ranked
@@ -701,7 +661,7 @@ export class GameFlowController {
       const { gameId, state } = payloadResult.data;
 
       if (state === 'closed') {
-        await this.closeQuestionAndNotify(gameId, questionId, { reason: 'referee' });
+        await this.questionCloser.closeAndNotify(gameId, questionId, 'referee');
         res.status(200).json({ ok: true });
         return;
       }
@@ -791,9 +751,7 @@ export class GameFlowController {
         outcome.guessId &&
         (await this.gameDataRepository.haveAllJoinedPlayersGuessed(gameId, questionId))
       ) {
-        await this.closeQuestionAndNotify(gameId, questionId, {
-          reason: 'all_pairs_answered',
-        });
+        await this.questionCloser.closeAndNotify(gameId, questionId, 'all_pairs_answered');
       }
     } catch (error) {
       // The successful response has already been sent. Closing failures must not

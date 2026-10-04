@@ -42,11 +42,16 @@ describe('GameFlowController', () => {
     getGameDetail: jest.fn(),
     getGameGuessChart: jest.fn(),
     haveAllJoinedPlayersGuessed: jest.fn(),
+    syncStationRoster: jest.fn(),
+    getOpenQuestionId: jest.fn(),
   } as unknown as jest.Mocked<GameDataRepository>;
 
-  const badgeStateService: jest.Mocked<Pick<BadgeStateService, 'broadcastDashboard' | 'sendToPairNames'>> = {
+  const badgeStateService: jest.Mocked<
+    Pick<BadgeStateService, 'broadcastDashboard' | 'sendToPairNames' | 'getStationRoster'>
+  > = {
     broadcastDashboard: jest.fn(),
     sendToPairNames: jest.fn(),
+    getStationRoster: jest.fn(),
   };
 
   const nfcCardService = new NfcCardService();
@@ -71,6 +76,8 @@ describe('GameFlowController', () => {
     });
     repository.haveAllJoinedPlayersGuessed.mockResolvedValue(false);
     repository.setQuestionState.mockResolvedValue(undefined);
+    repository.syncStationRoster.mockResolvedValue([]);
+    badgeStateService.getStationRoster.mockReturnValue(null);
   });
 
   it('returns 400 for invalid game creation payload', async () => {
@@ -940,6 +947,75 @@ describe('GameFlowController', () => {
       expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
         ['green'],
         expect.objectContaining({ type: 'game.ready' }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('reads stations before Play Again clears bindings, then reports the clear', async () => {
+      const res = createResponseMock();
+      const order: string[] = [];
+      repository.getStationNamesByGameId.mockImplementation(async () => {
+        order.push('stations');
+        return ['green'];
+      });
+      repository.setGameState.mockImplementation(async () => {
+        order.push('setGameState');
+        return { gameId: '507f1f77bcf86cd799439011', state: 'ready' };
+      });
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'ready' },
+        res as unknown as Response,
+      );
+
+      expect(order).toEqual(['stations', 'setGameState']);
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['green'],
+        expect.objectContaining({ type: 'game.ready' }),
+      );
+      expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'game.bindings.changed',
+          gameId: '507f1f77bcf86cd799439011',
+        }),
+      );
+    });
+
+    it('re-syncs bound stations from their live roster on Open for Joining', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'lobby' });
+      repository.getStationNamesByGameId.mockResolvedValue(['power-cable', 'orange']);
+      badgeStateService.getStationRoster.mockImplementation((name: string) =>
+        name === 'power-cable' ? ['power-cable', 'black'] : null,
+      );
+      repository.syncStationRoster.mockResolvedValue([
+        {
+          gameId: '507f1f77bcf86cd799439011',
+          stationName: 'power-cable',
+          added: ['black'],
+          removed: [],
+          skipped: [],
+        },
+      ]);
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'lobby' },
+        res as unknown as Response,
+      );
+
+      expect(repository.syncStationRoster).toHaveBeenCalledTimes(1);
+      expect(repository.syncStationRoster).toHaveBeenCalledWith({
+        stationName: 'power-cable',
+        badgeNames: ['power-cable', 'black'],
+      });
+      expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'game.bindings.changed',
+          stationName: 'power-cable',
+          added: ['black'],
+        }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
     });
