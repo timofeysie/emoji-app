@@ -43,6 +43,7 @@ type GamePlayDetail = {
   state: GameState;
   boundPairs: Array<{
     pairName: string;
+    stationName?: string;
     readyForNextQuestion: boolean | null;
   }>;
   totalRounds: number;
@@ -54,6 +55,7 @@ type GamePlayDetail = {
     sequence: number;
     scans: Array<{
       pairName: string;
+      stationName?: string;
       cardLabel: string | null;
       slotLabel: string | null;
       isCorrect: boolean;
@@ -370,6 +372,9 @@ export function GamePlayView() {
                           />
                         )}
                         <span className="capitalize">{pair.pairName}</span>
+                        {pair.stationName && pair.stationName !== pair.pairName && (
+                          <span className="text-muted-foreground">({pair.stationName})</span>
+                        )}
                         <TextReveal
                           revealKey={readinessLabel(pair.readyForNextQuestion)}
                           className="text-muted-foreground"
@@ -421,6 +426,11 @@ export function GamePlayView() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold capitalize">
                         {scan.pairName}
+                        {scan.stationName && scan.stationName !== scan.pairName && (
+                          <span className="ml-1 text-xs font-normal normal-case text-muted-foreground">
+                            on {scan.stationName}
+                          </span>
+                        )}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
                         {scan.slotLabel

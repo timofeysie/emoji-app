@@ -48,6 +48,10 @@ describe('GameDataRepository', () => {
     },
     PairBinding: {
       find: jest.fn(),
+      findOne: jest.fn(),
+      updateOne: jest.fn(),
+      updateMany: jest.fn(),
+      deleteMany: jest.fn(),
     },
     GameNfcCardGroupAssignment: {
       findOne: jest.fn(),
@@ -189,7 +193,11 @@ describe('GameDataRepository', () => {
       ]),
     );
     models.PairBinding.find.mockReturnValue(
-      createLeanQuery([{ pairName: 'green' }, { pairName: 'white' }, { pairName: 'red' }]),
+      createLeanQuery([
+        { pairName: 'green' },
+        { pairName: 'white', stationName: 'white' },
+        { pairName: 'white-2', stationName: 'white' },
+      ]),
     );
 
     const result = await repository.computeQuestionResult(
@@ -202,11 +210,190 @@ describe('GameDataRepository', () => {
       questionId: '507f1f77bcf86cd799439025',
       correctSlotLabel: 'B',
       results: [
-        { pairName: 'green', slotLabel: 'B', isCorrect: true },
-        { pairName: 'white', slotLabel: 'A', isCorrect: false },
-        { pairName: 'red', slotLabel: null, isCorrect: false },
+        { pairName: 'green', stationName: 'green', badgeName: 'green', slotLabel: 'B', isCorrect: true },
+        { pairName: 'white', stationName: 'white', badgeName: 'white', slotLabel: 'A', isCorrect: false },
+        { pairName: 'white-2', stationName: 'white', badgeName: 'white-2', slotLabel: null, isCorrect: false },
       ],
     });
+  });
+
+  it('stores the scanning badge as the player and the relay as the station', async () => {
+    models.Game.findById.mockReturnValue(createLeanQuery({ _id: 'g1', title: 'Demo Night' }));
+    models.PairBinding.findOne.mockReturnValue(
+      createLeanQuery({ pairName: 'white-2', stationName: 'white' }),
+    );
+    models.Question.findOne.mockReturnValue(
+      createLeanQuery({ _id: 'q1', state: 'open', gameId: 'g1' }),
+    );
+    models.GameNfcCardGroupAssignment.findOne.mockReturnValue(createLeanQuery(null));
+    models.AnswerOption.findOne.mockReturnValue(
+      createLeanQuery({
+        _id: { toString: () => '507f1f77bcf86cd799439022' },
+        slotLabel: 'B',
+        isCorrect: true,
+      }),
+    );
+    models.Guess.create.mockResolvedValue([
+      { _id: { toString: () => '507f1f77bcf86cd799439023' } },
+    ]);
+
+    await repository.submitGuess({
+      gameId: '507f1f77bcf86cd799439024',
+      questionId: '507f1f77bcf86cd799439025',
+      pairName: 'white',
+      badgeName: 'white-2',
+      cardUid: 'DB:93:B7:08',
+      slotLabel: 'B',
+    });
+
+    expect(models.PairBinding.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ pairName: 'white-2', stationName: 'white' }),
+      undefined,
+      expect.anything(),
+    );
+    expect(models.Guess.create).toHaveBeenCalledWith(
+      [expect.objectContaining({ pairName: 'white-2', stationName: 'white', badgeName: 'white-2' })],
+      expect.anything(),
+    );
+  });
+
+  it('rejects a guess from a badge that is not bound to the station', async () => {
+    models.Game.findById.mockReturnValue(createLeanQuery({ _id: 'g1', title: 'Demo Night' }));
+    models.PairBinding.findOne.mockReturnValue(createLeanQuery(null));
+
+    await expect(
+      repository.submitGuess({
+        gameId: '507f1f77bcf86cd799439024',
+        questionId: '507f1f77bcf86cd799439025',
+        pairName: 'white',
+        badgeName: 'red-2',
+        cardUid: 'DB:93:B7:08',
+        slotLabel: 'B',
+      }),
+    ).rejects.toThrow("Badge 'red-2' is not bound to station 'white'");
+    expect(models.Guess.create).not.toHaveBeenCalled();
+  });
+
+  it('keys a Mode 1 guess by pairName without a binding lookup', async () => {
+    models.Game.findById.mockReturnValue(createLeanQuery({ _id: 'g1', title: 'Demo Night' }));
+    models.Question.findOne.mockReturnValue(
+      createLeanQuery({ _id: 'q1', state: 'open', gameId: 'g1' }),
+    );
+    models.GameNfcCardGroupAssignment.findOne.mockReturnValue(createLeanQuery(null));
+    models.AnswerOption.findOne.mockReturnValue(
+      createLeanQuery({
+        _id: { toString: () => '507f1f77bcf86cd799439022' },
+        slotLabel: 'A',
+        isCorrect: true,
+      }),
+    );
+    models.Guess.create.mockResolvedValue([
+      { _id: { toString: () => '507f1f77bcf86cd799439023' } },
+    ]);
+
+    await repository.submitGuess({
+      gameId: '507f1f77bcf86cd799439024',
+      questionId: '507f1f77bcf86cd799439025',
+      pairName: 'white',
+      cardUid: '5B:6F:B8:08',
+      slotLabel: 'A',
+    });
+
+    expect(models.PairBinding.findOne).not.toHaveBeenCalled();
+    expect(models.Guess.create).toHaveBeenCalledWith(
+      [expect.objectContaining({ pairName: 'white', stationName: 'white' })],
+      expect.anything(),
+    );
+  });
+
+  it('binds one player per roster badge and drops badges that left the roster', async () => {
+    models.PairBinding.deleteMany.mockResolvedValue({ deletedCount: 1 });
+    models.PairBinding.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+    const bound = await repository.bindStation({
+      stationName: 'white',
+      badgeNames: ['white', 'white-2', 'white'],
+      gameId: '507f1f77bcf86cd799439024',
+    });
+
+    expect(bound).toEqual(['white', 'white-2']);
+    expect(models.PairBinding.deleteMany).toHaveBeenCalledWith({
+      $or: [{ stationName: 'white' }, { stationName: null, pairName: 'white' }],
+      pairName: { $nin: ['white', 'white-2'] },
+    });
+    expect(models.PairBinding.updateOne).toHaveBeenCalledTimes(2);
+    expect(models.PairBinding.updateOne).toHaveBeenCalledWith(
+      { pairName: 'white-2' },
+      expect.objectContaining({
+        $set: expect.objectContaining({ stationName: 'white', joined: false }),
+      }),
+      { upsert: true },
+    );
+  });
+
+  it('marks only the listed station badges joined', async () => {
+    models.PairBinding.find.mockReturnValue(createLeanQuery([{ pairName: 'white-2' }]));
+    models.PairBinding.updateMany.mockResolvedValue({ matchedCount: 1 });
+
+    const joined = await repository.markJoined({
+      gameId: '507f1f77bcf86cd799439024',
+      stationName: 'white',
+      badgeNames: ['white-2'],
+    });
+
+    expect(joined).toEqual(['white-2']);
+    expect(models.PairBinding.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ pairName: { $in: ['white-2'] } }),
+      { $set: expect.objectContaining({ joined: true }) },
+    );
+  });
+
+  it('auto-closes only on joined players, ignoring bound badges that never joined', async () => {
+    models.PairBinding.find.mockReturnValue(
+      createLeanQuery([{ pairName: 'white' }, { pairName: 'white-2' }]),
+    );
+    models.Guess.find.mockReturnValue(
+      createLeanQuery([{ pairName: 'white' }, { pairName: 'white-2' }]),
+    );
+
+    await expect(
+      repository.haveAllJoinedPlayersGuessed(
+        '507f1f77bcf86cd799439024',
+        '507f1f77bcf86cd799439025',
+      ),
+    ).resolves.toBe(true);
+    expect(models.PairBinding.find).toHaveBeenCalledWith(
+      expect.objectContaining({ joined: true }),
+      { pairName: 1 },
+    );
+  });
+
+  it('waits while a joined badge has not guessed', async () => {
+    models.PairBinding.find.mockReturnValue(
+      createLeanQuery([{ pairName: 'white' }, { pairName: 'white-2' }]),
+    );
+    models.Guess.find.mockReturnValue(createLeanQuery([{ pairName: 'white' }]));
+
+    await expect(
+      repository.haveAllJoinedPlayersGuessed(
+        '507f1f77bcf86cd799439024',
+        '507f1f77bcf86cd799439025',
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it('lists each station once, treating legacy bindings as their own station', async () => {
+    models.PairBinding.find.mockReturnValue(
+      createLeanQuery([
+        { pairName: 'green' },
+        { pairName: 'white', stationName: 'white' },
+        { pairName: 'white-2', stationName: 'white' },
+      ]),
+    );
+
+    await expect(
+      repository.getStationNamesByGameId('507f1f77bcf86cd799439024'),
+    ).resolves.toEqual(['green', 'white']);
   });
 
   it('returns game scores scoped to startedAt', async () => {
@@ -232,7 +419,7 @@ describe('GameDataRepository', () => {
       ]),
     );
     models.PairBinding.find.mockReturnValue(
-      createLeanQuery([{ pairName: 'green' }, { pairName: 'white' }]),
+      createLeanQuery([{ pairName: 'green' }, { pairName: 'white', stationName: 'black' }]),
     );
 
     const result = await repository.getGameScores('507f1f77bcf86cd799439024');
@@ -245,8 +432,8 @@ describe('GameDataRepository', () => {
     expect(result).toEqual({
       gameId: '507f1f77bcf86cd799439024',
       scores: [
-        { pairName: 'green', correct: 1, total: 4 },
-        { pairName: 'white', correct: 0, total: 4 },
+        { pairName: 'green', stationName: 'green', badgeName: 'green', correct: 1, total: 4 },
+        { pairName: 'white', stationName: 'black', badgeName: 'white', correct: 0, total: 4 },
       ],
     });
   });

@@ -35,16 +35,19 @@ export type SubmitGuessInput = {
   gameId: string;
   questionId: string;
   guesserUserId?: string;
+  /** Controller station that relayed the scan. */
   pairName?: string;
   badgeId?: string;
-  /** Roster slot of the station badge that scanned (multi-badge attribution only). */
+  /** Badge that scanned. It is the player; defaults to `pairName` (Mode 1). */
   badgeName?: string;
   cardUid: string;
   slotLabel?: SlotLabel;
 };
 
-export type BindPairInput = {
-  pairName: string;
+export type BindStationInput = {
+  stationName: string;
+  /** Roster; every name becomes one player binding. Empty → `[stationName]`. */
+  badgeNames: string[];
   gameId: string;
   controllerId?: string;
 };
@@ -79,8 +82,10 @@ export type QuestionDetail = {
   answerOptions: AnswerOptionDetail[];
 };
 
+/** One player (badge). `pairName` is the player key; `stationName` its controller. */
 export type BoundPairSummary = {
   pairName: string;
+  stationName: string;
   joined: boolean;
   readyForNextQuestion: boolean | null;
   controllerId?: string;
@@ -90,12 +95,24 @@ export type QuestionResultPayload = {
   gameId: string;
   questionId: string;
   correctSlotLabel: string;
-  results: Array<{ pairName: string; slotLabel: string | null; isCorrect: boolean }>;
+  results: Array<{
+    pairName: string;
+    stationName: string;
+    badgeName: string;
+    slotLabel: string | null;
+    isCorrect: boolean;
+  }>;
 };
 
 export type GameScoresPayload = {
   gameId: string;
-  scores: Array<{ pairName: string; correct: number; total: number }>;
+  scores: Array<{
+    pairName: string;
+    stationName: string;
+    badgeName: string;
+    correct: number;
+    total: number;
+  }>;
 };
 
 export type GuessChartPairCell = {
@@ -108,7 +125,10 @@ export type GuessChartPairCell = {
 export type GameGuessChartPayload = {
   gameId: string;
   title: string;
+  /** Player keys (badge names). */
   pairs: string[];
+  /** Player key → controller station. */
+  pairStations: Record<string, string>;
   questions: Array<{
     questionId: string;
     sequence: number;
@@ -127,8 +147,24 @@ export type GameDetail = {
   boundPairs: BoundPairSummary[];
 };
 
+/** Player state inside a station snapshot; guess fields describe the open question. */
+export type PlayerSnapshot = {
+  badgeName: string;
+  joined: boolean;
+  readyForNextQuestion: boolean | null;
+  guessed: boolean;
+  slotLabel: string | null;
+  isCorrect: boolean | null;
+};
+
+/**
+ * Station snapshot for a controller. Top-level `joined` is true when any player
+ * joined; `readyForNextQuestion` is set only when every joined player agrees.
+ * Mode 1 has one player, so both equal that player's values.
+ */
 export type PairBindingSnapshot = {
   pairName: string;
+  stationName: string;
   controllerId: string | undefined;
   gameId: string | null;
   state: GameState | null;
@@ -136,6 +172,7 @@ export type PairBindingSnapshot = {
   readyForNextQuestion: boolean | null;
   openQuestionId: string | null;
   roundsComplete: boolean;
+  players: PlayerSnapshot[];
 };
 
 export type CreateNfcCardGroupInput = {
@@ -147,6 +184,16 @@ export type CreateNfcCardGroupInput = {
     displayName: string;
   }>;
 };
+
+/** Station of a binding or guess; Mode 1 / legacy rows have none and use the player key. */
+function stationOf(row: { pairName?: string | null; stationName?: string | null }): string {
+  return row.stationName || row.pairName || '';
+}
+
+/** Bindings owned by a station, including legacy rows keyed only by `pairName`. */
+function stationFilter(stationName: string): Record<string, unknown> {
+  return { $or: [{ stationName }, { stationName: null, pairName: stationName }] };
+}
 
 @Injectable()
 export class GameDataRepository {
@@ -368,12 +415,31 @@ export class GameDataRepository {
     cardLabel: string;
     gameTitle: string;
   }> {
-    const { Question, AnswerOption, Guess, GameNfcCardGroupAssignment, NfcCard, Game } =
+    const { Question, AnswerOption, Guess, GameNfcCardGroupAssignment, NfcCard, Game, PairBinding } =
       this.mongoService.getModels();
+    const player = input.badgeName ?? input.pairName;
+    const stationName = input.pairName ?? input.badgeName;
 
     return this.withOptionalTransaction(async (session) => {
       const game = await Game.findById(asObjectId(input.gameId), undefined, { session }).lean();
       const gameTitle = game?.title ?? '';
+
+      if (input.badgeName && input.pairName && input.badgeName !== input.pairName) {
+        const binding = await PairBinding.findOne(
+          {
+            pairName: input.badgeName,
+            gameId: asObjectId(input.gameId),
+            stationName: input.pairName,
+          },
+          undefined,
+          { session },
+        ).lean();
+        if (!binding) {
+          throw new Error(
+            `Badge '${input.badgeName}' is not bound to station '${input.pairName}' for this game.`,
+          );
+        }
+      }
 
       const question = await Question.findOne(
         { _id: asObjectId(input.questionId), gameId: asObjectId(input.gameId) },
@@ -465,7 +531,8 @@ export class GameDataRepository {
             questionId: asObjectId(input.questionId),
             answerOptionId: answerOption._id,
             ...(input.guesserUserId ? { guesserUserId: asObjectId(input.guesserUserId) } : {}),
-            ...(input.pairName ? { pairName: input.pairName } : {}),
+            ...(player ? { pairName: player } : {}),
+            ...(stationName ? { stationName } : {}),
             ...(input.badgeId ? { badgeId: asObjectId(input.badgeId) } : {}),
             ...(input.badgeName ? { badgeName: input.badgeName } : {}),
             cardUid: input.cardUid,
@@ -497,7 +564,7 @@ export class GameDataRepository {
 
     const [questions, bindings, assignment] = await Promise.all([
       Question.find({ gameId: asObjectId(gameId) }).sort({ sequence: 1 }).lean(),
-      PairBinding.find({ gameId: asObjectId(gameId) }, { pairName: 1 }).lean(),
+      PairBinding.find({ gameId: asObjectId(gameId) }, { pairName: 1, stationName: 1 }).lean(),
       GameNfcCardGroupAssignment.findOne({
         gameId: asObjectId(gameId),
         status: 'active',
@@ -505,6 +572,7 @@ export class GameDataRepository {
     ]);
 
     const pairs = bindings.map((b) => b.pairName);
+    const pairStations = Object.fromEntries(bindings.map((b) => [b.pairName, stationOf(b)]));
     const questionIds = questions.map((q) => q._id as Types.ObjectId);
 
     const guessFilter: Record<string, unknown> = { gameId: asObjectId(gameId) };
@@ -557,6 +625,7 @@ export class GameDataRepository {
       gameId: (game._id as Types.ObjectId).toString(),
       title: game.title,
       pairs,
+      pairStations,
       questions: questions.map((q) => {
         const questionId = (q._id as Types.ObjectId).toString();
         const byPair: Record<string, GuessChartPairCell | null> = {};
@@ -641,45 +710,95 @@ export class GameDataRepository {
     return { gameId: input.gameId, state: input.state };
   }
 
-  async bindPair(input: BindPairInput): Promise<void> {
+  /**
+   * Bind a controller station to a game: one player binding per roster badge.
+   * Bindings this station owned for badges that left the roster are removed.
+   */
+  async bindStation(input: BindStationInput): Promise<string[]> {
     const { PairBinding } = this.mongoService.getModels();
-    await PairBinding.updateOne(
-      { pairName: input.pairName },
-      {
-        $set: {
-          gameId: new Types.ObjectId(input.gameId),
-          joined: false,
-          readyForNextQuestion: null,
-          updatedAt: new Date(),
-          ...(input.controllerId ? { controllerId: input.controllerId } : {}),
-        },
-        $setOnInsert: { pairName: input.pairName },
-      },
-      { upsert: true },
+    const badgeNames = [
+      ...new Set(input.badgeNames.length > 0 ? input.badgeNames : [input.stationName]),
+    ];
+
+    await PairBinding.deleteMany({
+      ...stationFilter(input.stationName),
+      pairName: { $nin: badgeNames },
+    });
+
+    await Promise.all(
+      badgeNames.map((badgeName) =>
+        PairBinding.updateOne(
+          { pairName: badgeName },
+          {
+            $set: {
+              stationName: input.stationName,
+              gameId: new Types.ObjectId(input.gameId),
+              joined: false,
+              readyForNextQuestion: null,
+              updatedAt: new Date(),
+              ...(input.controllerId ? { controllerId: input.controllerId } : {}),
+            },
+            $setOnInsert: { pairName: badgeName },
+          },
+          { upsert: true },
+        ),
+      ),
     );
+    return badgeNames;
   }
 
-  async getBinding(pairName: string): Promise<PairBindingSnapshot | null> {
-    const { PairBinding, Game, Question } = this.mongoService.getModels();
-    const binding = await PairBinding.findOne({ pairName }).lean();
-    if (!binding) {
-      return null;
+  /**
+   * Station snapshot for a controller. `name` is the station; a badge name also
+   * resolves to its station so an old caller still gets a snapshot.
+   */
+  async getBinding(name: string): Promise<PairBindingSnapshot | null> {
+    const { PairBinding, Game, Question, Guess, AnswerOption } = this.mongoService.getModels();
+    let bindings = await PairBinding.find(stationFilter(name)).lean();
+    if (bindings.length === 0) {
+      const byBadge = await PairBinding.findOne({ pairName: name }).lean();
+      if (!byBadge) {
+        return null;
+      }
+      bindings = await PairBinding.find(stationFilter(stationOf(byBadge))).lean();
     }
 
-    const gameId = binding.gameId ? (binding.gameId as Types.ObjectId).toString() : null;
+    const primary = bindings.find((b) => b.gameId) ?? bindings[0];
+    const stationName = stationOf(primary);
+    const players = bindings.filter(
+      (b) => String(b.gameId ?? '') === String(primary.gameId ?? ''),
+    );
+    const gameId = primary.gameId ? (primary.gameId as Types.ObjectId).toString() : null;
     let state: GameState | null = null;
     let openQuestionId: string | null = null;
     let roundsComplete = false;
+    const guessByPlayer = new Map<string, { slotLabel: string | null; isCorrect: boolean }>();
 
     if (gameId) {
-      const game = await Game.findById(binding.gameId).lean();
+      const game = await Game.findById(primary.gameId).lean();
       if (game) {
         state = game.state as GameState;
-        const openQuestion = await Question.findOne({ gameId: binding.gameId, state: 'open' }).lean();
+        const openQuestion = await Question.findOne({ gameId: primary.gameId, state: 'open' }).lean();
         openQuestionId = openQuestion ? (openQuestion._id as Types.ObjectId).toString() : null;
+        if (openQuestion) {
+          const [guesses, correct] = await Promise.all([
+            Guess.find({
+              questionId: openQuestion._id,
+              pairName: { $in: players.map((p) => p.pairName) },
+            }).lean(),
+            AnswerOption.findOne({ questionId: openQuestion._id, isCorrect: true }).lean(),
+          ]);
+          for (const guess of guesses) {
+            if (!guess.pairName) continue;
+            const slotLabel = (guess.slotLabel as string | undefined) ?? null;
+            guessByPlayer.set(guess.pairName, {
+              slotLabel,
+              isCorrect: slotLabel != null && slotLabel === correct?.slotLabel,
+            });
+          }
+        }
         if (state === 'active' && !openQuestion) {
           const playableQuestions = await Question.find({
-            gameId: binding.gameId,
+            gameId: primary.gameId,
             state: { $ne: 'archived' },
           }).lean();
           roundsComplete =
@@ -689,43 +808,76 @@ export class GameDataRepository {
       }
     }
 
+    const joinedPlayers = players.filter((p) => p.joined);
+    const readiness = [...new Set(joinedPlayers.map((p) => p.readyForNextQuestion ?? null))];
+
     return {
-      pairName: binding.pairName,
-      controllerId: binding.controllerId ?? undefined,
+      pairName: stationName,
+      stationName,
+      controllerId: primary.controllerId ?? undefined,
       gameId,
       state,
-      joined: binding.joined,
-      readyForNextQuestion: binding.readyForNextQuestion ?? null,
+      joined: joinedPlayers.length > 0,
+      readyForNextQuestion: readiness.length === 1 ? readiness[0] : null,
       openQuestionId,
       roundsComplete,
+      players: players.map((p) => {
+        const guess = guessByPlayer.get(p.pairName);
+        return {
+          badgeName: p.pairName,
+          joined: p.joined,
+          readyForNextQuestion: p.readyForNextQuestion ?? null,
+          guessed: guess != null,
+          slotLabel: guess?.slotLabel ?? null,
+          isCorrect: guess ? guess.isCorrect : null,
+        };
+      }),
     };
   }
 
-  async markJoined(pairName: string): Promise<void> {
+  /** Mark the listed station badges joined. Returns the badge names that matched. */
+  async markJoined(input: {
+    gameId: string;
+    stationName: string;
+    badgeNames: string[];
+  }): Promise<string[]> {
     const { PairBinding } = this.mongoService.getModels();
-    await PairBinding.updateOne({ pairName }, { $set: { joined: true, updatedAt: new Date() } });
+    const filter = {
+      ...stationFilter(input.stationName),
+      gameId: asObjectId(input.gameId),
+      pairName: { $in: input.badgeNames },
+    };
+    const matched = await PairBinding.find(filter, { pairName: 1 }).lean();
+    if (matched.length > 0) {
+      await PairBinding.updateMany(filter, { $set: { joined: true, updatedAt: new Date() } });
+    }
+    return matched.map((b) => b.pairName);
   }
 
+  /** Record readiness for the listed joined badges. Returns the badge names updated. */
   async setPairReadyForNextQuestion(input: {
     gameId: string;
-    pairName: string;
+    stationName: string;
+    badgeNames: string[];
     ready: boolean;
-  }): Promise<boolean> {
+  }): Promise<string[]> {
     const { PairBinding } = this.mongoService.getModels();
-    const result = await PairBinding.updateOne(
-      {
-        gameId: asObjectId(input.gameId),
-        pairName: input.pairName,
-        joined: true,
-      },
-      {
+    const filter = {
+      ...stationFilter(input.stationName),
+      gameId: asObjectId(input.gameId),
+      pairName: { $in: input.badgeNames },
+      joined: true,
+    };
+    const matched = await PairBinding.find(filter, { pairName: 1 }).lean();
+    if (matched.length > 0) {
+      await PairBinding.updateMany(filter, {
         $set: {
           readyForNextQuestion: input.ready,
           updatedAt: new Date(),
         },
-      },
-    );
-    return result.matchedCount > 0;
+      });
+    }
+    return matched.map((b) => b.pairName);
   }
 
   async resetPairReadiness(gameId: string): Promise<void> {
@@ -741,20 +893,32 @@ export class GameDataRepository {
     );
   }
 
+  /** Player keys (badge names) bound to the game. */
   async getBindingsByGameId(gameId: string): Promise<string[]> {
     const { PairBinding } = this.mongoService.getModels();
     const bindings = await PairBinding.find({ gameId: new Types.ObjectId(gameId) }, { pairName: 1 }).lean();
     return bindings.map((b) => b.pairName);
   }
 
+  /** Controller stations (WS rooms) with at least one player bound to the game. */
+  async getStationNamesByGameId(gameId: string): Promise<string[]> {
+    const { PairBinding } = this.mongoService.getModels();
+    const bindings = await PairBinding.find(
+      { gameId: new Types.ObjectId(gameId) },
+      { pairName: 1, stationName: 1 },
+    ).lean();
+    return [...new Set(bindings.map((b) => stationOf(b)))];
+  }
+
   /**
-   * True when every bound pair has a Guess for this question.
-   * No bindings → false (do not auto-close an unbound game).
+   * True when every joined player has a Guess for this question. Bound players
+   * that never joined (e.g. an unpowered badge) do not hold the question open.
+   * No joined players → false (do not auto-close).
    */
-  async haveAllBoundPairsGuessed(gameId: string, questionId: string): Promise<boolean> {
+  async haveAllJoinedPlayersGuessed(gameId: string, questionId: string): Promise<boolean> {
     const { PairBinding, Guess } = this.mongoService.getModels();
     const bindings = await PairBinding.find(
-      { gameId: asObjectId(gameId) },
+      { gameId: asObjectId(gameId), joined: true },
       { pairName: 1 },
     ).lean();
     if (bindings.length === 0) {
@@ -777,8 +941,8 @@ export class GameDataRepository {
   }
 
   /**
-   * Build per-pair correct/wrong outcomes for a closed question.
-   * Includes every bound pair; `slotLabel: null` means no guess was submitted.
+   * Build per-player correct/wrong outcomes for a closed question.
+   * Includes every bound player; `slotLabel: null` means no guess was submitted.
    */
   async computeQuestionResult(gameId: string, questionId: string): Promise<QuestionResultPayload> {
     const { AnswerOption, Guess, PairBinding } = this.mongoService.getModels();
@@ -804,7 +968,7 @@ export class GameDataRepository {
 
     const bindings = await PairBinding.find(
       { gameId: asObjectId(gameId) },
-      { pairName: 1 },
+      { pairName: 1, stationName: 1 },
     ).lean();
 
     const correctSlotLabel = correct.slotLabel as string;
@@ -814,6 +978,8 @@ export class GameDataRepository {
         : null;
       return {
         pairName: binding.pairName,
+        stationName: stationOf(binding),
+        badgeName: binding.pairName,
         slotLabel,
         isCorrect: slotLabel === correctSlotLabel,
       };
@@ -828,7 +994,7 @@ export class GameDataRepository {
   }
 
   /**
-   * Cumulative correct-guess counts per bound pair.
+   * Cumulative correct-guess counts per bound player (badge).
    * Guesses are scoped to `game.startedAt` when present so Play Again does not
    * inflate scores with prior runs.
    */
@@ -875,12 +1041,14 @@ export class GameDataRepository {
 
     const bindings = await PairBinding.find(
       { gameId: asObjectId(gameId) },
-      { pairName: 1 },
+      { pairName: 1, stationName: 1 },
     ).lean();
 
     const scores = bindings
       .map((binding) => ({
         pairName: binding.pairName,
+        stationName: stationOf(binding),
+        badgeName: binding.pairName,
         correct: correctByPair.get(binding.pairName) ?? 0,
         total,
       }))
@@ -985,6 +1153,7 @@ export class GameDataRepository {
       }),
       boundPairs: boundPairs.map((bp) => ({
         pairName: bp.pairName,
+        stationName: stationOf(bp),
         joined: bp.joined,
         readyForNextQuestion: bp.readyForNextQuestion ?? null,
         controllerId: bp.controllerId ?? undefined,

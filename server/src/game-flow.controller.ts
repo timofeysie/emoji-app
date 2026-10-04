@@ -138,7 +138,7 @@ export class GameFlowController {
     await this.gameDataRepository.resetPairReadiness(gameId);
 
     const serverTime = new Date().toISOString();
-    const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
+    const stationNames = await this.gameDataRepository.getStationNamesByGameId(gameId);
     const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
     const gameTitle = gameDetail?.title;
     const closedQuestion = gameDetail?.questions.find(
@@ -167,8 +167,8 @@ export class GameFlowController {
     );
 
     this.badgeStateService.broadcastDashboard(questionEvent);
-    if (pairNames.length > 0) {
-      this.badgeStateService.sendToPairNames(pairNames, questionEvent);
+    if (stationNames.length > 0) {
+      this.badgeStateService.sendToPairNames(stationNames, questionEvent);
     }
 
     const result = await this.gameDataRepository.computeQuestionResult(gameId, questionId);
@@ -178,11 +178,11 @@ export class GameFlowController {
       serverTime,
     };
     console.log(
-      `[GAME] server | question_closed | Question closed | question.result pairs=${result.results.length} correctSlot=${result.correctSlotLabel}`,
+      `[GAME] server | question_closed | Question closed | question.result players=${result.results.length} correctSlot=${result.correctSlotLabel}`,
     );
     this.badgeStateService.broadcastDashboard(resultEvent);
-    if (pairNames.length > 0) {
-      this.badgeStateService.sendToPairNames(pairNames, resultEvent);
+    if (stationNames.length > 0) {
+      this.badgeStateService.sendToPairNames(stationNames, resultEvent);
     }
   }
 
@@ -277,6 +277,7 @@ export class GameFlowController {
         state: game.state,
         boundPairs: game.boundPairs.map((pair) => ({
           pairName: pair.pairName,
+          stationName: pair.stationName,
           readyForNextQuestion: pair.readyForNextQuestion,
         })),
         totalRounds: game.questions.filter(
@@ -304,6 +305,7 @@ export class GameFlowController {
               scans: Object.entries(previousChartQuestion?.byPair ?? {}).map(
                 ([pairName, scan]) => ({
                   pairName,
+                  stationName: previousChart?.pairStations?.[pairName] ?? pairName,
                   cardLabel: scan?.cardLabel ?? null,
                   slotLabel: scan?.slotLabel ?? null,
                   isCorrect: scan?.isCorrect ?? false,
@@ -467,12 +469,13 @@ export class GameFlowController {
         serverTime,
       });
 
-      const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
+      const stationNames = await this.gameDataRepository.getStationNamesByGameId(gameId);
 
-      if (state === 'completed' && pairNames.length > 0) {
-        // Enriched per-pair game.ended (rank / score / isWinner). Ties for
-        // first place all get isWinner: true, but a 0-correct field is never
-        // a win (solo/all-wrong → rain on the badge, not fireworks).
+      if (state === 'completed' && stationNames.length > 0) {
+        // Enriched per-player game.ended (rank / score / isWinner), ranked
+        // across badges, sent to the badge's station room. Ties for first
+        // place all get isWinner: true, but a 0-correct field is never a win
+        // (solo/all-wrong → rain on the badge, not fireworks).
         const { scores } = await this.gameDataRepository.getGameScores(gameId);
         const topScore = scores.reduce((max, row) => Math.max(max, row.correct), 0);
         for (const row of scores) {
@@ -481,12 +484,14 @@ export class GameFlowController {
           console.log(
             `[GAME] server | ${isWinner ? 'winner' : 'loser'} | ${
               isWinner ? 'Game winner' : 'Game loser'
-            } | pair=${row.pairName} rank=${rank} score=${row.correct}`,
+            } | badge=${row.badgeName} station=${row.stationName} rank=${rank} score=${row.correct}`,
           );
-          this.badgeStateService.sendToPairNames([row.pairName], {
+          this.badgeStateService.sendToPairNames([row.stationName], {
             type: 'game.ended',
             gameId,
-            pairName: row.pairName,
+            pairName: row.stationName,
+            stationName: row.stationName,
+            badgeName: row.badgeName,
             isWinner,
             rank,
             score: row.correct,
@@ -495,8 +500,8 @@ export class GameFlowController {
         }
       } else {
         const controllerEvent = controllerEventForState[state];
-        if (controllerEvent && pairNames.length > 0) {
-          this.badgeStateService.sendToPairNames(pairNames, {
+        if (controllerEvent && stationNames.length > 0) {
+          this.badgeStateService.sendToPairNames(stationNames, {
             type: controllerEvent,
             gameId,
             serverTime,
@@ -523,8 +528,8 @@ export class GameFlowController {
             }`,
           );
           this.badgeStateService.broadcastDashboard(questionEvent);
-          if (pairNames.length > 0) {
-            this.badgeStateService.sendToPairNames(pairNames, questionEvent);
+          if (stationNames.length > 0) {
+            this.badgeStateService.sendToPairNames(stationNames, questionEvent);
           }
         }
       }
@@ -708,7 +713,7 @@ export class GameFlowController {
       });
 
       const serverTime = new Date().toISOString();
-      const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
+      const stationNames = await this.gameDataRepository.getStationNamesByGameId(gameId);
       const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
       const gameTitle = gameDetail?.title;
       const questionEvent = {
@@ -726,8 +731,8 @@ export class GameFlowController {
       );
 
       this.badgeStateService.broadcastDashboard(questionEvent);
-      if (pairNames.length > 0) {
-        this.badgeStateService.sendToPairNames(pairNames, questionEvent);
+      if (stationNames.length > 0) {
+        this.badgeStateService.sendToPairNames(stationNames, questionEvent);
       }
 
       res.status(200).json({ ok: true });
@@ -749,7 +754,9 @@ export class GameFlowController {
     try {
       outcome = await this.gameDataRepository.submitGuess(result.data);
 
-      const { gameId, questionId, pairName, badgeId, badgeName, cardUid } = result.data;
+      const { gameId, questionId, pairName, badgeId, cardUid } = result.data;
+      // The scanning badge is the player; Mode 1 sends no badgeName.
+      const badgeName = result.data.badgeName ?? pairName;
       const seedCard = cardUid ? this.nfcCardService.findByUid(cardUid) : undefined;
       cardLabel = seedCard
         ? shortCardLabel(seedCard.name, outcome.slotLabel)
@@ -759,7 +766,7 @@ export class GameFlowController {
         gameId,
         ...(outcome.gameTitle ? { gameTitle: outcome.gameTitle } : {}),
         questionId,
-        ...(pairName ? { pairName } : {}),
+        ...(pairName ? { pairName, stationName: pairName } : {}),
         ...(badgeId ? { badgeId } : {}),
         ...(badgeName ? { badgeName } : {}),
         ...(cardUid ? { cardUid } : {}),
@@ -779,10 +786,10 @@ export class GameFlowController {
 
     const { gameId, questionId } = result.data;
     try {
-      // Last bound pair to answer → close so badges leave NFC-armed state.
+      // Last joined player to answer → close so badges leave NFC-armed state.
       if (
         outcome.guessId &&
-        (await this.gameDataRepository.haveAllBoundPairsGuessed(gameId, questionId))
+        (await this.gameDataRepository.haveAllJoinedPlayersGuessed(gameId, questionId))
       ) {
         await this.closeQuestionAndNotify(gameId, questionId, {
           reason: 'all_pairs_answered',

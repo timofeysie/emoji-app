@@ -101,6 +101,7 @@ type Question = {
 
 type BoundPair = {
   pairName: string;
+  stationName?: string;
   joined: boolean;
   readyForNextQuestion: boolean | null;
   controllerId?: string;

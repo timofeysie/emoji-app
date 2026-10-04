@@ -36,12 +36,12 @@ describe('GameFlowController', () => {
     markJoined: jest.fn(),
     setPairReadyForNextQuestion: jest.fn(),
     resetPairReadiness: jest.fn(),
-    getBindingsByGameId: jest.fn(),
+    getStationNamesByGameId: jest.fn(),
     computeQuestionResult: jest.fn(),
     getGameScores: jest.fn(),
     getGameDetail: jest.fn(),
     getGameGuessChart: jest.fn(),
-    haveAllBoundPairsGuessed: jest.fn(),
+    haveAllJoinedPlayersGuessed: jest.fn(),
   } as unknown as jest.Mocked<GameDataRepository>;
 
   const badgeStateService: jest.Mocked<Pick<BadgeStateService, 'broadcastDashboard' | 'sendToPairNames'>> = {
@@ -69,7 +69,7 @@ describe('GameFlowController', () => {
       questions: [],
       boundPairs: [],
     });
-    repository.haveAllBoundPairsGuessed.mockResolvedValue(false);
+    repository.haveAllJoinedPlayersGuessed.mockResolvedValue(false);
     repository.setQuestionState.mockResolvedValue(undefined);
   });
 
@@ -211,7 +211,8 @@ describe('GameFlowController', () => {
     repository.getGameGuessChart.mockResolvedValue({
       gameId: '507f1f77bcf86cd799439011',
       title: 'Demo Night',
-      pairs: ['green', 'white'],
+      pairs: ['green', 'white-2'],
+      pairStations: { green: 'green', 'white-2': 'white' },
       questions: [
         {
           questionId: '507f1f77bcf86cd799439015',
@@ -222,7 +223,7 @@ describe('GameFlowController', () => {
               slotLabel: 'A',
               isCorrect: true,
             },
-            white: null,
+            'white-2': null,
           },
         },
       ],
@@ -245,12 +246,14 @@ describe('GameFlowController', () => {
           scans: [
             {
               pairName: 'green',
+              stationName: 'green',
               cardLabel: 'Monkey',
               slotLabel: 'A',
               isCorrect: true,
             },
             {
-              pairName: 'white',
+              pairName: 'white-2',
+              stationName: 'white',
               cardLabel: null,
               slotLabel: null,
               isCorrect: false,
@@ -287,6 +290,7 @@ describe('GameFlowController', () => {
       gameId: '507f1f77bcf86cd799439011',
       title: 'Demo Night',
       pairs: [],
+      pairStations: {},
       questions: [],
     });
 
@@ -322,7 +326,7 @@ describe('GameFlowController', () => {
 
   it('returns 200 for valid question state update and emits question.opened', async () => {
     const res = createResponseMock();
-    repository.getBindingsByGameId.mockResolvedValue(['green']);
+    repository.getStationNamesByGameId.mockResolvedValue(['green']);
 
     await controller.setQuestionState(
       '507f1f77bcf86cd799439015',
@@ -355,7 +359,7 @@ describe('GameFlowController', () => {
 
   it('emits question.closed and question.result when a question is closed', async () => {
     const res = createResponseMock();
-    repository.getBindingsByGameId.mockResolvedValue(['green', 'white']);
+    repository.getStationNamesByGameId.mockResolvedValue(['green', 'white']);
     repository.getGameDetail.mockResolvedValue({
       id: '507f1f77bcf86cd799439016',
       title: 'Demo Night',
@@ -390,8 +394,8 @@ describe('GameFlowController', () => {
       questionId: '507f1f77bcf86cd799439015',
       correctSlotLabel: 'B',
       results: [
-        { pairName: 'green', slotLabel: 'B', isCorrect: true },
-        { pairName: 'white', slotLabel: null, isCorrect: false },
+        { pairName: 'green', stationName: 'green', badgeName: 'green', slotLabel: 'B', isCorrect: true },
+        { pairName: 'white', stationName: 'white', badgeName: 'white', slotLabel: null, isCorrect: false },
       ],
     });
 
@@ -479,7 +483,7 @@ describe('GameFlowController', () => {
     expect(repository.setQuestionState).not.toHaveBeenCalled();
   });
 
-  it('records the station guess and echoes badgeName for a multi-badge scan', async () => {
+  it('records the scanning badge as the player for a multi-badge scan', async () => {
     const res = createResponseMock();
     repository.submitGuess.mockResolvedValue({
       guessId: '507f1f77bcf86cd799439020',
@@ -510,13 +514,14 @@ describe('GameFlowController', () => {
       expect.objectContaining({
         type: 'nfc.tagged',
         pairName: 'white',
+        stationName: 'white',
         badgeName: 'white-2',
         slotLabel: 'B',
       }),
     );
   });
 
-  it('omits badgeName from nfc.tagged when the guess has none', async () => {
+  it('uses pairName as the player badgeName on nfc.tagged for a Mode 1 scan', async () => {
     const res = createResponseMock();
     repository.submitGuess.mockResolvedValue({
       guessId: '507f1f77bcf86cd799439020',
@@ -540,8 +545,9 @@ describe('GameFlowController', () => {
     const event = badgeStateService.broadcastDashboard.mock.calls
       .map(([payload]) => payload as Record<string, unknown>)
       .find((payload) => payload['type'] === 'nfc.tagged');
-    expect(event).toBeDefined();
-    expect(event).not.toHaveProperty('badgeName');
+    expect(event).toEqual(
+      expect.objectContaining({ pairName: 'white', stationName: 'white', badgeName: 'white' }),
+    );
   });
 
   it('rejects an empty badgeName', async () => {
@@ -572,14 +578,14 @@ describe('GameFlowController', () => {
       cardLabel: 'monkey',
       gameTitle: 'Demo Night',
     });
-    repository.haveAllBoundPairsGuessed.mockImplementation(async () => {
+    repository.haveAllJoinedPlayersGuessed.mockImplementation(async () => {
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ isCorrect: true, cardLabel: 'monkey' }),
       );
       return true;
     });
-    repository.getBindingsByGameId.mockResolvedValue(['white']);
+    repository.getStationNamesByGameId.mockResolvedValue(['white']);
     repository.getGameDetail.mockResolvedValue({
       id: '507f1f77bcf86cd799439017',
       title: 'Demo Night',
@@ -604,7 +610,9 @@ describe('GameFlowController', () => {
       gameId: '507f1f77bcf86cd799439017',
       questionId: '507f1f77bcf86cd799439018',
       correctSlotLabel: 'A',
-      results: [{ pairName: 'white', slotLabel: 'A', isCorrect: true }],
+      results: [
+        { pairName: 'white', stationName: 'white', badgeName: 'white', slotLabel: 'A', isCorrect: true },
+      ],
     });
 
     await controller.submitGuess(
@@ -645,7 +653,7 @@ describe('GameFlowController', () => {
       cardLabel: 'monkey',
       gameTitle: 'Demo Night',
     });
-    repository.haveAllBoundPairsGuessed.mockResolvedValue(true);
+    repository.haveAllJoinedPlayersGuessed.mockResolvedValue(true);
     repository.setQuestionState.mockRejectedValue(new Error('close failed'));
 
     await controller.submitGuess(
@@ -696,7 +704,7 @@ describe('GameFlowController', () => {
     it('transitions game to lobby and emits game.opened to controllers', async () => {
       const res = createResponseMock();
       repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'lobby' });
-      repository.getBindingsByGameId.mockResolvedValue(['white', 'red']);
+      repository.getStationNamesByGameId.mockResolvedValue(['white', 'red']);
 
       await controller.setGameState(
         '507f1f77bcf86cd799439011',
@@ -721,7 +729,7 @@ describe('GameFlowController', () => {
     it('transitions game to active and emits game.started to controllers', async () => {
       const res = createResponseMock();
       repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'active' });
-      repository.getBindingsByGameId.mockResolvedValue(['white']);
+      repository.getStationNamesByGameId.mockResolvedValue(['white']);
       repository.openNextQuestionForGame.mockResolvedValue('507f1f77bcf86cd799439015');
 
       await controller.setGameState(
@@ -751,12 +759,12 @@ describe('GameFlowController', () => {
         gameId: '507f1f77bcf86cd799439011',
         state: 'completed',
       });
-      repository.getBindingsByGameId.mockResolvedValue(['green', 'white']);
+      repository.getStationNamesByGameId.mockResolvedValue(['green', 'white']);
       repository.getGameScores.mockResolvedValue({
         gameId: '507f1f77bcf86cd799439011',
         scores: [
-          { pairName: 'green', correct: 3, total: 4 },
-          { pairName: 'white', correct: 1, total: 4 },
+          { pairName: 'green', stationName: 'green', badgeName: 'green', correct: 3, total: 4 },
+          { pairName: 'white', stationName: 'white', badgeName: 'white', correct: 1, total: 4 },
         ],
       });
 
@@ -795,10 +803,18 @@ describe('GameFlowController', () => {
         gameId: '507f1f77bcf86cd799439011',
         state: 'completed',
       });
-      repository.getBindingsByGameId.mockResolvedValue(['power-cable']);
+      repository.getStationNamesByGameId.mockResolvedValue(['power-cable']);
       repository.getGameScores.mockResolvedValue({
         gameId: '507f1f77bcf86cd799439011',
-        scores: [{ pairName: 'power-cable', correct: 0, total: 2 }],
+        scores: [
+          {
+            pairName: 'power-cable',
+            stationName: 'power-cable',
+            badgeName: 'power-cable',
+            correct: 0,
+            total: 2,
+          },
+        ],
       });
 
       await controller.setGameState(
@@ -819,13 +835,77 @@ describe('GameFlowController', () => {
       );
     });
 
+    it('ranks badges of one station as separate players', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'completed',
+      });
+      repository.getStationNamesByGameId.mockResolvedValue(['white']);
+      repository.getGameScores.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        scores: [
+          { pairName: 'white-2', stationName: 'white', badgeName: 'white-2', correct: 2, total: 2 },
+          { pairName: 'white', stationName: 'white', badgeName: 'white', correct: 1, total: 2 },
+        ],
+      });
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'completed' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledTimes(2);
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white'],
+        expect.objectContaining({
+          type: 'game.ended',
+          pairName: 'white',
+          stationName: 'white',
+          badgeName: 'white-2',
+          isWinner: true,
+          rank: 1,
+          score: 2,
+        }),
+      );
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white'],
+        expect.objectContaining({
+          type: 'game.ended',
+          badgeName: 'white',
+          isWinner: false,
+          rank: 2,
+          score: 1,
+        }),
+      );
+    });
+
+    it('sends station-wide events once per station room', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'lobby' });
+      repository.getStationNamesByGameId.mockResolvedValue(['white']);
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'lobby' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledTimes(1);
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white'],
+        expect.objectContaining({ type: 'game.opened' }),
+      );
+    });
+
     it('emits game.ready to controllers when draft is opened to ready', async () => {
       const res = createResponseMock();
       repository.setGameState.mockResolvedValue({
         gameId: '507f1f77bcf86cd799439011',
         state: 'ready',
       });
-      repository.getBindingsByGameId.mockResolvedValue(['green']);
+      repository.getStationNamesByGameId.mockResolvedValue(['green']);
 
       await controller.setGameState(
         '507f1f77bcf86cd799439011',
@@ -846,7 +926,7 @@ describe('GameFlowController', () => {
         gameId: '507f1f77bcf86cd799439011',
         state: 'ready',
       });
-      repository.getBindingsByGameId.mockResolvedValue(['green']);
+      repository.getStationNamesByGameId.mockResolvedValue(['green']);
 
       await controller.setGameState(
         '507f1f77bcf86cd799439011',

@@ -6,20 +6,27 @@ import { BadgeStateService } from './badge-state.service';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 
+const badgeNamesSchema = z.array(z.string().min(1)).min(1).optional();
+
+/** `pairName` is the controller station; each roster badge is bound as a player. */
 const bindPairSchema = z.object({
   pairName: z.string().min(1),
   controllerId: z.string().optional(),
+  badgeNames: badgeNamesSchema,
 });
 
+/** `badgeNames` lists the station badges that join; defaults to `[pairName]` (Mode 1). */
 const joinGameSchema = z.object({
   pairName: z.string().min(1),
   controllerId: z.string().optional(),
+  badgeNames: badgeNamesSchema,
 });
 
 const setReadinessSchema = z.object({
   pairName: z.string().min(1),
   controllerId: z.string().optional(),
   ready: z.boolean(),
+  badgeNames: badgeNamesSchema,
 });
 
 function getValidationErrors(error: ZodError): Array<{ path: string; message: string }> {
@@ -53,13 +60,28 @@ export class PairBindingsController {
       return;
     }
 
-    try {
-      await this.gameDataRepository.bindPair({
-        pairName: payloadResult.data.pairName,
-        gameId,
-        controllerId: payloadResult.data.controllerId,
+    const { pairName, controllerId } = payloadResult.data;
+    const roster =
+      payloadResult.data.badgeNames ??
+      this.badgeStateService.getStationRoster(pairName) ??
+      [pairName];
+    const conflicts = this.badgeStateService.findRosterConflicts(pairName, roster);
+    if (conflicts.length > 0) {
+      res.status(409).json({
+        error: 'Badge names belong to another station',
+        badgeNames: conflicts,
       });
-      res.status(201).json({ ok: true });
+      return;
+    }
+
+    try {
+      const badgeNames = await this.gameDataRepository.bindStation({
+        stationName: pairName,
+        badgeNames: roster,
+        gameId,
+        controllerId,
+      });
+      res.status(201).json({ ok: true, badgeNames });
     } catch (error) {
       res.status(500).json({ error: 'Failed to bind pair', message: String(error) });
     }
@@ -105,15 +127,24 @@ export class PairBindingsController {
     }
 
     try {
-      await this.gameDataRepository.markJoined(payloadResult.data.pairName);
-      this.badgeStateService.broadcastDashboard({
-        type: 'controller.joined',
+      const { pairName, controllerId } = payloadResult.data;
+      const joined = await this.gameDataRepository.markJoined({
         gameId,
-        pairName: payloadResult.data.pairName,
-        ...(payloadResult.data.controllerId ? { controllerId: payloadResult.data.controllerId } : {}),
-        serverTime: new Date().toISOString(),
+        stationName: pairName,
+        badgeNames: payloadResult.data.badgeNames ?? [pairName],
       });
-      res.status(200).json({ ok: true });
+      const serverTime = new Date().toISOString();
+      for (const badgeName of joined) {
+        this.badgeStateService.broadcastDashboard({
+          type: 'controller.joined',
+          gameId,
+          pairName,
+          badgeName,
+          ...(controllerId ? { controllerId } : {}),
+          serverTime,
+        });
+      }
+      res.status(200).json({ ok: true, joined });
     } catch (error) {
       res.status(500).json({ error: 'Failed to join game', message: String(error) });
     }
@@ -153,24 +184,28 @@ export class PairBindingsController {
 
       const updated = await this.gameDataRepository.setPairReadyForNextQuestion({
         gameId,
-        pairName,
+        stationName: pairName,
+        badgeNames: payloadResult.data.badgeNames ?? [pairName],
         ready,
       });
-      if (!updated) {
+      if (updated.length === 0) {
         res.status(409).json({ error: 'Pair is not joined to this game' });
         return;
       }
 
-      const event = {
-        type: 'controller.readiness.changed',
-        gameId,
-        pairName,
-        ready,
-        ...(controllerId ? { controllerId } : {}),
-        serverTime: new Date().toISOString(),
-      };
-      this.badgeStateService.broadcastDashboard(event);
-      res.status(200).json({ ok: true, ready });
+      const serverTime = new Date().toISOString();
+      for (const badgeName of updated) {
+        this.badgeStateService.broadcastDashboard({
+          type: 'controller.readiness.changed',
+          gameId,
+          pairName,
+          badgeName,
+          ready,
+          ...(controllerId ? { controllerId } : {}),
+          serverTime,
+        });
+      }
+      res.status(200).json({ ok: true, ready, badgeNames: updated });
     } catch (error) {
       res.status(500).json({ error: 'Failed to update readiness', message: String(error) });
     }

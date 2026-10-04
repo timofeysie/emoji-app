@@ -183,7 +183,10 @@ const guessSchema = new Schema(
     questionId: { type: objectId, ref: 'Question', required: true, immutable: true },
     answerOptionId: { type: objectId, ref: 'AnswerOption', required: true, immutable: true },
     guesserUserId: { type: objectId, ref: 'User', immutable: true },
+    /** Player key: the badge name (Mode 1: the pair name). */
     pairName: { type: String },
+    /** Controller station that relayed the guess; absent on Mode 1 / legacy rows. */
+    stationName: { type: String },
     badgeId: { type: objectId, ref: 'Badge' },
     badgeName: { type: String },
     cardUid: { type: String },
@@ -206,7 +209,10 @@ guessSchema.index({ questionId: 1, createdAt: -1 });
 
 const pairBindingSchema = new Schema(
   {
+    /** Player key: the badge name (Mode 1: the pair name). */
     pairName: { type: String, required: true },
+    /** Controller station that owns this badge; absent on legacy rows (= pairName). */
+    stationName: { type: String },
     gameId: { type: objectId, ref: 'Game', default: null },
     controllerId: { type: String },
     joined: { type: Boolean, required: true, default: false },
@@ -217,6 +223,7 @@ const pairBindingSchema = new Schema(
 );
 pairBindingSchema.index({ pairName: 1 }, { unique: true });
 pairBindingSchema.index({ gameId: 1 });
+pairBindingSchema.index({ gameId: 1, stationName: 1 });
 
 export type User = InferSchemaType<typeof userSchema>;
 export type Badge = InferSchemaType<typeof badgeSchema>;

@@ -370,6 +370,25 @@ export class BadgeStateService {
     };
   }
 
+  /** Live roster for a station, or null when that controller has never posted. */
+  getStationRoster(stationName: string): string[] | null {
+    const station = this.stationsByName.get(stationName);
+    return station ? this.stationRoster(station) : null;
+  }
+
+  /** Badge names in `badgeNames` that another live station also has in its roster. */
+  findRosterConflicts(stationName: string, badgeNames: string[]): string[] {
+    const conflicts = new Set<string>();
+    for (const station of this.stationsByName.values()) {
+      if (station.pairName === stationName) continue;
+      const roster = this.stationRoster(station);
+      for (const name of badgeNames) {
+        if (roster.includes(name)) conflicts.add(name);
+      }
+    }
+    return [...conflicts];
+  }
+
   getStations(): StationDto[] {
     return [...this.stationsByName.values()].map((station) => this.toStationDto(station));
   }

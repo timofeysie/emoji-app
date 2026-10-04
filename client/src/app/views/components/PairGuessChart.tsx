@@ -17,7 +17,10 @@ export type GuessChartQuestion = {
 export type GuessChartData = {
   gameId: string;
   title: string;
+  /** One column per player (badge). */
   pairs: string[];
+  /** Player → controller station; absent on older servers. */
+  pairStations?: Record<string, string>;
   questions: GuessChartQuestion[];
 };
 
@@ -56,7 +59,7 @@ export function PairGuessChart({
           Loading…
         </div>
       ) : pairs.length === 0 ? (
-        <p className="text-xs italic text-muted-foreground">No bound pairs yet.</p>
+        <p className="text-xs italic text-muted-foreground">No bound players yet.</p>
       ) : questions.length === 0 ? (
         <p className="text-xs italic text-muted-foreground">No rounds yet.</p>
       ) : (
@@ -65,11 +68,19 @@ export function PairGuessChart({
             <thead>
               <tr className="border-b text-left text-[11px] text-muted-foreground">
                 <th className="py-1 pr-3 font-medium">Round</th>
-                {pairs.map((pairName) => (
-                  <th key={pairName} className="px-2 py-1 font-medium capitalize">
-                    {pairName}
-                  </th>
-                ))}
+                {pairs.map((pairName) => {
+                  const stationName = chart?.pairStations?.[pairName];
+                  return (
+                    <th key={pairName} className="px-2 py-1 font-medium capitalize">
+                      {pairName}
+                      {stationName && stationName !== pairName && (
+                        <span className="block text-[10px] font-normal normal-case">
+                          {stationName}
+                        </span>
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>

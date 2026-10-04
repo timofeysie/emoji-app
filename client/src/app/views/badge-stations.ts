@@ -48,7 +48,7 @@ export type StationSlot = {
   status?: StatusChangedEvent;
 };
 
-/** One controller `pairName` (one player) and its configured badges. */
+/** One controller `pairName` and its configured badges; each badge is a player. */
 export type StationRecord = {
   pairName: string;
   controllerId: string;
@@ -106,6 +106,14 @@ export function slotNameOf(event: {
   controllerId: string;
 }): string {
   return event.badgeName || stationNameOf(event);
+}
+
+/**
+ * Player key for a game event: the badge, else `pairName` (Mode 1 and older
+ * servers). Game rows (`question.result`, scores) carry the badge in both.
+ */
+export function playerNameOf(event: { badgeName?: string; pairName?: string }): string | undefined {
+  return event.badgeName || event.pairName;
 }
 
 function emptyStation(pairName: string, controllerId: string): StationRecord {

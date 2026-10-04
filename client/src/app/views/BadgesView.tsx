@@ -57,6 +57,7 @@ import {
   applyStatusToStations,
   connectedSlotCount,
   isLiveConnected,
+  playerNameOf,
   sortedStations,
   stationsFromSnapshot,
   type BadgesSnapshotResponse,
@@ -92,6 +93,8 @@ type WsEnvelope =
       gameId: string;
       gameTitle?: string;
       pairName: string;
+      /** The badge (player) that joined; absent from Mode 1 / older servers. */
+      badgeName?: string;
       controllerId?: string;
       serverTime: string;
     }
@@ -101,6 +104,7 @@ type WsEnvelope =
       gameTitle?: string;
       questionId?: string;
       pairName?: string;
+      stationName?: string;
       controllerId?: string;
       badgeId?: string;
       badgeName?: string;
@@ -132,6 +136,8 @@ type WsEnvelope =
       correctSlotLabel: string;
       results: Array<{
         pairName: string;
+        stationName?: string;
+        badgeName?: string;
         slotLabel: string | null;
         isCorrect: boolean;
       }>;
@@ -148,16 +154,18 @@ type GameEventState = {
 type JoinEvent = {
   gameId: string;
   pairName: string;
+  badgeName?: string;
   controllerId?: string;
   serverTime: string;
 };
 
 type NfcTagEvent = {
   gameId: string;
+  /** Controller station that relayed the scan. */
   pairName?: string;
   controllerId?: string;
   badgeId?: string;
-  /** Station roster slot that scanned; the guess itself belongs to `pairName`. */
+  /** Badge that scanned; it is the player the guess belongs to. */
   badgeName?: string;
   cardUid?: string;
   slotLabel?: string;
@@ -649,7 +657,7 @@ function OutdatedChip() {
   );
 }
 
-/** Live game state shared by every station (one player per `pairName`). */
+/** Live game state shared by every station, keyed by player (badge name). */
 type StationGameProps = {
   activeGame: GameEventState | null;
   joinsByPair: Record<string, JoinEvent>;
@@ -718,7 +726,7 @@ function StationCardHeader({
   );
 }
 
-/** Marks the slot whose badge scanned the station's current guess (`white-2 · B`). */
+/** This badge's guess for the open question (`NFC · B`), pulsing on arrival. */
 function SlotNfcChip({ nfcEvent, correct }: { nfcEvent: NfcTagEvent; correct?: boolean }) {
   return (
     <motion.span
@@ -730,7 +738,7 @@ function SlotNfcChip({ nfcEvent, correct }: { nfcEvent: NfcTagEvent; correct?: b
             ? 'bg-red-50 text-red-700'
             : 'bg-muted text-foreground',
       )}
-      title="This badge scanned the station's guess"
+      title="This badge's guess"
       initial={{ opacity: 0, scale: 0.6 }}
       animate={{
         opacity: 1,
@@ -744,9 +752,64 @@ function SlotNfcChip({ nfcEvent, correct }: { nfcEvent: NfcTagEvent; correct?: b
       transition={{ duration: FRESH_HIGHLIGHT_MS / 1000, times: [0, 0.3, 1] }}
     >
       <ScanLine className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
-      {nfcEvent.badgeName}
+      NFC
       {nfcEvent.slotLabel ? ` · ${nfcEvent.slotLabel}` : ''}
     </motion.span>
+  );
+}
+
+function hasAnswer(answerByPair: Record<string, boolean>, player: string): boolean {
+  return Object.prototype.hasOwnProperty.call(answerByPair, player);
+}
+
+/** Per-badge game line on a multi-badge slot: joined, guess, and result. */
+function SlotGameLine({ badgeName, game }: { badgeName: string; game: StationGameProps }) {
+  const joinEvent = game.joinsByPair[badgeName];
+  const nfcEvent = game.nfcByPair[badgeName];
+  const result = game.resultsByPair[badgeName];
+  const inPlay = game.activeGame?.gameState === 'lobby' || game.activeGame?.gameState === 'active';
+  if (!inPlay && !joinEvent && !nfcEvent && !result) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 text-[10px] leading-tight text-muted-foreground">
+      <TextReveal revealKey={joinEvent ? 'joined' : 'not-joined'}>
+        {joinEvent ? `Joined ${formatShortTime(joinEvent.serverTime)}` : 'Not joined'}
+      </TextReveal>
+      {nfcEvent && !result && (
+        <SlotNfcChip
+          key={`${nfcEvent.serverTime}-${nfcEvent.cardUid ?? ''}`}
+          nfcEvent={nfcEvent}
+          correct={hasAnswer(game.answerByPair, badgeName) ? game.answerByPair[badgeName] : undefined}
+        />
+      )}
+      {result && <ResultChip result={result} />}
+    </div>
+  );
+}
+
+/** Station header game line for a multi-badge roster: state plus joined / answered counts. */
+function StationGameSummary({ station, game }: { station: StationRecord; game: StationGameProps }) {
+  const { activeGame } = game;
+  if (!activeGame) return null;
+  const players = station.badgeNames.filter((name) => game.joinsByPair[name]);
+  const answered = players.filter((name) => hasAnswer(game.answerByPair, name)).length;
+
+  return (
+    <div className="w-full rounded-md border bg-muted/10 px-1.5 py-1 text-[10px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
+        <TextReveal revealKey={activeGame.gameState} className="font-medium capitalize text-foreground">
+          {activeGame.gameState}
+        </TextReveal>
+        {activeGame.gameTitle && <span className="text-[9px]">· {activeGame.gameTitle}</span>}
+        <span className="text-[9px]">· {formatShortTime(activeGame.serverTime)}</span>
+      </div>
+      <div className="tabular-nums">
+        Joined {players.length}/{station.badgeNames.length}
+        {game.questionPhase === 'open' && players.length > 0
+          ? ` · answered ${answered}/${players.length}`
+          : ''}
+      </div>
+    </div>
   );
 }
 
@@ -779,14 +842,6 @@ function StationSlotCard({
     live || display === 'connecting' || badgeId
       ? SLOT_STATUS_LABELS[display]
       : SLOT_STATUS_LABELS.unknown;
-  const stationNfc = game.nfcByPair[station.pairName];
-  const scannedHere =
-    station.badgeNames.length > 1 &&
-    stationNfc?.badgeName != null &&
-    stationNfc.badgeName === slot.badgeName;
-  const stationAnswer = Object.prototype.hasOwnProperty.call(game.answerByPair, station.pairName)
-    ? game.answerByPair[station.pairName]
-    : undefined;
 
   return (
     <div
@@ -815,13 +870,7 @@ function StationSlotCard({
         </TextReveal>
       </div>
       <BleConnectionRow status={status} />
-      {scannedHere && stationNfc && (
-        <SlotNfcChip
-          key={`${stationNfc.serverTime}-${stationNfc.cardUid ?? ''}`}
-          nfcEvent={stationNfc}
-          correct={stationAnswer}
-        />
-      )}
+      {station.badgeNames.length > 1 && <SlotGameLine badgeName={slot.badgeName} game={game} />}
       {(knownPico || badgeId) && (
         <div className="flex flex-col gap-0.5 text-[10px] leading-tight text-muted-foreground">
           {knownPico && (
@@ -838,7 +887,7 @@ function StationSlotCard({
         <BadgePrimaryVisual
           emoji={station.emoji}
           nfcCardMap={nfcCardMap}
-          pairName={station.pairName}
+          pairName={slot.badgeName}
           activeGame={game.activeGame}
           joinsByPair={game.joinsByPair}
           answerByPair={game.answerByPair}
@@ -870,11 +919,11 @@ function StationCardBody({
     <>
       <StationCardHeader station={station} versionInfo={versionInfo} />
       <div className="flex flex-col gap-1.5 p-1.5">
-        <BadgeCardGameSection
-          pairName={station.pairName}
-          showNfcSource={station.badgeNames.length > 1}
-          {...game}
-        />
+        {station.badgeNames.length > 1 ? (
+          <StationGameSummary station={station} game={game} />
+        ) : (
+          <BadgeCardGameSection pairName={station.badgeNames[0] ?? station.pairName} {...game} />
+        )}
         <div className="flex flex-wrap gap-1.5">
           {station.badgeNames.map((badgeName) => (
             <StationSlotCard
@@ -923,7 +972,6 @@ function ResultChip({ result }: { result: QuestionResultEntry }) {
 
 function BadgeCardGameSection({
   pairName,
-  showNfcSource = false,
   activeGame,
   joinsByPair,
   nfcByPair,
@@ -933,8 +981,6 @@ function BadgeCardGameSection({
   winnerPairNames,
 }: {
   pairName?: string;
-  /** Name the scanning badge on the NFC line (multi-badge stations). */
-  showNfcSource?: boolean;
   activeGame: GameEventState | null;
   joinsByPair: Record<string, JoinEvent>;
   nfcByPair: Record<string, NfcTagEvent>;
@@ -985,8 +1031,7 @@ function BadgeCardGameSection({
       {nfcEvent && (
         <div className="flex items-center gap-1">
           <span>
-            NFC{nfcEvent.slotLabel ? `: ${nfcEvent.slotLabel}` : ''}
-            {showNfcSource && nfcEvent.badgeName ? ` from ${nfcEvent.badgeName}` : ''} ·{' '}
+            NFC{nfcEvent.slotLabel ? `: ${nfcEvent.slotLabel}` : ''} ·{' '}
             {formatShortTime(nfcEvent.serverTime)}
           </span>
           {answered && !result && (
@@ -1308,18 +1353,21 @@ export const BadgesView = () => {
         }
 
         if (message.type === 'controller.joined') {
+          const player = playerNameOf(message) ?? message.pairName;
           setJoinsByPair((prev) => ({
             ...prev,
-            [message.pairName]: {
+            [player]: {
               gameId: message.gameId,
               pairName: message.pairName,
+              badgeName: message.badgeName,
               controllerId: message.controllerId,
               serverTime: message.serverTime,
             },
           }));
+          const badgeRef = message.badgeName ? ` badge=${message.badgeName}` : '';
           logGameState(
             'lobby_joined',
-            `WS controller.joined pair=${message.pairName} ${refFor(message.gameId, message.gameTitle)} icon=hand-platter`,
+            `WS controller.joined pair=${message.pairName}${badgeRef} ${refFor(message.gameId, message.gameTitle)} icon=hand-platter`,
           );
           return;
         }
@@ -1349,29 +1397,29 @@ export const BadgesView = () => {
           const next: Record<string, QuestionResultEntry> = {};
           const nextAnswers: Record<string, boolean> = {};
           for (const row of message.results) {
-            next[row.pairName] = {
+            const player = playerNameOf(row) ?? row.pairName;
+            next[player] = {
               slotLabel: row.slotLabel,
               isCorrect: row.isCorrect,
             };
-            if (row.slotLabel != null) {
-              nextAnswers[row.pairName] = row.isCorrect;
-            } else {
-              nextAnswers[row.pairName] = false;
-            }
+            nextAnswers[player] = row.slotLabel != null ? row.isCorrect : false;
           }
           setResultsByPair(next);
           setAnswerByPair((prev) => ({ ...prev, ...nextAnswers }));
           const gameRef = refFor(message.gameId, message.gameTitle);
           for (const row of message.results) {
+            const player = playerNameOf(row) ?? row.pairName;
+            const stationRef =
+              row.stationName && row.stationName !== player ? ` station=${row.stationName}` : '';
             if (row.slotLabel == null) {
               logGameState(
                 'wrong',
-                `WS question.result pair=${row.pairName} no guess ${gameRef}`,
+                `WS question.result player=${player}${stationRef} no guess ${gameRef}`,
               );
             } else {
               logGameState(
                 row.isCorrect ? 'correct' : 'wrong',
-                `WS question.result pair=${row.pairName} slot=${row.slotLabel} ${gameRef}`,
+                `WS question.result player=${player}${stationRef} slot=${row.slotLabel} ${gameRef}`,
               );
             }
           }
@@ -1380,10 +1428,11 @@ export const BadgesView = () => {
 
         if (message.type === 'nfc.tagged') {
           const pairName = message.pairName;
-          if (pairName) {
+          const player = playerNameOf(message);
+          if (player) {
             setNfcByPair((prev) => ({
               ...prev,
-              [pairName]: {
+              [player]: {
                 gameId: message.gameId,
                 pairName: message.pairName,
                 controllerId: message.controllerId,
@@ -1398,7 +1447,7 @@ export const BadgesView = () => {
             if (typeof message.isCorrect === 'boolean') {
               setAnswerByPair((prev) => ({
                 ...prev,
-                [pairName]: message.isCorrect as boolean,
+                [player]: message.isCorrect as boolean,
               }));
             }
           }

@@ -55,7 +55,7 @@ controller instead.
 | 5 | React station component | React | ✅ done |
 | 6 | Game / referee surfaces + NFC attribution | Server + React | ✅ done |
 | 7 | Docs, setup, hardware verification | Docs + devices | 🟡 docs done; hardware checklist pending |
-| 8 | Each badge is a separate player | Server + Zero + React | ⬜ not started |
+| 8 | Each badge is a separate player | Server + Zero + React | 🟡 code done; hardware checklist pending |
 | 9 | Fix docs for per-badge players | Docs | ⬜ not started |
 
 Mode 1 (one controller, one badge) must keep working after every milestone.
