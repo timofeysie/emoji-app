@@ -1,6 +1,7 @@
 # Multi-badge plan — one controller, many named badges
 
-Status: **planned**. This is the implementation plan for Step 10 in
+Status: **implemented** (hardware checklist in Milestone 7 pending). This is
+the implementation plan for Step 10 in
 [`next-steps.md`](./next-steps.md). It supersedes the short Mode 2 sketch in
 that file and refines
 [`game-modes.md`](./game-modes.md) Mode 2.
@@ -53,7 +54,9 @@ controller instead.
 | 4 | Server station + badge-slot model | NestJS | ✅ done |
 | 5 | React station component | React | ✅ done |
 | 6 | Game / referee surfaces + NFC attribution | Server + React | ✅ done |
-| 7 | Docs, setup, hardware verification | Docs + devices | 🔲 planned |
+| 7 | Docs, setup, hardware verification | Docs + devices | 🟡 docs done; hardware checklist pending |
+| 8 | Each badge is a separate player | Server + Zero + React | ⬜ not started |
+| 9 | Fix docs for per-badge players | Docs | ⬜ not started |
 
 Mode 1 (one controller, one badge) must keep working after every milestone.
 If `BADGE_NAMES` is omitted or empty, the Zero treats the roster as
@@ -669,19 +672,37 @@ the sport flow.
 
 ### Docs to update
 
-- [`next-steps.md`](./next-steps.md) Step 10 — point at this file (done when
+- [x] [`next-steps.md`](./next-steps.md) Step 10 — point at this file (done when
   this plan lands; mark milestones done as they ship).
-- [`game-modes.md`](./game-modes.md) Mode 2 — replace "all Picos share
+- [x] [`game-modes.md`](./game-modes.md) Mode 2 — replace "all Picos share
   `PAIR_NAME`" with the roster model; keep Mode 1 as current.
-- [`game-realtime-design.md`](./game-realtime-design.md) multi-badge
+- [x] [`game-realtime-design.md`](./game-realtime-design.md) multi-badge
   section — note Topology A game identity + named discovery.
-- `rainbow-connection/python/emoji-os/project/badge-setup.md` — each Pico
+- [x] `rainbow-connection/python/emoji-os/project/badge-setup.md` — each Pico
   gets its own `PAIR_NAME`; that name must appear in the Zero
   `BADGE_NAMES`.
-- `rainbow-connection/python/emoji-os/project/controller-setup.md` —
+- [x] `rainbow-connection/python/emoji-os/project/controller-setup.md` —
   document `BADGE_NAMES`.
-- `rainbow-connection/python/emoji-os/project/multiplayer-mode.md` —
+- [x] `rainbow-connection/python/emoji-os/project/multiplayer-mode.md` —
   pairing section for N named targets.
+
+### As implemented (Milestone 7)
+
+- `game-modes.md` Mode 2 is rewritten for the roster model (identity,
+  config, BLE lifecycle, game flow, NFC attribution, dashboard) with an
+  updated Mode 1 / Mode 2 comparison table.
+- `game-realtime-design.md` keeps Topologies A and B as the options
+  considered and adds the implemented hybrid (named discovery, one station
+  identity). The `pairBindings`, NFC relay, and example event payloads use
+  `badgeName`; the multi-badge open question is marked resolved.
+- `badge-setup.md` adds name rules, buttonless-badge behaviour, and the Zero
+  log lines / dashboard slot that confirm a badge connected.
+- `controller-setup.md` adds the boot / scan log lines, the 2–4 badge
+  budget, and the one-bind / one-join station rules.
+- `multiplayer-mode.md` updates the intro, handshake (`PAIR:<badgeName>`),
+  behaviour summary, NFC flow (`badgeName`, one guess per pair), adds a
+  Mode 2 action table and Mode 2 smoke-test steps.
+- The hardware checklist below has to be run on devices (Zero `v0.7.16`).
 
 ### Hardware checklist
 
@@ -700,6 +721,298 @@ the sport flow.
 
 ---
 
+## Milestone 8 — Each badge is a separate player
+
+Goal: every badge on a Mode 2 station is its own scored player. The Zero
+stays the only input device (it joins and answers the ready prompt for its
+badges), but each badge has its own binding, guess, result, score row, and
+winner / loser outcome.
+
+Milestones 4–7 built Mode 2 as **one team per station**: one binding, one
+guess per question from whichever badge scanned first, one score row. That
+is wrong. Mode 2 is not a team mode. A team mode may be added later as a
+separate mode; it is out of scope here.
+
+### Locked decisions (Milestone 8)
+
+These replace the conflicting locks earlier in this file (`pairName` is one
+player, the "badges as separate scored players" out-of-scope bullet, and the
+"Scoring uniqueness" risk note). Milestone 9 rewrites those sections.
+
+| Term | Meaning after Milestone 8 |
+| --- | --- |
+| station | Controller `PAIR_NAME` (`stationName`). Not a player. |
+| player | One badge, keyed by its `badgeName`. |
+
+The station owns the WS room, the referee bind target, and the roster. The
+player owns binding, join, readiness, guess, result, score, and outcome.
+
+- **Player key = `badgeName`.** In Mode 1 the only badge's name equals
+  `PAIR_NAME`, so Mode 1 keys, stored rows, and payloads do not change.
+- **Storage reuses `pairName` as the player key.** `pairBindings.pairName`
+  and `guesses.pairName` hold the `badgeName`, so the existing unique
+  indexes (one binding per name, `uniq_guess_per_pair`) give one binding and
+  one guess **per badge** per question. Both collections gain
+  `stationName`. Rows without `stationName` (Mode 1 and existing data) read
+  as `stationName = pairName`.
+- **Badge names are unique across stations.** The BLE roster already needs
+  this; the binding index now depends on it too. Binding a station whose
+  roster name belongs to another live station is rejected with `409`.
+- **Referee binds the station once.** `{ pairName: "white" }` expands to one
+  player binding per roster name.
+- **The Zero joins its badges.** One `KEY1` posts a join that lists every
+  connected badge. A badge that connects later while the station is joined
+  auto-joins.
+- **Auto-close waits for joined players only.** An unpowered roster badge
+  must not hold a question open. This also changes Mode 1: a bound pair that
+  never joined no longer blocks auto-close.
+- **Each Pico shows its own player state.** Correct / wrong and winner /
+  loser go to that badge only. Station-wide phases (lobby, question open,
+  question closed, ready prompt) still fan out.
+- **The Zero LCD shows a station summary.** It keeps the station phase
+  glyph, adds an `answered n/m` caption while a question is open, and plays
+  fireworks at game end when any of its badges won (rain otherwise).
+
+### Server
+
+Model and repository (`server/src/persistence/models.ts`,
+`game-data.repository.ts`):
+
+- `pairBindingSchema`: add `stationName` and an index on
+  `{ gameId, stationName }`.
+- `guessSchema`: add `stationName`.
+- `bindPair` becomes `bindStation({ stationName, badgeNames, gameId,
+  controllerId })`. It upserts one binding per roster name and deletes
+  bindings for that `stationName` whose name has left the roster.
+- `markJoined` and `setPairReadyForNextQuestion` take a list of player names
+  scoped by `stationName` and `gameId`.
+- `getBinding(pairName)` resolves the station and returns a station snapshot
+  plus `players: [{ badgeName, joined, readyForNextQuestion, guessed,
+  slotLabel, isCorrect }]` for the open question. Top-level `joined` and
+  `readyForNextQuestion` stay for Mode 1 (the single player's values).
+- `getBindingsByGameId` returns player names. Add `getStationNamesByGameId`
+  for WS routing.
+- `submitGuess`: player = `badgeName ?? pairName`. When `badgeName` is sent,
+  require a binding with that name, `stationName = pairName`, and the same
+  `gameId`. Store the player in `pairName` and the station in `stationName`.
+- `haveAllBoundPairsGuessed` becomes `haveAllJoinedPlayersGuessed` and only
+  counts `joined: true` bindings.
+- `computeQuestionResult`, `getGameScores`, `getGameGuessChart`, and
+  `getGameDetail().boundPairs` return one row per player, each with
+  `stationName` and `badgeName`.
+
+Controllers:
+
+- `pair-bindings.controller.ts`
+  - Bind: body `{ pairName, controllerId?, badgeNames? }`. Roster comes from
+    the body, else the live `BadgeStateService` station, else `[pairName]`.
+  - Join: optional `badgeNames: string[]` (default `[pairName]`). Emit one
+    `controller.joined` per player with `pairName` (station) and
+    `badgeName`.
+  - Readiness: optional `badgeNames`. Emit one
+    `controller.readiness.changed` per player with `badgeName`.
+- `game-flow.controller.ts`
+  - Route controller events by station name, deduplicated, so a 3-badge
+    station receives one copy of each station-wide event.
+  - `question.result`: one `results[]` row per player with `stationName`
+    and `badgeName`.
+  - `game.ended` on `completed`: one enriched event per player (`badgeName`,
+    `rank`, `score`, `isWinner`) sent to that player's station room. Rank
+    and winner are computed across all players, not stations.
+  - `nfc.tagged`: always carries `badgeName` (the player) and adds
+    `stationName`.
+  - `GET /api/games/:gameId/play`: `boundPairs` and `previousResult.scans`
+    are per player with `stationName`.
+- `badge-state.service.ts`: expose the live roster for a station so bind can
+  expand it.
+
+Tests:
+
+- `pair-bindings.controller.spec.ts`: binding a 3-name station creates three
+  player bindings; rebinding with a shorter roster removes the stale one;
+  join with `badgeNames` marks only the listed players; readiness is per
+  player; a roster name owned by another station returns `409`.
+- `game-flow.controller.spec.ts`: two badges on one station guess the same
+  question and both are stored, both appear in `question.result`, and both
+  score; a second guess from the same badge returns `400`; auto-close fires
+  once every joined player has guessed and ignores a not-joined roster
+  badge; `game.ended` is sent once per player to a single station room;
+  Mode 1 payloads are unchanged.
+- `game-data.repository.spec.ts`: score and guess-chart rows per player with
+  `stationName`; a legacy binding without `stationName` still resolves.
+
+### Zero firmware (`emoji-os-zero.py`)
+
+Per-badge game state:
+
+- `_game_pair_result`, `_game_answered_this_question`, and
+  `_game_end_outcome` become dicts keyed by `badgeName`.
+- `_ws_joined` becomes a set of joined badge names. The station counts as
+  joined when the set is non-empty.
+- `_next_question_ready` stays station-level (only the Zero has buttons),
+  but the readiness POST applies it to every joined badge.
+- `_current_game_cmd(badge_name)` uses that badge's state.
+  `_sync_badge_game_state` and `_apply_game_state_to_display` write the
+  right command to each badge instead of one fan-out command.
+
+Join and readiness:
+
+- `KEY1` join posts `{ pairName, controllerId, badgeNames }` with every
+  connected roster badge.
+- When a roster badge completes its handshake while the station is joined
+  and the game is `lobby` or `active`, POST join for that badge only, then
+  sync it.
+- The readiness POST includes `badgeNames` (joined, connected badges).
+- Mode 1 sends `badgeNames: [PAIR_NAME]`.
+
+NFC:
+
+- `_relay_nfc_tag(card_uid, badge_name)`: the "already answered" guard is
+  per badge. A second scan from the same badge is ignored; a scan from a
+  sibling badge is a new guess. Always send `badgeName` (Mode 1:
+  `PAIR_NAME`). Update the docstring that says sibling scans are rejected.
+- `_schedule_pair_answer` and `_apply_pair_answer` take `badge_name` and
+  write `GAME:correct` / `GAME:wrong` to that badge only. The other badges
+  stay on `GAME:question_open`.
+- An unknown card is wrong for the scanning badge only.
+
+Server events:
+
+- `question.result`: for each joined badge, find the row by `badgeName`
+  (fall back to `pairName` for older servers) and apply it to that badge. A
+  joined badge with no guess shows wrong, as the station does today.
+- `game.ended` with `badgeName`: winner / loser goes to that badge. Without
+  `badgeName` (older server), apply to every badge as today.
+- `game.ready`, `game.opened`, `game.started`, `question.opened`, and
+  `question.closed` still fan out to every badge and reset per-badge state.
+- Welcome / HTTP poll snapshot: restore per-badge joined and answered state
+  from `players[]`.
+
+Bump the Zero version (for example `0.8.0`) and the expected version in
+`GET /api/version` so the dashboard flags older controllers.
+
+No Pico change: badges still receive the same `GAME:*` commands, just
+addressed per badge.
+
+### React
+
+- `client/src/app/views/badge-stations.ts`: `controller.joined`,
+  `controller.readiness.changed`, `nfc.tagged`, `question.result`, and
+  `game.ended` carry `badgeName`. Add per-slot game state (joined, ready,
+  guess, result, outcome) and patch helpers keyed by station and
+  `badgeName`.
+- `BadgesView.tsx`: each slot shows its own joined chip, guess chip
+  (`white-2 · B`), correct / wrong result, and winner / loser. The station
+  header keeps the game title and state plus `joined 2/3` and
+  `answered 1/2` counts. Remove the station-level `NFC: B from white-2`
+  line.
+- `GameRefereePanel.tsx`: bind chips stay per station. The bound list shows
+  players grouped under their station, each with joined and ready state.
+  Any "all ready" count uses players, not stations.
+- `GamePlayView.tsx`: leaderboard and previous-result scans have one row
+  per player, labelled with the `badgeName` and a station subtitle for
+  rosters of 2+.
+- `PairGuessChart.tsx`: one column per player.
+- `GameDetailView.tsx`: bound pairs, scores, and game logs per player.
+- Mode 1 stays visually unchanged.
+
+### Hardware checklist (Milestone 8)
+
+- [ ] Mode 1 regression: pair, emoji, join, NFC guess, scoring, winner /
+      loser.
+- [ ] Mode 2 (`white`, `white-2`): one `KEY1` join shows both badges joined
+      in the referee panel.
+- [ ] Scan on `white` shows correct / wrong on `white` only; `white-2`
+      stays on `?`.
+- [ ] Scan on `white-2` records its own guess; the question auto-closes
+      after both badges answer.
+- [ ] A second scan on the same badge in the same question is ignored.
+- [ ] An unpowered third roster badge does not hold the question open.
+- [ ] Powering a roster badge during the lobby auto-joins it.
+- [ ] The leaderboard has one row per badge, and each badge shows its own
+      winner / loser at game end.
+
+### Acceptance criteria — Milestone 8
+
+- [ ] Binding a Mode 2 station creates one player binding per roster name.
+- [ ] Every connected badge is a joined player after one `KEY1` join.
+- [ ] Each badge can record one guess per question, independent of its
+      siblings.
+- [ ] `question.result`, scores, the guess chart, and the play view have
+      one row per badge.
+- [ ] `game.ended` gives each badge its own rank, score, and winner flag.
+- [ ] Each Pico shows only its own correct / wrong and winner / loser.
+- [ ] The dashboard shows join, guess, and result per badge slot.
+- [ ] Mode 1 behaviour and payloads are unchanged (except the joined-only
+      auto-close rule).
+
+---
+
+## Milestone 9 — Fix docs for per-badge players
+
+Goal: remove the "one station = one player / team" description written in
+Milestones 6 and 7 and describe Mode 2 as one player per badge. Do this
+after Milestone 8 ships so the docs match the code.
+
+### This plan (`multi-badge-plan.md`)
+
+- [ ] Status line: mention Milestone 8.
+- [ ] Locked decisions, "Station vs badge": `pairName` is the station, not
+      the player; add the player row (`badgeName`) and remove "A multi-badge
+      station is still one player."
+- [ ] Roster diagram: replace `(one bind, one join, one score)` with one
+      station bind expanding to one player per badge.
+- [ ] "Auto-bind and auto-join": replace "Badges are not separate
+      `pairBindings`" with the Milestone 8 rules (station bind expands, the
+      Zero joins its badges, late badges auto-join).
+- [ ] "Out of scope": remove "Badges as separate scored players"; add "Team
+      mode (one score per station)" as a possible future mode.
+- [ ] "Current code to change": update the `GameRefereePanel` row.
+- [ ] Milestone 5 acceptance (station-header chips, "not duplicated as
+      three joined players") and all of Milestone 6 (goal, Guess / NFC,
+      Player / play views, As implemented, acceptance): add a short note
+      that Milestone 8 superseded the team behaviour. Keep the history.
+- [ ] Milestone 7 hardware checklist: replace "scores the station once"
+      with a pointer to the Milestone 8 checklist.
+- [ ] Risk notes: rewrite "Scoring uniqueness" (per-badge bindings are now
+      intended; the risk is two stations sharing a badge name).
+
+### Other docs touched in Milestone 7
+
+- [ ] [`game-modes.md`](./game-modes.md): Mode 2 intro ("one player: one
+      bind, one join, one guess per question, one score row"), the NFC
+      attribution paragraph (sibling scan rejected), the use-case table row
+      "Team buzzer … one team score" (move to a future team mode), and the
+      Mode 1 / Mode 2 comparison row "Controller station (one player)".
+- [ ] [`game-realtime-design.md`](./game-realtime-design.md): the hybrid
+      topology note ("one bind / join / score"), the `pairBindings` section
+      ("never bound separately … score one team"), and the example
+      `question.result` / `game.ended` / `nfc.tagged` payloads (add
+      `stationName` and `badgeName`). Topology A can stay as an option
+      considered, but say the implemented Mode 2 scores per badge.
+- [ ] `rainbow-connection/python/emoji-os/project/badge-setup.md`: the
+      paragraph saying the first scan is the station's answer and sibling
+      scans are ignored.
+- [ ] `rainbow-connection/python/emoji-os/project/controller-setup.md`:
+      "The station is one player in emoji-app" and the one-bind / one-join
+      rules (bind once, but each badge is a player; late badges auto-join).
+- [ ] `rainbow-connection/python/emoji-os/project/multiplayer-mode.md`: the
+      intro ("still plays as one player"), the Mode 2 section ("one player
+      with several badges"), the NFC flow step ("one guess per pairName per
+      question"), the Mode 2 action table, and the Mode 2 smoke test.
+- [ ] [`next-steps.md`](./next-steps.md) Step 10: status reflects
+      Milestone 8.
+
+### Acceptance criteria — Milestone 9
+
+- [ ] No doc says a Mode 2 station is one player, one team, or has one
+      score.
+- [ ] Every doc that describes Mode 2 scoring says one player per badge,
+      keyed by `badgeName`.
+- [ ] Team play is only mentioned as a possible future mode.
+
+---
+
 ## Suggested implementation order
 
 Do these in order. Each milestone should be shippable on its own.
@@ -715,6 +1028,9 @@ Do these in order. Each milestone should be shippable on its own.
    one-slot, Mode 2 empty slots, live connect/disconnect).
 7. **Milestone 6** — referee chip count + `badgeName` on NFC.
 8. **Milestone 7** — docs and the hardware checklist.
+9. **Milestone 8** — per-badge players: server first (tests), then Zero
+   firmware, then React.
+10. **Milestone 9** — rewrite the team-mode wording from Milestones 6 and 7.
 
 ---
 

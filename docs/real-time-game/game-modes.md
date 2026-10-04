@@ -64,159 +64,160 @@ backoff.
 
 - `POST /api/status` — Zero posts `pairName`, `controllerVersion`, `picoVersion`,
   `batteryLevel`, `badgeId`, `bleStatus`.
-- One badge card appears on the dashboard, labelled by `pairName`.
-- `submitGuess` carries `pairName` + `badgeId` (single badge, so `badgeId`
-  is unambiguous).
+- One station card appears on the dashboard, labelled by `pairName`, with a
+  single badge slot.
+- `submitGuess` carries `pairName` (and `badgeName`, which equals `pairName`
+  in Mode 1).
 
 ### Current limitations
 
 - One badge per station. If the physical Pico is swapped, the `badgeId` changes
   but `pairName` stays stable.
-- The Zero cannot relay NFC events from more than one badge simultaneously.
+- For more than one badge on a station, use Mode 2 below. Mode 1 is the same
+  code path with a one-name roster.
 
 ---
 
-## Mode 2 — Multi-badge pair (one controller, N badges) 🔮 planned
+## Mode 2 — Multi-badge station (one controller, N named badges) ✅ implemented
 
-### Multi-badge pair overview
+Implementation plan and as-built notes:
+[`multi-badge-plan.md`](./multi-badge-plan.md). Hardware verification is
+tracked in that plan's Milestone 7 checklist.
 
-One Pi Zero controller maintains simultaneous BLE connections to **N Pico
-badges**, all sharing the same `PAIR_NAME`. This enables team-buzzer scenarios,
-audience-participation sets, or classroom kits where one station manages a rack
-of physical devices.
+### Multi-badge station overview
+
+One Pi Zero controller keeps simultaneous BLE links to **several Pico badges**.
+Each Pico has its **own** `PAIR_NAME`; the Zero connects only to the names in
+its `BADGE_NAMES` roster. The station still plays as **one player**: one bind,
+one join, one guess per question, one score row.
+
+Badges can be buttonless. The Zero is the only input device: emoji choices,
+join, and readiness all come from the Zero and are written to every connected
+badge.
 
 ```text
-┌─────────────────────────┐  BLE  ┌──────────────────────────────┐
-│  Pi Zero controller     │ ◀────▶ │  Pico badge 1 (badge-aa…)   │
-│  PAIR_NAME = "green"    │  BLE  ├──────────────────────────────┤
-│                         │ ◀────▶ │  Pico badge 2 (badge-bb…)   │
-│                         │  BLE  ├──────────────────────────────┤
-│                         │ ◀────▶ │  Pico badge 3 (badge-cc…)   │
-└─────────────────────────┘       └──────────────────────────────┘
+┌──────────────────────────────┐  BLE  ┌──────────────────────────────┐
+│  Pi Zero controller          │ ◀────▶ │  Pico PAIR_NAME = "green"    │
+│  PAIR_NAME   = "green"       │  BLE  ├──────────────────────────────┤
+│  BADGE_NAMES = ["green",     │ ◀────▶ │  Pico PAIR_NAME = "green-2"  │
+│    "green-2", "green-3"]     │  BLE  ├──────────────────────────────┤
+│                              │ ◀────▶ │  Pico PAIR_NAME = "green-3"  │
+└──────────────────────────────┘       └──────────────────────────────┘
           │
-          │ REST + WebSocket
+          │ REST + WebSocket (pairName = "green")
           ▼
     emoji-app server
 ```
 
-### Multi-badge pair identity
-
-`pairName` still identifies the **controller** (the Zero). Individual badges
-are distinguished by `badgeId` — the Pico's Bluetooth MAC address, unique per
-chip even when all Picos share the same `PAIR_NAME`.
+### Multi-badge station identity
 
 | Field | Holds | Example |
 | --- | --- | --- |
-| `pairName` | Controller name (shared by all badges) | `"green"` |
-| `badgeId` | Per-chip unique identifier | `"badge-aa-bb…"`, `"badge-cc-dd…"` |
+| `pairName` | Controller / station id. Bind, join, readiness, guesses, scores | `"green"` |
+| `badgeNames` | Ordered roster from the Zero's `BADGE_NAMES` (dashboard slot order) | `["green", "green-2", "green-3"]` |
+| `badgeName` | One roster slot; equals that Pico's `PAIR_NAME` | `"green-2"` |
+| `badgeId` | Pico MAC-derived id. Diagnostics only | `"badge-aa-bb…"` |
 | `controllerId` | Zero's logical id | `"zero-1"` |
 
-No per-badge config file is needed — all Picos can use the identical
-`pair_config.py`. This keeps provisioning simple for large sets.
+`badgeName` is the stable badge identity. `badgeId` changes if a Pico is
+swapped, so nothing is keyed on it.
 
-### Multi-badge pair configuration
+### Multi-badge station configuration
 
-All Picos share the same `pair_config.py`:
+Only the Zero file has a roster:
 
 ```python
+# Zero pair_config.py
 PAIR_NAME = "green"
+BADGE_NAMES = ["green", "green-2", "green-3"]
 ```
 
-Each Pico advertises as `Pico-Client-green`. The Zero's scan loop is extended
-to connect to **all** matching peripherals rather than the first one found.
+Each Pico gets its own name, which must appear in that roster:
 
-### BLE connection lifecycle (planned)
+```python
+# Pico pair_config.py
+PAIR_NAME = "green-2"
+```
+
+Omitting `BADGE_NAMES` (or leaving it empty) is Mode 1: the roster is
+`[PAIR_NAME]`. Names are case-sensitive. Keep them short; the Pico truncates
+long `Pico-Client-<PAIR_NAME>` advertising names.
+
+### Multi-badge BLE connection lifecycle
 
 ```text
-Zero boots → scans for ALL devices named "Pico-Client-green"
-           → opens one BleakClient per device
-           → runs PAIR handshake on each in parallel
-           → starts one heartbeat task per client
-           → on NFC notify from badge-N, relays TAG event with badgeId = badge-N
+Zero boots → logs PAIR_NAME and BADGE_NAMES
+           → posts status "scanning" for every roster name (empty slots appear)
+           → one scan for every unmatched Pico-Client-<badgeName>
+           → connects matches one at a time
+           → sends PAIR:<badgeName> to each, waits for PAIR_OK:<version>
+           → syncs a late badge to the current GAME:* state
+           → rescans periodically to fill empty slots
 ```
 
-Bleak on Linux supports multiple simultaneous BLE central connections. Each
-Pico is a BLE peripheral that accepts one central at a time — so N Picos each
-accept the Zero as their sole central.
+- Scans are serialized (BlueZ rejects overlapping scans).
+- A Pico whose name is not in the roster is never connected.
+- A drop on one badge reconnects only that slot.
+- Plan for 2–4 badges per Zero on the first hardware pass; a connect that
+  fails past the BLE budget leaves that slot **not connected**.
 
-### Server-side changes needed
+### Multi-badge game flow
 
-The server data model requires **no breaking changes**. The following additions
-are needed:
+| Controller event | Badge result |
+| --- | --- |
+| Emoji selection on the Zero | `MENU:POS:NEG` written to every connected badge; one `POST /api/emoji` for the station |
+| `game.opened` | Every connected badge shows `GAME:lobby` |
+| `KEY1` join (`POST /api/games/:id/join` once) | Every badge shows `GAME:lobby_joined` |
+| Badge connects mid-game | That badge alone receives the current `GAME:*` command |
+| Question / result / end events | Every connected badge gets the matching `GAME:*` |
 
-#### `pairBindings` — unchanged
-
-`pairName → gameId` continues to bind the controller to a game. This does not
-need to know how many badges are attached.
-
-#### `badgeRegistrations` — new (optional)
-
-If per-badge join/ready state is required, a new lightweight collection maps
-each physical badge to its controller:
-
-```text
-badgeRegistrations
-  badgeId     string   (unique Pico chip id, e.g. "badge-aa-bb…")
-  pairName    string   (controller this badge belongs to)
-  joinedAt    Date
-  lastSeenAt  Date
-```
-
-This is **not required** for the first multi-badge milestone. The dashboard
-can infer per-badge activity from `nfc.tagged` events that carry `badgeId`.
-
-#### `submitGuess` — `badgeId` added
+NFC: any connected badge can scan. The Zero posts the guess for the station
+`pairName` and adds the scanning slot as `badgeName`:
 
 ```json
-{ "gameId": "…", "questionId": "…", "pairName": "green", "badgeId": "badge-aa-bb…", "cardUid": "…" }
+{
+  "gameId": "…",
+  "questionId": "…",
+  "pairName": "green",
+  "badgeName": "green-2",
+  "cardUid": "…",
+  "slotLabel": "B"
+}
 ```
 
-`badgeId` is required in multi-badge mode so the server and dashboard know
-which physical badge scanned which card. In Mode 1 the Zero already knows its
-single badge's `badgeId` and includes it automatically — no change to the
-1:1 flow.
+The first scan of a question counts. The server keeps one guess per
+`pairName` per question, so a later scan from a sibling badge is rejected the
+same way a repeat scan is. `nfc.tagged` echoes `badgeName`.
 
-#### `nfc.tagged` dashboard event — `badgeId` added
+### Multi-badge server and dashboard
 
-```json
-{ "type": "nfc.tagged", "pairName": "green", "badgeId": "badge-aa-bb…", "cardUid": "…", "slotLabel": "B", "serverTime": "…" }
-```
+- `POST /api/status` carries `badgeName` and `badgeNames` (one post per slot).
+- `GET /api/badges` returns a `stations[]` view: one station per `pairName`
+  with one slot per roster name, including never-connected names.
+- The Badges view renders a **station card** (controller version, battery,
+  `n/m badges`, the station's game state) with one slot per roster name.
+  The slot that scanned shows a `green-2 · B` chip.
+- The referee panel binds the station `pairName` once and shows
+  `n/m badges` on the bound-pair chip and the invite list.
+- Player views, scores, and `question.result` keep one row per `pairName`.
 
-### Dashboard changes needed
+### Multi-badge Pico changes
 
-- Badge cards are already keyed by `controllerId::badgeId`, so N badges from
-  the same controller already appear as N separate cards, each labelled with
-  `pairName` as the primary label and `badgeId` as secondary.
-- A grouping view ("all cards under pairName `green`") would be useful but is
-  not required for the first milestone.
-- NFC tag activity on the game view can show per-badge activity via `badgeId`.
-
-### Zero code changes needed
-
-The main work is in `emoji-os-zero.py`:
-
-- **Multi-device scan loop** — `scan_for_device` currently returns the first
-  match; extend to return a list of all matching devices.
-- **Multiple `BleakClient` instances** — `BLEController` currently manages one
-  client; refactor to manage a `dict[str, BleakClient]` keyed by device address.
-- **Per-badge notification handler** — `_on_pico_tx_notify` must carry the
-  source `badgeId` so NFC tag events are attributed correctly.
-- **Parallel heartbeats** — one `_heartbeat_loop` task per connected badge.
-
-### Pico code changes needed
-
-None. Each Pico continues to behave identically: it advertises, accepts one
-connection, handles PAIR/GAME/MENU commands, and notifies TAG events. The
-multi-badge coordination happens entirely on the Zero.
+None. Each Pico advertises `Pico-Client-<PAIR_NAME>`, accepts only
+`PAIR:<PAIR_NAME>`, applies emoji and `GAME:*` writes, and notifies
+`TAG:<uid>`. All coordination happens on the Zero.
 
 ### Use cases
 
 | Use case | Badges per controller | Notes |
 | --- | --- | --- |
-| Individual player station | 1 | Mode 1 — current |
-| Team buzzer (e.g. 4 per team) | 2–6 | Mode 2 — planned |
-| Audience participation (large set) | 10+ | Mode 2, hardware-limited by Zero BLE stack |
-| Classroom kit | N | Mode 2 — one Zero manages a tray of badges |
+| Individual player station | 1 | Mode 1 |
+| Learning-sport station with buttonless badges | 2–4 | Mode 2 |
+| Team buzzer | 2–4 | Mode 2; one team score, not per-badge scores |
+| Larger sets | 5+ | Limited by the Zero's concurrent BLE connections |
+
+Badges scored as separate players are out of scope: give each player its own
+Zero (Mode 1) instead.
 
 ---
 
@@ -370,13 +371,15 @@ Referee (app)              Server             Zero               Pico
 
 ## Comparison summary
 
-| Aspect | Mode 1 (current) | Mode 2 (planned) |
+| Aspect | Mode 1 | Mode 2 |
 | --- | --- | --- |
-| Badges per controller | 1 | N |
-| `pairName` meaning | Controller + badge station | Controller station only |
-| Individual badge id | `badgeId` (present but redundant) | `badgeId` (essential) |
-| Config per badge | Same `pair_config.py` | Same `pair_config.py` |
-| Zero BLE clients | 1 | N |
-| Server model changes | None | `badgeId` in guess/tag events; optional `badgeRegistrations` |
-| Dashboard changes | None | Per-badge NFC activity; optional grouping view |
+| Badges per controller | 1 | Roster of N (2–4 tested target) |
+| `pairName` meaning | Controller + badge station | Controller station (one player) |
+| Individual badge id | Not needed | `badgeName` (roster slot); `badgeId` diagnostic |
+| Zero config | `PAIR_NAME` only | `PAIR_NAME` + `BADGE_NAMES` |
+| Pico config | Same `PAIR_NAME` as the Zero | Own `PAIR_NAME`, listed in `BADGE_NAMES` |
+| Zero BLE clients | 1 | One per connected roster name |
+| Bind / join / score | Once per `pairName` | Once per `pairName` (unchanged) |
+| Guess payload | `pairName` | `pairName` + `badgeName` |
+| Dashboard | One-slot station card | Station card with one slot per roster name |
 | Pico code changes | None | None |

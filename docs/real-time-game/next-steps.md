@@ -12,7 +12,7 @@
 | 7 | NFC card → answer mapping (demo-ready) | ✅ done |
 | 8 | Scoring + results + platform icons | ✅ done — see `8-scoring.md` |
 | 9 | NFC card group management UI | 🔲 planned |
-| 10 | Multi-badge (Mode 2) | 🔲 planned |
+| 10 | Multi-badge (Mode 2) | ✅ done — hardware check pending |
 
 ---
 
@@ -465,21 +465,25 @@ from a dropdown of existing groups.
 
 ---
 
-## Step 10 — Multi-badge Mode 2 (planned)
+## Step 10 — Multi-badge Mode 2 (done)
 
-Detailed plan: [`multi-badge-plan.md`](./multi-badge-plan.md).
-Milestones 0–5 are done (config, multi-connect, command fan-out, per-badge
-status posts, server `stations` grouping, React station card). Referee
-surfaces and NFC attribution are next.
+Detailed plan and as-built notes:
+[`multi-badge-plan.md`](./multi-badge-plan.md). Milestones 0–7 are done
+(config, multi-connect, command fan-out, per-badge status posts, server
+`stations` grouping, React station card, referee / NFC attribution, docs).
+The Milestone 7 hardware checklist still has to be run on devices.
 
 One Zero commands several named Picos. The controller keeps `PAIR_NAME` as
 the station id (bind / join / score) and adds a `BADGE_NAMES` roster of Pico
 `PAIR_NAME` values it may auto-connect. Buttonless badges follow the
 controller's emoji and `GAME:*` state. The dashboard shows one station card
-with a slot per roster name (including **not connected**).
+with a slot per roster name (including **not connected**). Any badge can
+scan; the first scan per question is the station's guess, attributed by
+`badgeName`.
 
-See `game-modes.md` for the older same-name sketch; the roster model in
-`multi-badge-plan.md` is the implementation path.
+User-facing summary: `game-modes.md` Mode 2. Device setup:
+`rainbow-connection/python/emoji-os/project/controller-setup.md` and
+`badge-setup.md`.
 
 ---
 
