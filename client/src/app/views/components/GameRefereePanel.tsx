@@ -25,6 +25,12 @@ import {
   logFromServerGameState,
   logGameState,
 } from '../../shared/game-state-log';
+import {
+  connectedSlotCount,
+  sortedStations,
+  stationsFromSnapshot,
+  type BadgesSnapshotResponse,
+} from '../badge-stations';
 
 const chipSpring = { type: 'spring' as const, stiffness: 420, damping: 28 };
 
@@ -51,6 +57,17 @@ type GameDetail = {
   boundPairs: BoundPair[];
   questions: Array<{ state: string }>;
 };
+
+/** A live station (one player); `total` > 1 for a multi-badge roster. */
+type KnownPair = {
+  pairName: string;
+  connected: number;
+  total: number;
+};
+
+function badgeCountLabel(known: KnownPair | undefined): string | null {
+  return known && known.total > 1 ? `${known.connected}/${known.total} badges` : null;
+}
 
 type LifecycleButton = {
   label: string;
@@ -92,8 +109,8 @@ export function GameRefereePanel({
   const [lifecycleLoading, setLifecycleLoading] = useState<string | null>(null);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
 
-  // Live pairs from GET /api/badges (Zeros that have posted status with pairName).
-  const [knownPairs, setKnownPairs] = useState<string[]>([]);
+  // Live stations from GET /api/badges (Zeros that have posted status with pairName).
+  const [knownPairs, setKnownPairs] = useState<KnownPair[]>([]);
   const [badgesLoading, setBadgesLoading] = useState(true);
 
   const loadKnownPairs = useCallback(async () => {
@@ -101,15 +118,14 @@ export function GameRefereePanel({
     try {
       const res = await fetch('/api/badges', { credentials: 'same-origin' });
       if (!res.ok) return;
-      const data = (await res.json()) as {
-        badges: Array<{ status?: { pairName?: string } | null }>;
-      };
-      const names = new Set<string>();
-      for (const b of data.badges) {
-        const name = b.status?.pairName;
-        if (name) names.add(name);
-      }
-      setKnownPairs([...names].sort());
+      const data = (await res.json()) as BadgesSnapshotResponse;
+      setKnownPairs(
+        sortedStations(stationsFromSnapshot(data)).map((station) => ({
+          pairName: station.pairName,
+          connected: connectedSlotCount(station),
+          total: station.badgeNames.length,
+        })),
+      );
     } catch {
       // suggestions are optional
     } finally {
@@ -124,8 +140,13 @@ export function GameRefereePanel({
   }, [loadKnownPairs]);
 
   const unboundPairs = useMemo(
-    () => knownPairs.filter((n) => !game.boundPairs.some((bp) => bp.pairName === n)),
+    () =>
+      knownPairs.filter((known) => !game.boundPairs.some((bp) => bp.pairName === known.pairName)),
     [knownPairs, game.boundPairs],
+  );
+  const knownByName = useMemo(
+    () => new Map(knownPairs.map((known) => [known.pairName, known])),
+    [knownPairs],
   );
 
   // NFC card group assignment
@@ -277,115 +298,126 @@ export function GameRefereePanel({
         ) : (
           <div className="relative flex flex-col gap-1">
             <AnimatePresence mode="popLayout" initial={false}>
-              {game.boundPairs.map((bp) => (
-                <motion.div
-                  key={bp.pairName}
-                  layout
-                  initial={{ opacity: 0, scale: 0.85, y: -4 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: -4 }}
-                  transition={chipSpring}
-                  className="flex items-center gap-2"
-                >
-                  <motion.span
+              {game.boundPairs.map((bp) => {
+                const badgeCount = badgeCountLabel(knownByName.get(bp.pairName));
+                return (
+                  <motion.div
+                    key={bp.pairName}
                     layout
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs',
-                      isBetweenRounds && bp.readyForNextQuestion === true
-                        ? 'border-green-400/60 bg-green-50 text-green-800'
-                        : isBetweenRounds && bp.readyForNextQuestion === false
-                          ? 'border-red-400/60 bg-red-50 text-red-800'
-                          : isBetweenRounds
-                            ? 'border-amber-400/60 bg-amber-50 text-amber-800'
-                            : bp.joined
-                              ? 'border-green-400/60 bg-green-50 text-green-800'
-                              : 'border-border bg-muted/50 text-muted-foreground',
-                    )}
+                    initial={{ opacity: 0, scale: 0.85, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: -4 }}
+                    transition={chipSpring}
+                    className="flex items-center gap-2"
                   >
-                    {bp.pairName}
-                    <AnimatePresence mode="wait" initial={false}>
-                      {isBetweenRounds ? (
-                        <motion.span
-                          key={`readiness-${String(bp.readyForNextQuestion)}`}
-                          className="inline-flex items-center gap-1"
-                          initial={{ opacity: 0, scale: 0.5 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.5 }}
-                          transition={chipSpring}
-                        >
-                          {bp.readyForNextQuestion === true ? (
-                            <>
-                              <CheckCircle2 className="h-3 w-3" aria-label="Ready" />
-                              <TextReveal
-                                revealKey="ready"
-                                className="text-[10px]"
-                              >
-                                · ready
-                              </TextReveal>
-                            </>
-                          ) : bp.readyForNextQuestion === false ? (
-                            <>
-                              <XCircle className="h-3 w-3" aria-label="Needs more time" />
-                              <TextReveal
-                                revealKey="wait"
-                                className="text-[10px]"
-                              >
-                                · wait
-                              </TextReveal>
-                            </>
-                          ) : (
-                            <>
-                              <HelpCircle
-                                className="h-3 w-3"
-                                aria-label="Waiting for response"
-                              />
-                              <TextReveal
-                                revealKey="awaiting-response"
-                                className="text-[10px]"
-                              >
-                                · awaiting response
-                              </TextReveal>
-                            </>
-                          )}
-                        </motion.span>
-                      ) : bp.joined ? (
-                        <motion.span
-                          key="joined"
-                          className="inline-flex items-center gap-1"
-                          initial={{ opacity: 0, scale: 0.5 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.5 }}
-                          transition={chipSpring}
-                        >
-                          <CheckCircle2 className="h-3 w-3" aria-label="Ready to start" />
-                          <TextReveal
-                            revealKey="ready-to-start"
-                            className="text-[10px]"
-                          >
-                            · ready to start
-                          </TextReveal>
-                        </motion.span>
-                      ) : (
-                        <motion.span
-                          key="waiting"
-                          className="text-[10px]"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 0.15 }}
-                        >
-                          <TextReveal
-                            revealKey="waiting-to-join"
-                            className="text-[10px]"
-                          >
-                            · waiting to join
-                          </TextReveal>
-                        </motion.span>
+                    <motion.span
+                      layout
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs',
+                        isBetweenRounds && bp.readyForNextQuestion === true
+                          ? 'border-green-400/60 bg-green-50 text-green-800'
+                          : isBetweenRounds && bp.readyForNextQuestion === false
+                            ? 'border-red-400/60 bg-red-50 text-red-800'
+                            : isBetweenRounds
+                              ? 'border-amber-400/60 bg-amber-50 text-amber-800'
+                              : bp.joined
+                                ? 'border-green-400/60 bg-green-50 text-green-800'
+                                : 'border-border bg-muted/50 text-muted-foreground',
                       )}
-                    </AnimatePresence>
-                  </motion.span>
-                </motion.div>
-              ))}
+                    >
+                      {bp.pairName}
+                      <AnimatePresence mode="wait" initial={false}>
+                        {isBetweenRounds ? (
+                          <motion.span
+                            key={`readiness-${String(bp.readyForNextQuestion)}`}
+                            className="inline-flex items-center gap-1"
+                            initial={{ opacity: 0, scale: 0.5 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.5 }}
+                            transition={chipSpring}
+                          >
+                            {bp.readyForNextQuestion === true ? (
+                              <>
+                                <CheckCircle2 className="h-3 w-3" aria-label="Ready" />
+                                <TextReveal
+                                  revealKey="ready"
+                                  className="text-[10px]"
+                                >
+                                  · ready
+                                </TextReveal>
+                              </>
+                            ) : bp.readyForNextQuestion === false ? (
+                              <>
+                                <XCircle className="h-3 w-3" aria-label="Needs more time" />
+                                <TextReveal
+                                  revealKey="wait"
+                                  className="text-[10px]"
+                                >
+                                  · wait
+                                </TextReveal>
+                              </>
+                            ) : (
+                              <>
+                                <HelpCircle
+                                  className="h-3 w-3"
+                                  aria-label="Waiting for response"
+                                />
+                                <TextReveal
+                                  revealKey="awaiting-response"
+                                  className="text-[10px]"
+                                >
+                                  · awaiting response
+                                </TextReveal>
+                              </>
+                            )}
+                          </motion.span>
+                        ) : bp.joined ? (
+                          <motion.span
+                            key="joined"
+                            className="inline-flex items-center gap-1"
+                            initial={{ opacity: 0, scale: 0.5 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.5 }}
+                            transition={chipSpring}
+                          >
+                            <CheckCircle2 className="h-3 w-3" aria-label="Ready to start" />
+                            <TextReveal
+                              revealKey="ready-to-start"
+                              className="text-[10px]"
+                            >
+                              · ready to start
+                            </TextReveal>
+                          </motion.span>
+                        ) : (
+                          <motion.span
+                            key="waiting"
+                            className="text-[10px]"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                          >
+                            <TextReveal
+                              revealKey="waiting-to-join"
+                              className="text-[10px]"
+                            >
+                              · waiting to join
+                            </TextReveal>
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </motion.span>
+                    {badgeCount && (
+                      <span
+                        className="text-[10px] tabular-nums text-muted-foreground"
+                        title="Connected badges on this station"
+                      >
+                        {badgeCount}
+                      </span>
+                    )}
+                  </motion.div>
+                );
+              })}
             </AnimatePresence>
           </div>
         )}
@@ -407,11 +439,19 @@ export function GameRefereePanel({
                 <SelectValue placeholder="Select a live pair…" />
               </SelectTrigger>
               <SelectContent>
-                {unboundPairs.map((n) => (
-                  <SelectItem key={n} value={n}>
-                    {n}
-                  </SelectItem>
-                ))}
+                {unboundPairs.map((known) => {
+                  const badgeCount = badgeCountLabel(known);
+                  return (
+                    <SelectItem key={known.pairName} value={known.pairName}>
+                      {known.pairName}
+                      {badgeCount && (
+                        <span className="ml-1.5 text-[10px] tabular-nums text-muted-foreground">
+                          {badgeCount}
+                        </span>
+                      )}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
             <Button

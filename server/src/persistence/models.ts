@@ -185,6 +185,7 @@ const guessSchema = new Schema(
     guesserUserId: { type: objectId, ref: 'User', immutable: true },
     pairName: { type: String },
     badgeId: { type: objectId, ref: 'Badge' },
+    badgeName: { type: String },
     cardUid: { type: String },
     slotLabel: { type: String, enum: slotLabelValues },
   },

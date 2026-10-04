@@ -225,6 +225,22 @@ export function stationsFromSnapshot(data: BadgesSnapshotResponse): StationsByNa
   return Array.isArray(data.badges) ? stationsFromFlat(data.badges) : {};
 }
 
+/** If `connected` but no liveness for this long, show offline (abrupt power-off, etc.). */
+const STALE_CONNECTED_MS = 90_000;
+
+/** `connected` with recent liveness; the server never synthesizes `offline`. */
+export function isLiveConnected(status?: StatusChangedEvent): boolean {
+  if (status?.bleStatus !== 'connected') {
+    return false;
+  }
+  const t = new Date(status.timestamp).getTime();
+  return !Number.isNaN(t) && Date.now() - t <= STALE_CONNECTED_MS;
+}
+
+export function connectedSlotCount(station: StationRecord): number {
+  return station.badgeNames.filter((name) => isLiveConnected(station.slots[name]?.status)).length;
+}
+
 export function sortedStations(stations: StationsByName): StationRecord[] {
   return Object.values(stations).sort((a, b) => a.pairName.localeCompare(b.pairName));
 }

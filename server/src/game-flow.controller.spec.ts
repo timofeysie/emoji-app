@@ -479,6 +479,89 @@ describe('GameFlowController', () => {
     expect(repository.setQuestionState).not.toHaveBeenCalled();
   });
 
+  it('records the station guess and echoes badgeName for a multi-badge scan', async () => {
+    const res = createResponseMock();
+    repository.submitGuess.mockResolvedValue({
+      guessId: '507f1f77bcf86cd799439020',
+      answerOptionId: '507f1f77bcf86cd799439021',
+      slotLabel: 'B',
+      isCorrect: false,
+      cardLabel: 'b',
+      gameTitle: 'Demo Night',
+    });
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'white',
+        badgeName: 'white-2',
+        cardUid: 'DB:93:B7:08',
+        slotLabel: 'B',
+      },
+      res as unknown as Response,
+    );
+
+    expect(repository.submitGuess).toHaveBeenCalledWith(
+      expect.objectContaining({ pairName: 'white', badgeName: 'white-2' }),
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'nfc.tagged',
+        pairName: 'white',
+        badgeName: 'white-2',
+        slotLabel: 'B',
+      }),
+    );
+  });
+
+  it('omits badgeName from nfc.tagged when the guess has none', async () => {
+    const res = createResponseMock();
+    repository.submitGuess.mockResolvedValue({
+      guessId: '507f1f77bcf86cd799439020',
+      answerOptionId: '507f1f77bcf86cd799439021',
+      slotLabel: 'A',
+      isCorrect: true,
+      cardLabel: 'a',
+      gameTitle: 'Demo Night',
+    });
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'white',
+        cardUid: '5B:6F:B8:08',
+      },
+      res as unknown as Response,
+    );
+
+    const event = badgeStateService.broadcastDashboard.mock.calls
+      .map(([payload]) => payload as Record<string, unknown>)
+      .find((payload) => payload['type'] === 'nfc.tagged');
+    expect(event).toBeDefined();
+    expect(event).not.toHaveProperty('badgeName');
+  });
+
+  it('rejects an empty badgeName', async () => {
+    const res = createResponseMock();
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'white',
+        badgeName: '',
+        cardUid: '5B:6F:B8:08',
+      },
+      res as unknown as Response,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(repository.submitGuess).not.toHaveBeenCalled();
+  });
+
   it('auto-closes the question when the last bound pair answers', async () => {
     const res = createResponseMock();
     repository.submitGuess.mockResolvedValue({

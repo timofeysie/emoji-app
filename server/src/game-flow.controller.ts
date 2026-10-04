@@ -94,6 +94,7 @@ const submitGuessSchema = z.object({
   guesserUserId: objectIdSchema.optional(),
   pairName: z.string().min(1).optional(),
   badgeId: objectIdSchema.optional(),
+  badgeName: z.string().min(1).optional(),
   cardUid: z.string().min(1),
   slotLabel: slotLabelSchema.optional(),
 });
@@ -748,7 +749,7 @@ export class GameFlowController {
     try {
       outcome = await this.gameDataRepository.submitGuess(result.data);
 
-      const { gameId, questionId, pairName, badgeId, cardUid } = result.data;
+      const { gameId, questionId, pairName, badgeId, badgeName, cardUid } = result.data;
       const seedCard = cardUid ? this.nfcCardService.findByUid(cardUid) : undefined;
       cardLabel = seedCard
         ? shortCardLabel(seedCard.name, outcome.slotLabel)
@@ -760,6 +761,7 @@ export class GameFlowController {
         questionId,
         ...(pairName ? { pairName } : {}),
         ...(badgeId ? { badgeId } : {}),
+        ...(badgeName ? { badgeName } : {}),
         ...(cardUid ? { cardUid } : {}),
         slotLabel: outcome.slotLabel ?? undefined,
         cardLabel,

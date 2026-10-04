@@ -25,6 +25,7 @@ import {
   Loader2,
   Meh,
   Power,
+  ScanLine,
   Skull,
   Smile,
   Square,
@@ -54,6 +55,8 @@ import { getWsUrl } from '../shared/ws-url';
 import {
   applyEmojiToStations,
   applyStatusToStations,
+  connectedSlotCount,
+  isLiveConnected,
   sortedStations,
   stationsFromSnapshot,
   type BadgesSnapshotResponse,
@@ -100,6 +103,7 @@ type WsEnvelope =
       pairName?: string;
       controllerId?: string;
       badgeId?: string;
+      badgeName?: string;
       cardUid?: string;
       slotLabel?: string;
       cardLabel?: string;
@@ -153,6 +157,8 @@ type NfcTagEvent = {
   pairName?: string;
   controllerId?: string;
   badgeId?: string;
+  /** Station roster slot that scanned; the guess itself belongs to `pairName`. */
+  badgeName?: string;
   cardUid?: string;
   slotLabel?: string;
   isCorrect?: boolean;
@@ -256,9 +262,6 @@ function isNfcNeg(label: string): boolean {
   return label === 'others_nfc_neg';
 }
 
-/** If `connected` but no liveness for this long, show offline (abrupt power-off, etc.). */
-const STALE_CONNECTED_MS = 90_000;
-
 function resolveBleDisplay(status?: StatusChangedEvent): DisplayBleStatus {
   if (!status) {
     return 'unknown';
@@ -266,14 +269,7 @@ function resolveBleDisplay(status?: StatusChangedEvent): DisplayBleStatus {
   if (status.bleStatus !== 'connected') {
     return status.bleStatus;
   }
-  const t = new Date(status.timestamp).getTime();
-  if (Number.isNaN(t)) {
-    return 'offline';
-  }
-  if (Date.now() - t > STALE_CONNECTED_MS) {
-    return 'offline';
-  }
-  return 'connected';
+  return isLiveConnected(status) ? 'connected' : 'offline';
 }
 
 function getEmojiIconForLabel(label: string): LucideIcon {
@@ -674,12 +670,6 @@ const SLOT_STATUS_LABELS: Record<DisplayBleStatus, string> = {
   unknown: 'not connected',
 };
 
-function connectedSlotCount(station: StationRecord): number {
-  return station.badgeNames.filter(
-    (name) => resolveBleDisplay(station.slots[name]?.status) === 'connected',
-  ).length;
-}
-
 function StationCardHeader({
   station,
   versionInfo,
@@ -728,6 +718,38 @@ function StationCardHeader({
   );
 }
 
+/** Marks the slot whose badge scanned the station's current guess (`white-2 · B`). */
+function SlotNfcChip({ nfcEvent, correct }: { nfcEvent: NfcTagEvent; correct?: boolean }) {
+  return (
+    <motion.span
+      className={cn(
+        'inline-flex w-fit items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-tight',
+        correct === true
+          ? 'bg-blue-50 text-blue-700'
+          : correct === false
+            ? 'bg-red-50 text-red-700'
+            : 'bg-muted text-foreground',
+      )}
+      title="This badge scanned the station's guess"
+      initial={{ opacity: 0, scale: 0.6 }}
+      animate={{
+        opacity: 1,
+        scale: [0.6, 1.15, 1],
+        boxShadow: [
+          '0 0 0 0 rgba(59, 130, 246, 0.6)',
+          '0 0 0 6px rgba(59, 130, 246, 0)',
+          '0 0 0 0 rgba(59, 130, 246, 0)',
+        ],
+      }}
+      transition={{ duration: FRESH_HIGHLIGHT_MS / 1000, times: [0, 0.3, 1] }}
+    >
+      <ScanLine className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
+      {nfcEvent.badgeName}
+      {nfcEvent.slotLabel ? ` · ${nfcEvent.slotLabel}` : ''}
+    </motion.span>
+  );
+}
+
 function StationSlotCard({
   station,
   slot,
@@ -757,6 +779,14 @@ function StationSlotCard({
     live || display === 'connecting' || badgeId
       ? SLOT_STATUS_LABELS[display]
       : SLOT_STATUS_LABELS.unknown;
+  const stationNfc = game.nfcByPair[station.pairName];
+  const scannedHere =
+    station.badgeNames.length > 1 &&
+    stationNfc?.badgeName != null &&
+    stationNfc.badgeName === slot.badgeName;
+  const stationAnswer = Object.prototype.hasOwnProperty.call(game.answerByPair, station.pairName)
+    ? game.answerByPair[station.pairName]
+    : undefined;
 
   return (
     <div
@@ -785,6 +815,13 @@ function StationSlotCard({
         </TextReveal>
       </div>
       <BleConnectionRow status={status} />
+      {scannedHere && stationNfc && (
+        <SlotNfcChip
+          key={`${stationNfc.serverTime}-${stationNfc.cardUid ?? ''}`}
+          nfcEvent={stationNfc}
+          correct={stationAnswer}
+        />
+      )}
       {(knownPico || badgeId) && (
         <div className="flex flex-col gap-0.5 text-[10px] leading-tight text-muted-foreground">
           {knownPico && (
@@ -833,7 +870,11 @@ function StationCardBody({
     <>
       <StationCardHeader station={station} versionInfo={versionInfo} />
       <div className="flex flex-col gap-1.5 p-1.5">
-        <BadgeCardGameSection pairName={station.pairName} {...game} />
+        <BadgeCardGameSection
+          pairName={station.pairName}
+          showNfcSource={station.badgeNames.length > 1}
+          {...game}
+        />
         <div className="flex flex-wrap gap-1.5">
           {station.badgeNames.map((badgeName) => (
             <StationSlotCard
@@ -882,6 +923,7 @@ function ResultChip({ result }: { result: QuestionResultEntry }) {
 
 function BadgeCardGameSection({
   pairName,
+  showNfcSource = false,
   activeGame,
   joinsByPair,
   nfcByPair,
@@ -891,6 +933,8 @@ function BadgeCardGameSection({
   winnerPairNames,
 }: {
   pairName?: string;
+  /** Name the scanning badge on the NFC line (multi-badge stations). */
+  showNfcSource?: boolean;
   activeGame: GameEventState | null;
   joinsByPair: Record<string, JoinEvent>;
   nfcByPair: Record<string, NfcTagEvent>;
@@ -941,7 +985,8 @@ function BadgeCardGameSection({
       {nfcEvent && (
         <div className="flex items-center gap-1">
           <span>
-            NFC{nfcEvent.slotLabel ? `: ${nfcEvent.slotLabel}` : ''} ·{' '}
+            NFC{nfcEvent.slotLabel ? `: ${nfcEvent.slotLabel}` : ''}
+            {showNfcSource && nfcEvent.badgeName ? ` from ${nfcEvent.badgeName}` : ''} ·{' '}
             {formatShortTime(nfcEvent.serverTime)}
           </span>
           {answered && !result && (
@@ -1343,6 +1388,7 @@ export const BadgesView = () => {
                 pairName: message.pairName,
                 controllerId: message.controllerId,
                 badgeId: message.badgeId,
+                badgeName: message.badgeName,
                 cardUid: message.cardUid,
                 slotLabel: message.slotLabel,
                 isCorrect: message.isCorrect,
@@ -1360,9 +1406,10 @@ export const BadgesView = () => {
           const slot = message.slotLabel ?? '?';
           const card = message.cardLabel ?? slot;
           const gameRef = refFor(message.gameId, message.gameTitle);
+          const badgeRef = message.badgeName ? ` badge=${message.badgeName}` : '';
           logGameState(
             'card_scanned',
-            `WS nfc.tagged pair=${pair} card=${card} slot=${slot} cardUid=${message.cardUid ?? '?'} ${gameRef}`,
+            `WS nfc.tagged pair=${pair}${badgeRef} card=${card} slot=${slot} cardUid=${message.cardUid ?? '?'} ${gameRef}`,
           );
           if (typeof message.isCorrect === 'boolean') {
             logGameState(

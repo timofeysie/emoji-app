@@ -37,6 +37,8 @@ export type SubmitGuessInput = {
   guesserUserId?: string;
   pairName?: string;
   badgeId?: string;
+  /** Roster slot of the station badge that scanned (multi-badge attribution only). */
+  badgeName?: string;
   cardUid: string;
   slotLabel?: SlotLabel;
 };
@@ -465,6 +467,7 @@ export class GameDataRepository {
             ...(input.guesserUserId ? { guesserUserId: asObjectId(input.guesserUserId) } : {}),
             ...(input.pairName ? { pairName: input.pairName } : {}),
             ...(input.badgeId ? { badgeId: asObjectId(input.badgeId) } : {}),
+            ...(input.badgeName ? { badgeName: input.badgeName } : {}),
             cardUid: input.cardUid,
             slotLabel: resolvedSlotLabel,
           },

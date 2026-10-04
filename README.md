@@ -42,7 +42,7 @@ command above.
 
 ```bash
 cp .env.example .env
-npm run dev
+npm run dev # both apps started and frontend available at http://localhost:5200
 npm run dev:client
 npm run dev:server
 npm run build

@@ -676,6 +676,7 @@ export function GameDetailView() {
           gameTitle?: string;
           questionId?: string;
           pairName?: string;
+          badgeName?: string;
           cardLabel?: string;
           slotLabel?: string;
           cardUid?: string;
@@ -704,9 +705,10 @@ export function GameDetailView() {
           });
           const pair = message.pairName ?? '?';
           const card = message.cardLabel ?? message.slotLabel ?? '?';
+          const badgeRef = message.badgeName ? ` badge=${message.badgeName}` : '';
           logGameState(
             'card_scanned',
-            `WS nfc.tagged pair=${pair} card=${card} slot=${message.slotLabel ?? '?'} ${gameRef}`,
+            `WS nfc.tagged pair=${pair}${badgeRef} card=${card} slot=${message.slotLabel ?? '?'} ${gameRef}`,
           );
           if (typeof message.isCorrect === 'boolean') {
             logGameState(

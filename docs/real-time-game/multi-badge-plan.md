@@ -52,7 +52,7 @@ controller instead.
 | 3 | Per-badge status posts + game follow | Zero → server | ✅ done |
 | 4 | Server station + badge-slot model | NestJS | ✅ done |
 | 5 | React station component | React | ✅ done |
-| 6 | Game / referee surfaces + NFC attribution | Server + React | 🔲 planned |
+| 6 | Game / referee surfaces + NFC attribution | Server + React | ✅ done |
 | 7 | Docs, setup, hardware verification | Docs + devices | 🔲 planned |
 
 Mode 1 (one controller, one badge) must keep working after every milestone.
@@ -622,15 +622,43 @@ small NFC chip (`white-2 · B`).
 `GamePlayView` and leaderboard rows stay one row per `pairName`. Do not
 add a row per badge.
 
+### As implemented (Milestone 6)
+
+- `POST /api/guesses` takes optional `badgeName` (non-empty string). It is
+  stored on the `Guess` document and echoed on `nfc.tagged` only when sent.
+- Uniqueness is unchanged: the `uniq_guess_per_pair` index
+  (`questionId` + `pairName`) rejects a sibling badge's later scan with the
+  same `400` a repeat scan gets today. With one bound pair the first guess
+  also auto-closes the question, so the sibling sees "not open".
+- Zero `0.7.16`: `_relay_nfc_tag` adds `badgeName` from the notify closure
+  and resolves `badgeId` per slot (still sent only when it is a 24-char
+  ObjectId override).
+- Dashboard: the station game section reads `NFC: B from white-2` for
+  rosters of 2+. The source slot shows a `white-2 · B` chip (blue when
+  correct, red when wrong) that pulses on arrival and clears on the next
+  `question.opened`. Mode 1 is visually unchanged.
+- Referee panel: known pairs come from `stations` (via
+  `stationsFromSnapshot`, so old servers still work). Bound-pair chips and
+  invite options show `n/m badges` for rosters of 2+. The connected count
+  uses the shared `isLiveConnected` stale rule in `badge-stations.ts`.
+- `GameDetailView` and `BadgesView` game logs include `badge=<badgeName>`.
+- Tests: `server/src/game-flow.controller.spec.ts` (echo, omission, empty
+  `badgeName` rejected).
+- Verified in the browser with a simulated 3-name station (two connected):
+  one bind and one join, a scan from the second badge scored the station
+  once, and the sibling's scan was rejected.
+
 ### Acceptance criteria — Milestone 6
 
-- [ ] Binding `white` once is enough for all of that station's badges to
+- [x] Binding `white` once is enough for all of that station's badges to
       receive game events (via the Zero fan-out).
-- [ ] One join from the Zero marks the station joined; badge slots do not
+- [x] One join from the Zero marks the station joined; badge slots do not
       each appear as waiting players.
-- [ ] First NFC from any connected badge records the station guess.
-- [ ] `nfc.tagged` includes `badgeName` when sent.
-- [ ] Scores and `question.result` still have one entry for `white`.
+- [x] First NFC from any connected badge records the station guess.
+- [x] `nfc.tagged` includes `badgeName` when sent.
+- [x] Scores and `question.result` still have one entry for `white`.
+
+Hardware confirmation is still required (Milestone 7 checklist).
 
 ---
 
