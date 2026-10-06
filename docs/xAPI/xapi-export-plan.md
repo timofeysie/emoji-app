@@ -15,6 +15,8 @@ Related:
 
 - [`xAPI.md`](./xAPI.md) — background notes, standards landscape, and the
   Korean-vocabulary pilot scenario this plan targets first
+- [`security.md`](./security.md) — security and privacy requirements for
+  Step 1a (player identity, referee-only binding, auth prerequisites, audit)
 - [`LRS.md`](./LRS.md) — LRS requirements, statement design detail, and the
   LRS options comparison that Step 1b/1c now follow
 - [`moodle.md`](./moodle.md) — why Moodle is deferred, and the options

@@ -12,6 +12,8 @@ Related:
   shape, manual export, delivery client). Step 1c is where this doc applies.
 - [`moodle.md`](./moodle.md) — why we're using an LRS directly and not Moodle
 - [`xAPI.md`](./xAPI.md) — Korean-vocabulary pilot scenario
+- [`security.md`](./security.md) — identity model, access control, audit
+  logs, data isolation (children's data)
 - `server/src/persistence/models.ts` — `Game`, `Question`, `AnswerOption`,
   `Guess` fields referenced below
 
@@ -174,6 +176,10 @@ Resulting IDs:
 > the activity ID.
 
 ### Actor
+
+> **See [`security.md`](./security.md) → Identity model.** It recommends
+> `account` with a random `externalId` and no `mbox` or real name in
+> statements, because school children may play.
 
 Planned: `{ "name": "<Player.name>", "mbox": "mailto:<Player.email>" }`.
 
