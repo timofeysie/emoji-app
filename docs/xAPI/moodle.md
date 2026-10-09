@@ -77,7 +77,8 @@ and reports. This proves the statement shape and the delivery client
 Pros: no servers, minutes to set up, standard endpoint + Basic Auth exactly
 as `xapi-export-plan.md` assumes.
 Cons: not Moodle, and the data lives with a third party. Fine for a
-personal pilot; think twice before sending a real class's names and emails.
+personal pilot. Statements carry only pseudonymous player IDs, never names
+or emails (see `security.md`).
 
 ### Option B — Self-hosted open-source LRS
 
@@ -96,7 +97,8 @@ Cons: we run it, and the reporting UIs are basic unless we add a BI tool.
 
 Statements still go to an LRS (A or B). Separately, the export **also**
 pushes each player's game score into a Moodle course gradebook via Moodle
-web services, matching players by email.
+web services, matching players to Moodle users via a referee-maintained
+mapping (players have no email; see `security.md`).
 
 - Hosting choices for Moodle:
   - **[moodle-docker](https://github.com/moodlehq/moodle-docker)**: the
@@ -204,9 +206,11 @@ only good for clicking around to refresh your Moodle knowledge.
   duplicates instead of storing them twice. That would turn the
   "re-running is safe" acceptance criterion into real idempotency for
   little extra work.
-- Actor: `mbox: "mailto:<email>"` + `name`, already planned via the
-  `Player` record. If we later push to Moodle (Option C), the same email
-  is the join key to Moodle users.
+- Actor: an `account` with the player's random `externalId`. There's no
+  email or name (decided in `security.md` because children may play). If
+  we later push grades to Moodle (Option C), email can't be the join key.
+  The referee would need to map each player to a Moodle user inside our
+  app.
 - Activity IDs must be **IRIs** that are stable and globally unique, e.g.
   `https://kogs.link/xapi/emoji-app/games/<gameId>/questions/<questionId>`
   (base IRI decided in `LRS.md`). It's hard to change after statements exist.
@@ -218,7 +222,8 @@ only good for clicking around to refresh your Moodle knowledge.
 
 - Is seeing results **inside Moodle** a real requirement for the personal
   pilot, or is an LRS dashboard enough until a teacher is involved?
-- Is it acceptable for pilot data (player names and emails) to live in a
+- Is it acceptable for pilot data (pseudonymous player IDs; no names or
+  emails, per `security.md`) to live in a
   third-party hosted LRS?
 - If a teacher pilot happens, will the school have **its own Moodle**? If
   so, its admins decide which plugins and web services are allowed, which

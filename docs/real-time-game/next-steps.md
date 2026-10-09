@@ -13,6 +13,7 @@
 | 8 | Scoring + results + platform icons | ✅ done — see `8-scoring.md` |
 | 9 | NFC card group management UI | 🔲 planned |
 | 10 | Multi-badge (Mode 2) | ✅ done — hardware check pending |
+| — | Access-control foundations: `/api/*` (referee login), `/api/public/*` (spectator share code), `/api/device/*`, WebSocket split | ⏸ deferred until funded — Step 0 of [`../xAPI/xapi-export-plan.md`](../xAPI/xapi-export-plan.md); design in [`../xAPI/security.md`](../xAPI/security.md) |
 
 ---
 

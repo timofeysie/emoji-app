@@ -13,6 +13,9 @@ Related:
   plan narrowed out of this doc
 - [`LRS.md`](./LRS.md), [`moodle.md`](./moodle.md) — LRS requirements/options
   and why Moodle itself is deferred (see "Working direction" below)
+- [`security.md`](./security.md) — privacy and security decisions (referee-only
+  login, no emails to the LRS, public/device route split) for when school
+  children play
 
 ---
 
@@ -160,6 +163,13 @@ let their class be an early real test.
 ---
 
 ## Working direction (near term)
+
+> **Focus (2026-10-09):** the main goal right now is establishing the
+> **rules and play flow of the new "learning sport"**. The xAPI export is
+> a supporting slice for the prototype. Security and compliance heavy
+> lifting (access-control build-out, parental consent, Australian
+> hosting, deletion, ST4S, SOC 2) is deferred until the prototype is
+> funded. See `security.md` → Phasing.
 
 Given the open questions above, the plan is to **defer** most of this
 (cmi5, SCORM, QTI, OneRoster, LTI, and — per `moodle.md` — Moodle itself)

@@ -10,6 +10,25 @@ deferred (see "Out of scope" below).
 > the pilot, a hosted LRS with its own dashboard is enough — Moodle is
 > deferred until a real need to show results inside an LMS shows up. See
 > "Revision: LRS instead of Moodle" below.
+>
+> **Revision (2026-10-09):** security and privacy decisions for school
+> children were added before any code. The referee is the only person who
+> logs in. Players have no email, and statements identify them only by a
+> random `externalId`. Routes are split into `/api/*`, `/api/public/*`
+> (spectators, share code) and `/api/device/*`. These land as a new
+> **Step 0**. See [`security.md`](./security.md).
+>
+> **Revision (2026-10-09, later): prototype first.** The project's focus is
+> the **rules and play flow of the "learning sport"**. This plan is a
+> supporting slice. **Step 0 is deferred until the prototype is funded**
+> (`security.md` D12), along with consent, tenancy, the audit log,
+> AU-hosted LRS and deletion. Steps 1a–1c go ahead for the prototype
+> under the [prototype guardrails](./security.md#prototype-guardrails-d12):
+> - no real children's personal data
+> - export only for consenting adults or pseudonymous playtest players
+> - the permanent identity decisions (D2–D4) built in from the start
+>
+> `emoji-os` stays in `rainbow-connection` (D13).
 
 Related:
 
@@ -75,7 +94,8 @@ So "export to Moodle" is replaced with **"export to an LRS"**:
 
 | Milestone | Title | Status |
 | --- | --- | --- |
-| 1 | Emit xAPI statements for completed games, export to a hosted LRS | 🔲 planned |
+| 0 | Access-control foundations (route prefixes, spectator share codes, device credentials) | ⏸ deferred until funded. Required before any school/children's pilot; not before the prototype (guardrails apply). |
+| 1 | Emit xAPI statements for completed games, export to a hosted LRS | 🟡 in progress (Step 1a implemented) |
 | 2+ | cmi5, SCORM, QTI, OneRoster, LTI, Moodle (gradebook push / plugin / cmi5 launch) | ⏸ deferred indefinitely — see [Out of scope](#out-of-scope-for-this-plan) |
 
 ---
@@ -88,7 +108,7 @@ milestone proves them wrong in practice.
 | Term | Meaning |
 | --- | --- |
 | Statement | One xAPI Statement (JSON, xAPI 1.0.3 shape) describing one guess or one game result. |
-| Actor | The real person (name + email) the statement is about — see identity decision below. **Not** `badgeName`/`pairName` directly. |
+| Actor | The player the statement is about, identified **only** by an xAPI `account` holding the player's random `externalId`: no email, no real name (`security.md` D3). **Not** `badgeName`/`pairName` directly. |
 | Export | A manual, explicit action on one `completed` game that generates and sends its statements. Not automatic, not continuous. |
 
 ### Actor identity requires a real person record
@@ -99,11 +119,26 @@ existing `User` model (`createdByUserId`, `authProviderId`) is the
 referee/admin account, not a player, and `Guess.guesserUserId` is optional
 and unpopulated by the pair-based play flow.
 
-Decision: xAPI actors must be real, so Milestone 1 adds a **minimal**
-identity concept — a `Player` record (`name`, `email`) and a per-game
-assignment of `badgeName` → player. This is entered manually (e.g. by the
-referee before or during the game); it is **not** a login/auth system. A
-game cannot be exported until every badge that recorded a guess has an
+Decision: xAPI actors must be real people, so Milestone 1 adds a
+**minimal** identity concept: a `Player` record and a per-game,
+time-ranged assignment of `badgeName` → player. Decided on 2026-10-09 (see
+`security.md` → Decisions D1–D4):
+
+- **The referee is the only person who logs in.** Players (possibly school
+  children) never log in and have no accounts.
+- **The referee knows the children** and is the only one who creates
+  players and binds a badge to a player, in person, as badges are handed
+  out.
+- **`Player` = `firstName` + `externalId`** (+ `createdByUserId` when
+  referee login is enforced; + `orgId` and consent after funding).
+  `firstName` is whatever the referee recognises, with no surnames.
+  `externalId` is a random UUID v4. **There's no email field**, for adults
+  either, so there's one code path.
+- **Nothing identifying goes to the LRS.** The actor is
+  `{"account": {"homePage": "https://kogs.link", "name": "<externalId>"}}`.
+  The `externalId → firstName` mapping lives only in our database.
+
+A game cannot be exported until every badge that recorded a guess has an
 assigned player.
 
 ### Statement shape
@@ -130,15 +165,15 @@ assigned player.
   `result.response`; and `result.score.scaled` on `scored` statements
   (most LRS dashboards chart `scaled`, not `raw`/`max`). See that doc for
   the full field tables and a worked example.
-- **Open, must decide before the first pilot export:** the actor
-  identifier — `mbox` (email) vs. an opaque `account` id. `LRS.md` flags
-  this because changing it later splits one learner into two actors in
-  whichever LRS holds the data.
+- **Actor identifier: decided as `account` + `externalId`** (no `mbox`, no
+  real `actor.name`). See `LRS.md` → Actor and `security.md` → Identity
+  model. It's effectively permanent once pilot statements exist.
 
 ### Trigger and delivery
 
-- Export is a manual action a referee/admin takes on a game already in
-  state `completed` (reusing the existing state machine in
+- Export is a manual action that **only the game's referee** (or a
+  platform admin) can take, under the authenticated `/api/*` prefix, on a
+  game already in state `completed` (reusing the existing state machine in
   `game-flow.controller.ts` — no new trigger is added for entering that
   state).
 - Delivery target: a configured xAPI **LRS** endpoint, using the standard
@@ -176,9 +211,11 @@ assigned player.
 - **LTI 1.3 launch** (instructor launching the game from inside the LMS) —
   assumed infeasible given the hardware badges/controllers (see `xAPI.md`);
   revisit only if that assumption turns out to be wrong.
-- **A general player/auth system** — Milestone 1 adds only the minimal
-  name+email mapping needed to produce a real actor; it does not add
-  account creation, login, or roster management.
+- **Player logins or a general roster system.** Players never log in
+  (`security.md` D1). Milestone 1 adds only the minimal referee-managed
+  `Player` record (first name + random `externalId`) needed to produce a
+  pseudonymous actor. Roster import (CSV/OneRoster) and a separate
+  org-admin role are deferred.
 - **Automatic / real-time statement streaming** — exports stay a deliberate,
   after-the-fact action on completed games only.
 - **AI-assisted question generation** (the Hashbrown-based authoring idea in
@@ -193,7 +230,8 @@ assigned player.
 
 | Area | Today | Target (Milestone 1) |
 | --- | --- | --- |
-| Identity | `pairName` / `badgeName` only; `Guess.guesserUserId` optional, unused by pair-based play | New minimal `Player` record (`name`, `email`) + per-game `badgeName → player` assignment |
+| Access control | Only `POST /api/chat` requires login; game, device and `/ws` traffic is open; `createdByUserId` read from request bodies | Step 0: `/api/*` (referee, default-deny), `/api/public/*` (spectator share code), `/api/device/*` (device credential); WebSocket split to match; identity from the token |
+| Identity | `pairName` / `badgeName` only; `Guess.guesserUserId` optional, unused by pair-based play | New minimal `Player` record (`firstName`, `externalId`, `orgId`, no email) + referee-made, time-ranged `badgeName → player` assignment |
 | Game completion | `setGameState` transitions `active → completed` manually (`game-flow.controller.ts`) | Unchanged; export becomes available once a game is `completed` |
 | Scoring data | `getGameScores`, `computeQuestionResult`, `getGameGuessChart` (`game-data.repository.ts`) return per-pair rows | Reused as the source data for statement generation; no change to their shape |
 | Export | None exists | New module: xAPI statement builder + LRS delivery client |
@@ -210,17 +248,111 @@ LRS — validated first against the personal Korean-vocabulary pilot, and
 visible through that LRS's own statement viewer/dashboard without any
 Moodle involvement.
 
+### Step 0 — Access-control foundations (⏸ deferred until funded)
+
+> **Deferred (D12).** Not part of the prototype. It becomes a prerequisite
+> before any school or children's pilot, and the prototype guardrails in
+> `security.md` cover the gap until then. When it's scheduled, consider
+> moving `emoji-os` into this repo first, with a shared device-contract
+> file (`security.md` D13; for now it stays in `rainbow-connection`).
+> Spectator expiry and rate limits are server config with env overrides
+> (D10), not shared with the station.
+
+Kept here as the agreed design for when it's picked up. Today every game
+endpoint and `/ws` is open to the internet, which is why the prototype
+stores no real children's personal data. The full design is in
+`security.md` (Decisions D5–D7, Access control, Spectators and public
+access).
+
+- **Route prefixes, default-deny:**
+  - `/api/*` requires a Cognito login (referee, platform admin), and
+    `requireAuth` attaches `req.user = { sub, groups, orgId }`.
+  - Explicit public exceptions: `GET /api/version`, health check, static
+    SPA.
+  - `createdByUserId` and similar fields come from `req.user`, **never**
+    from request bodies.
+- **Device prefix:**
+  - Move the station calls (`guesses`, `status`, `emoji`,
+    `games/:id/join`, `games/:id/readiness`, `pairs/:pairName`,
+    `nfc-cards`) under `/api/device/*`, behind a per-device credential
+    (stored hashed, revocable).
+  - Update `rainbow-connection/python/emoji-os/emoji-os-zero.py` to match.
+- **Spectator prefix `/api/public/*`:**
+  - **GET-only**, separate handlers returning a **spectator projection**:
+    badges, scores by badge, question text; no player IDs.
+  - Access by a referee-issued **share code**: random, stored hashed, one
+    per game, revocable/regenerable.
+  - The code **expires** (default 2 h after the game completes, 24 h cap)
+    and is **rate-limited** per IP and per code, with lockout after
+    repeated invalid codes.
+- **First names for spectators:** a per-game `spectatorsSeeFirstNames`
+  flag, **default off**. Only the referee can set it, and the UI warns
+  that anyone with the link will see the names.
+- **WebSocket split:** `/ws/referee` (token in the first message),
+  `/ws/public` (share code), `/ws/device` (device credential). Events are
+  sent per game and projected per audience, instead of today's broadcast
+  of every event to every client.
+- **CORS** restricted to the app's own origin(s).
+- **Audit events** (append-only `auditEvents` collection, IDs only) for:
+  share code issued/revoked, first-name opt-in toggled, device credential
+  issued/revoked. Step 1 adds binding and export events.
+
 ### Step 1a — Minimal player identity
 
-- Add a `Player` schema (`name`, `email`) in `models.ts`.
+- Add a `Player` schema in `models.ts`: `firstName` (no surnames; in
+  prototype playtests with children, a nickname or badge name, per the
+  guardrails) and `externalId` (random UUID v4, unique, immutable).
+  **No email field.** `createdByUserId` comes from the token once referee
+  login is enforced. `orgId` and consent fields are added after funding.
 - Add a per-game assignment of `badgeName` → `playerId` (new schema, or a
   field alongside `PairBinding`/`Guess` — exact shape decided during
   implementation).
+- Bindings are **referee-only**, time-ranged (`assignedAt`/`unassignedAt`,
+  reason `initial`/`swap`/`replacement`, following
+  `playerBadgeAssignment`). A guess belongs to whoever held the badge **at
+  the time of the guess**. `assignedByUserId` (from the token) and an
+  audit event per binding are added with Step 0, after funding.
 - Add a small referee-facing UI control to assign a player to a badge
   (reusing existing badge/station display in `BadgesView.tsx` /
   `GameRefereePanel.tsx`).
 - Validation: a game cannot be exported while any badge with a recorded
   guess has no assigned player.
+
+**Implemented (2026-10-09):**
+
+- Models (`models.ts`):
+  - `Player` (`players`): `firstName`, `externalId` (`crypto.randomUUID()`).
+  - `PlayerBinding` (`playerBindings`): `gameId`, `badgeName` (the
+    `Guess.pairName` player key), `playerId`, `assignedAt`,
+    `unassignedAt`, `reason` (`initial`/`swap`/`replacement`).
+  - Unique-active indexes per badge and per player.
+  - The unused `playerBadgeAssignments` (keyed to `User`/`Badge`) is left
+    as is.
+- Repository: `persistence/player.repository.ts`.
+  - **Attribution rule:** `bindingAt()` picks the binding active when the
+    guess was made.
+  - The badge's **first** binding also covers guesses made before it, so
+    the referee can bind after a round or after the game.
+  - After an unbind with no new binding, later guesses are uncovered.
+- Endpoints (`players.controller.ts`):
+  - `GET/POST /api/players`. The body is strict, so `email` or any other
+    extra field gets a 400.
+  - `GET /api/games/:gameId/player-bindings`, returning `badgeNames`,
+    `bindings` (history included) and `missingBadges`. Guesses are scoped
+    to the current run (`startedAt`), like `getGameScores`.
+  - `PUT|DELETE /api/games/:gameId/player-bindings/:badgeName`. A rebind
+    ends the badge's previous binding and the player's binding on another
+    badge. Reason defaults to `initial`, or `swap` if the badge was bound
+    before.
+- UI: `PlayerBindingsPanel.tsx` under the referee panel in
+  `GameDetailView`. It has a player picker per badge, an "add player"
+  field (first name/nickname) and a warning that lists `missingBadges`.
+  Players show with their `Player 7F3A` label.
+- Not yet:
+  - `createdByUserId`/`assignedByUserId` and binding audit events wait for
+    Step 0, since no identity comes from the token yet.
+  - The roster is global (no `orgId`) until tenancy.
+  - The "export blocked" check is `missingBadges`; Step 1c enforces it.
 
 ### Step 1b — Statement generation
 
@@ -231,9 +363,10 @@ Moodle involvement.
   interaction definition, `result.duration`/`response`,
   `result.score.scaled`).
 - Base IRI is decided: `https://kogs.link/xapi/emoji-app` (see `LRS.md` →
-  Identifiers). Still decide the actor
-  identifier (`mbox` vs. `account`) before this step ships — both are
-  called out in `LRS.md` as hard to change once statements exist.
+  Identifiers). The actor is decided as
+  `account { homePage: "https://kogs.link", name: externalId }`, with no
+  `mbox` and no `firstName` anywhere in the statement. Both are permanent
+  once pilot statements exist.
 - Pure function from (game id, player assignments) → `Statement[]`; no
   network calls, so it can be unit-tested and inspected without an LRS.
 
@@ -267,12 +400,25 @@ Moodle involvement.
 
 ### Acceptance criteria — Milestone 1
 
-- [ ] A `Player` (name + email) can be created and assigned to a badge for
-      a specific game.
+- [ ] **Step 0 (deferred until funded):** every `/api/*` route except the explicit public ones
+      returns 401 without a valid Cognito token, and `createdByUserId` is
+      never read from a request body.
+- [ ] **Step 0 (deferred until funded):** stations work only via `/api/device/*` and `/ws/device`
+      with a valid device credential.
+- [ ] **Step 0 (deferred until funded):** a spectator with a valid share code can watch one game
+      via `/api/public/*` and `/ws/public` (GET only). The spectator view
+      shows no player identity unless the game's first-name opt-in is on.
+      An expired, revoked or wrong code gets 404, and repeated wrong codes
+      are rate-limited.
+- [ ] A `Player` (first name + generated `externalId`, no email) can be
+      created by the referee and bound to a badge for a specific game; the
+      binding records who made it.
 - [ ] A game with any unassigned badge that recorded a guess cannot be
       exported; the error names the missing badge.
 - [ ] Exporting a completed game produces one `answered` statement per
-      guess and one `scored` statement per player, each with a real actor,
+      guess and one `scored` statement per player, each with an `account`
+      actor (`externalId`) and **no email or first name anywhere in the
+      statement**,
       matching `getGameScores` / `computeQuestionResult`.
 - [ ] Statements are successfully written to a real LRS endpoint and are
       visible in that LRS's own statement viewer/dashboard — no Moodle
@@ -288,8 +434,10 @@ Moodle involvement.
 
 ## Suggested implementation order
 
-1. **Step 1a** — player identity + badge assignment (server + a minimal
-   referee UI control).
+- *(Step 0 deferred until funded; see above. The prototype relies on the
+  guardrails in `security.md`.)*
+1. **Step 1a** — player identity + referee-only badge assignment (server +
+   a minimal referee UI control).
 2. **Step 1b** — statement generation as a pure, testable function (verify
    by logging/inspecting generated JSON; no LRS needed yet). In parallel,
    do the Veracity setup and curl smoke test in `LRS.md` (Steps 1–4), so
@@ -304,9 +452,12 @@ Moodle involvement.
 ## Risk notes
 
 - **Pilot data lives with a third party.** The pilot LRS (Veracity, per
-  `LRS.md`) is hosted SaaS — fine for a personal pilot, worth reconsidering before sending a real class's names and
-  emails. `LRS.md`'s self-hosted options (SQL LRS, Learning Locker) are the
-  fallback if that matters.
+  `LRS.md`) is hosted SaaS. Statements carry only pseudonymous
+  `externalId`s, with no names or emails, which greatly reduces the
+  exposure. Even so, it's still pseudonymous personal data, so check
+  Veracity's DPA and data location before a school pilot (`security.md` →
+  Third parties). `LRS.md`'s self-hosted options (SQL LRS, Learning
+  Locker) are the fallback if that matters.
 - **Veracity free-tier reporting is unconfirmed.** It's unclear whether
   the free plan includes Analytics dashboards or only the statement viewer.
   `LRS.md` Step 5 checks this on `dev` after the first exports. If
@@ -320,6 +471,16 @@ Moodle involvement.
 - **Custom context extensions aren't portable.** `gameId`/`stationName`/
   `badgeName` in `context.extensions` are useful for our own traceability
   but are not a standard xAPI vocabulary other tools would understand.
-- **The `mbox`/`account` and base-IRI choices are effectively permanent**
-  once real statements have been sent (per `LRS.md`) — decide both before
-  the first pilot export, not during Step 1c.
+- **The actor format and base IRI are effectively permanent** once real
+  statements have been sent (per `LRS.md`). Both are now decided
+  (`account` + `externalId`; `https://kogs.link/xapi/emoji-app`), so they
+  must not drift during implementation.
+- **Prototype runs on an open staging server.** Until Step 0 (deferred),
+  anyone who finds `emoji-staging.kogs.link` can read or alter games. The
+  guardrails (no real children's data) are what keep this acceptable. If
+  a children's pilot comes up before funding, Step 0 must be done first.
+- **Step 0 (when it's picked up) touches the station firmware/script
+  too.** Moving device calls
+  to `/api/device/*` with credentials needs a coordinated update of
+  `emoji-os-zero.py`. Stations running the old script will stop working
+  until updated.

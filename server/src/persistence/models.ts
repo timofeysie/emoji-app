@@ -16,6 +16,7 @@ import {
   participantRoleValues,
   participantStatusValues,
   playModeValues,
+  playerBindingReasonValues,
   questionModeValues,
   questionStateValues,
   slotLabelValues,
@@ -95,6 +96,55 @@ playerBadgeAssignmentSchema.index(
     unique: true,
     partialFilterExpression: { unassignedAt: null },
     name: 'uniq_active_assignment_per_badge',
+  },
+);
+
+/**
+ * A person the referee plays with (security.md D4). Never logs in; no email.
+ * `externalId` is the only identifier that leaves our database (xAPI actor, D3).
+ */
+const playerSchema = new Schema(
+  {
+    /** First name, nickname or badge name the referee recognises; no surnames. */
+    firstName: { type: String, required: true, trim: true },
+    /** Random UUID v4; never the Mongo `_id`. */
+    externalId: { type: String, required: true, immutable: true },
+  },
+  { timestamps: true, collection: 'players' },
+);
+playerSchema.index({ externalId: 1 }, { unique: true });
+
+/**
+ * Referee-made binding of a badge (the game's player key, `Guess.pairName`) to
+ * a `Player` (security.md D2). Time-ranged: changes end the old row and add a
+ * new one, so a guess belongs to whoever held the badge when it was made.
+ */
+const playerBindingSchema = new Schema(
+  {
+    gameId: { type: objectId, ref: 'Game', required: true, immutable: true },
+    badgeName: { type: String, required: true, immutable: true },
+    playerId: { type: objectId, ref: 'Player', required: true, immutable: true },
+    assignedAt: { type: Date, required: true, default: () => new Date(), immutable: true },
+    unassignedAt: { type: Date, default: null },
+    reason: { type: String, required: true, enum: playerBindingReasonValues },
+  },
+  { collection: 'playerBindings' },
+);
+playerBindingSchema.index({ gameId: 1, badgeName: 1, assignedAt: 1 });
+playerBindingSchema.index(
+  { gameId: 1, badgeName: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { unassignedAt: null },
+    name: 'uniq_active_binding_per_badge',
+  },
+);
+playerBindingSchema.index(
+  { gameId: 1, playerId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { unassignedAt: null },
+    name: 'uniq_active_binding_per_player',
   },
 );
 
@@ -230,6 +280,8 @@ export type Badge = InferSchemaType<typeof badgeSchema>;
 export type Game = InferSchemaType<typeof gameSchema>;
 export type GameParticipant = InferSchemaType<typeof gameParticipantSchema>;
 export type PlayerBadgeAssignment = InferSchemaType<typeof playerBadgeAssignmentSchema>;
+export type Player = InferSchemaType<typeof playerSchema>;
+export type PlayerBinding = InferSchemaType<typeof playerBindingSchema>;
 export type Question = InferSchemaType<typeof questionSchema>;
 export type AnswerOption = InferSchemaType<typeof answerOptionSchema>;
 export type NfcCardGroup = InferSchemaType<typeof nfcCardGroupSchema>;
@@ -243,6 +295,8 @@ export type BadgeDocument = HydratedDocument<Badge>;
 export type GameDocument = HydratedDocument<Game>;
 export type GameParticipantDocument = HydratedDocument<GameParticipant>;
 export type PlayerBadgeAssignmentDocument = HydratedDocument<PlayerBadgeAssignment>;
+export type PlayerDocument = HydratedDocument<Player>;
+export type PlayerBindingDocument = HydratedDocument<PlayerBinding>;
 export type QuestionDocument = HydratedDocument<Question>;
 export type AnswerOptionDocument = HydratedDocument<AnswerOption>;
 export type NfcCardGroupDocument = HydratedDocument<NfcCardGroup>;
@@ -257,6 +311,8 @@ export type DbModels = {
   Game: Model<Game>;
   GameParticipant: Model<GameParticipant>;
   PlayerBadgeAssignment: Model<PlayerBadgeAssignment>;
+  Player: Model<Player>;
+  PlayerBinding: Model<PlayerBinding>;
   Question: Model<Question>;
   AnswerOption: Model<AnswerOption>;
   NfcCardGroup: Model<NfcCardGroup>;
@@ -273,6 +329,8 @@ export function registerModels(connection: Connection): DbModels {
     Game: connection.model('Game', gameSchema),
     GameParticipant: connection.model('GameParticipant', gameParticipantSchema),
     PlayerBadgeAssignment: connection.model('PlayerBadgeAssignment', playerBadgeAssignmentSchema),
+    Player: connection.model('Player', playerSchema),
+    PlayerBinding: connection.model('PlayerBinding', playerBindingSchema),
     Question: connection.model('Question', questionSchema),
     AnswerOption: connection.model('AnswerOption', answerOptionSchema),
     NfcCardGroup: connection.model('NfcCardGroup', nfcCardGroupSchema),

@@ -177,19 +177,30 @@ Resulting IDs:
 
 ### Actor
 
-> **See [`security.md`](./security.md) → Identity model.** It recommends
-> `account` with a random `externalId` and no `mbox` or real name in
-> statements, because school children may play.
+**Decided (2026-10-09):** an `account` identifier only. There's no email
+(`mbox`) and no real name. See [`security.md`](./security.md) → Decisions
+D1–D4: the referee is the only person who logs in, children may play, and
+the `Player` record has no email field at all.
 
-Planned: `{ "name": "<Player.name>", "mbox": "mailto:<Player.email>" }`.
+```json
+"actor": {
+  "objectType": "Agent",
+  "account": { "homePage": "https://kogs.link", "name": "<Player.externalId>" }
+}
+```
 
-Alternative for third-party hosted LRSs: use an `account` identifier
-(`{ "homePage": "https://kogs.link", "name": "<playerId>" }`) plus a display `name`, so
-emails never leave our system. Trade-off: if we later join with Moodle
-users by email, we'd need to map player IDs to emails on our side. The
-`mbox` vs `account` choice should be made **before** the first pilot
-export, because changing it later splits one learner into two actors in
-the LRS.
+- `externalId` is a random UUID v4 generated when the referee creates the
+  player. It's not the Mongo `_id`.
+- `actor.name` is omitted, or set to a non-identifying label derived from
+  `externalId` (e.g. `"Player 7F3A"`) so Veracity's viewer stays readable.
+  **Never the player's first name.**
+- The `externalId → firstName` mapping exists only in our database. To find
+  one child's statements in Veracity, the referee looks up their label in
+  our app.
+- This is permanent once pilot statements exist: changing the actor
+  format later would split each learner into two actors in the LRS.
+- A future Moodle join (see `moodle.md`) can't use email. It would need a
+  referee-maintained mapping to Moodle users.
 
 ### `answered` statement (one per `Guess`)
 
@@ -215,7 +226,11 @@ Example:
 ```json
 {
   "id": "5f0c0c3e-8a4b-5c1e-9a7d-2b6f1e0d9c11",
-  "actor": { "objectType": "Agent", "name": "Tim", "mbox": "mailto:tim@example.com" },
+  "actor": {
+    "objectType": "Agent",
+    "name": "Player 7F3A",
+    "account": { "homePage": "https://kogs.link", "name": "7f3a2c1e-5b8d-4e6a-9c0f-1d2e3f4a5b6c" }
+  },
   "verb": { "id": "http://adlnet.gov/expapi/verbs/answered", "display": { "en-US": "answered" } },
   "object": {
     "objectType": "Activity",
@@ -400,13 +415,18 @@ limited *and* Superset is more trouble than it's worth.
      Watershed Essentials.
    - **If pilot data shouldn't leave our system:** SQL LRS (Postgres) +
      Superset.
+5. **School pilot (after funding; children, Australia first):** the LRS must be hosted in
+   Australia and support **per-actor deletion** (draft OAIC Children's
+   Code: destroy on request). Veracity qualifies only if its answers
+   (`security.md` → Checking Veracity) confirm AU hosting, a DPA and
+   deletion. Otherwise use SQL LRS on our AWS account in `ap-southeast-2`.
+   Veracity stays for dev and the adult personal pilot either way.
 
 Because the delivery client only uses the standard xAPI REST API and the
 endpoint comes from config, switching LRS is just a config change. The
 only lasting commitments are the **base IRI** (decided:
-`https://kogs.link/xapi/emoji-app`) and the **actor identifier** (`mbox` vs
-`account`, still open), which must be decided before the first pilot
-export.
+`https://kogs.link/xapi/emoji-app`) and the **actor format** (decided:
+`account` + random `externalId`, no email or name; see `security.md`).
 
 ---
 
@@ -536,7 +556,7 @@ ID=$(uuidgen | tr 'A-Z' 'a-z')
 # 1. Write one statement with a fixed id → expect 204 (PUT)
 curl -i -u "$AUTH" -X PUT "$LRS/statements?statementId=$ID" \
   -H 'X-Experience-API-Version: 1.0.3' -H 'Content-Type: application/json' \
-  -d '{"id":"'$ID'","actor":{"name":"Smoke Test","mbox":"mailto:smoke@example.com"},
+  -d '{"id":"'$ID'","actor":{"name":"Player SMOKE","account":{"homePage":"https://kogs.link","name":"smoke-test-0001"}},
        "verb":{"id":"http://adlnet.gov/expapi/verbs/answered","display":{"en-US":"answered"}},
        "object":{"id":"https://kogs.link/xapi/emoji-app/smoke/q1"},
        "result":{"response":"A","success":true}}'
@@ -582,10 +602,9 @@ Essentials remains the fallback if spreadsheets become a chore.
 - **Clear `dev`/`sandbox`** via the LRS management page ("clear xAPI data")
   whenever the statement shape changes. That removes old-shape statements
   that would otherwise cause 409s on re-export (requirement 7).
-- **Before the pilot starts**, settle the **actor identifier** (`mbox` vs
-  `account`). The base IRI is already decided. Veracity
-  is third-party hosting, so the `account` form (no emails leave our
-  system) is the safer default for `emojiapp-pilot`.
+- **Before the pilot starts**, check the generated statements contain no
+  email and no first name, only the `account` actor (`security.md` D3).
+  Base IRI and actor format are both decided.
 - **Removing a person's data** from `emojiapp-pilot`: standard xAPI has
   no delete, only *voiding* (the statement is hidden but still stored). Real
   deletion means clearing the LRS, or asking Veracity support. Acceptable
@@ -607,7 +626,16 @@ Fill in as the setup is done:
 | Smoke test: PUT / GET / identical re-send / changed re-send status codes | |
 | Analytics dashboards available on free tier? | |
 | Base IRI decided | `https://kogs.link/xapi/emoji-app` ✅ |
-| Actor identifier decided (`mbox` / `account`) | |
+| Actor format decided | `account` + `externalId`, no email/name ✅ (2026-10-09) |
+| Veracity hosting region(s) / AU hosting possible? | **Yes (assumed for the prototype, 2026-10-09; not yet confirmed by Veracity)** |
+| Veracity DPA + sub-processor list available? | **Yes (assumed for the prototype; not yet confirmed)** |
+| Veracity per-actor permanent deletion? (how, how fast, backups) | **Yes (assumed for the prototype; not yet confirmed)** |
+
+> The three Veracity answers above are working assumptions so the
+> prototype can proceed on Veracity alone (`security.md` D12). Confirm
+> them with Veracity after funding and before any school pilot. If any
+> turns out to be no, the school pilot moves to a self-hosted SQL LRS in
+> `ap-southeast-2`.
 
 ---
 
@@ -629,7 +657,6 @@ features:
 
 ## Open questions
 
-- Actor identifier: `mbox` (email) or `account` (player id)?
 - Veracity Free: does it include dashboards or only the statement viewer?
   The pricing page and other summaries disagree; this gets answered at
   [Step 5](#step-5--viewing-results-mapping-to-q1q6) of the Veracity setup.

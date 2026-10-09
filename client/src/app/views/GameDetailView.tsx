@@ -4,6 +4,7 @@ import { LayoutGroup, motion } from 'motion/react';
 import { CheckCircle2, ChevronLeft, Circle, Loader2, Plus } from 'lucide-react';
 import { Button } from '../shared/button';
 import { GameRefereePanel } from './components/GameRefereePanel';
+import { PlayerBindingsPanel } from './components/PlayerBindingsPanel';
 import {
   Dialog,
   DialogClose,
@@ -780,6 +781,14 @@ export function GameDetailView() {
     orderedQuestions.find((q) => q.state === 'open') ??
     orderedQuestions.find((q) => q.state === 'draft') ??
     null;
+  // Badges, guesses and run changes can each change which badges need a player.
+  const playerBindingsReloadKey = [
+    game.state,
+    game.startedAt ?? '',
+    game.boundPairs.map((bp) => bp.pairName).sort().join(','),
+    game.questions.reduce((sum, q) => sum + (q.guessCount ?? 0), 0),
+    guessChart?.questions.length ?? 0,
+  ].join('|');
   const guessesByQuestion = new Map(
     (guessChart?.questions ?? []).map((question) => [
       question.questionId,
@@ -881,6 +890,9 @@ export function GameDetailView() {
                 void loadGuessChart();
               }}
             />
+            <div className="mt-4">
+              <PlayerBindingsPanel gameId={game.id} reloadKey={playerBindingsReloadKey} />
+            </div>
           </motion.div>
         </div>
       </LayoutGroup>

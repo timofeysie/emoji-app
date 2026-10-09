@@ -21,6 +21,8 @@ export const assignmentReasonValues = [
   'recovery',
   'admin_override',
 ] as const;
+/** Why a badge → player binding was made (subset of `assignmentReasonValues`). */
+export const playerBindingReasonValues = ['initial', 'swap', 'replacement'] as const;
 export const questionModeValues = ['standard', 'cut-throat', 'mixed'] as const;
 export const questionStateValues = ['draft', 'open', 'closed', 'scored', 'archived'] as const;
 export const nfcCardStatusValues = ['active', 'retired', 'lost'] as const;
@@ -34,6 +36,7 @@ export type PlayMode = (typeof playModeValues)[number];
 export type ParticipantStatus = (typeof participantStatusValues)[number];
 export type BadgeStatus = (typeof badgeStatusValues)[number];
 export type AssignmentReason = (typeof assignmentReasonValues)[number];
+export type PlayerBindingReason = (typeof playerBindingReasonValues)[number];
 export type QuestionMode = (typeof questionModeValues)[number];
 export type QuestionState = (typeof questionStateValues)[number];
 export type NfcCardStatus = (typeof nfcCardStatusValues)[number];
