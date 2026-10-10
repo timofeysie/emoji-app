@@ -58,6 +58,8 @@ export function requestLoggingMiddleware(req: Request, res: Response, next: Next
   }
 
   const originalEnd = res.end.bind(res);
+  // Matches Node's own Writable.end(chunk: any, ...) overloads being patched here.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   res.end = function end(chunk?: any, encoding?: any, cb?: any): Response {
     const duration = Date.now() - startTime;
     const doneTimestamp = new Date().toISOString();

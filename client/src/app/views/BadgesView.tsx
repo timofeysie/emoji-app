@@ -1120,6 +1120,10 @@ export const BadgesView = () => {
 
   useEffect(() => {
     return () => {
+      // Intentionally reads .current at unmount time, not a copy captured at
+      // mount: this ref accumulates timeout ids for the component's whole
+      // life, and unmount must clear whatever is pending then.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       for (const id of freshTimeoutsRef.current.values()) {
         window.clearTimeout(id);
       }

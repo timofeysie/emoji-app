@@ -12,13 +12,6 @@ export const ScheduledScene = ({
   scheduledScene,
   onEdit,
 }: ScheduledSceneProps) => {
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   const formatWeekdays = (weekdays?: string[]) => {
     if (!weekdays || weekdays.length === 0) return 'every day';
     if (weekdays.length === 7) return 'every day';

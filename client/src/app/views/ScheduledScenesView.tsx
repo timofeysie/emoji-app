@@ -1,16 +1,5 @@
-import { Weekday } from '../models/scheduled-scene.model';
 import { useSmartHomeStore } from '../store/emoji-app.store';
 import { ScheduledScene } from './components/ScheduledScene';
-
-const WEEKDAYS: Weekday[] = [
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-  'sunday',
-];
 
 export const ScheduledScenesView = () => {
   const scheduledScenes = useSmartHomeStore((state) => state.scheduledScenes);
