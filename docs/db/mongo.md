@@ -103,12 +103,25 @@ needs guesses, so the gotcha still applies.)
 This machine has Homebrew but no Docker, so the main path is Homebrew.
 Docker and Atlas alternatives are below.
 
+Commands in this doc are meant to be pasted into zsh, the macOS default
+shell. Interactive zsh doesn't treat `#` as a comment, so the code blocks
+put no comments on command lines.
+
 ### 1. Install
 
 ```bash
 brew tap mongodb/brew
+brew trust mongodb/brew
 brew install mongodb/brew/mongodb-community@7.0 mongosh
 ```
+
+Newer Homebrew refuses formulae from untrusted third-party taps. Without
+the `brew trust` line, the install stops with `Refusing to load
+formula mongodb/brew/mongodb-database-tools from untrusted tap
+mongodb/brew`. That's a dependency of `mongodb-community` from the same
+tap. To trust only what's needed instead of the whole tap, run `brew trust
+--formula mongodb/brew/mongodb-database-tools` (and repeat for any other
+formula it names).
 
 7.0 matches the version the older docs used (`mongo:7`). Check which major
 version the Atlas staging cluster runs (Atlas console → cluster → Version),
@@ -116,9 +129,10 @@ and prefer the same one locally (e.g. `mongodb-community@8.0`).
 
 ### 2. Turn on the replica set
 
-Homebrew's service reads `/opt/homebrew/etc/mongod.conf`. Add the
-`replication` block, keeping the existing `systemLog`/`storage`/`net`
-sections. The result should look like this:
+Homebrew's service reads `/opt/homebrew/etc/mongod.conf`.
+Add the `replication` block, keeping the existing `systemLog`/`storage`/`net`
+sections. 
+The result should look like this:
 
 ```yaml
 systemLog:
@@ -141,8 +155,10 @@ replication:
 brew services start mongodb/brew/mongodb-community@7.0
 
 mongosh --quiet --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"
-mongosh --quiet --eval "rs.status().ok"   # → 1
+mongosh --quiet --eval "rs.status().ok"
 ```
+
+`rs.initiate` prints `{ ok: 1 }` and `rs.status().ok` prints `1`.
 
 `rs.initiate` is needed only once; the config persists in the data
 directory. After a reboot, `brew services` starts it again. Stop it with
@@ -228,11 +244,14 @@ Stations normally create bindings and guesses. Locally, `curl` can play
 the station. With no NFC card group attached, `POST /api/guesses` trusts
 the `slotLabel` in the body.
 
-Requires `jq` (ships with macOS 15) and the server on port 3000.
+Requires `jq` (ships with macOS 15) and the server on port 3000. Run
+`setopt interactive_comments` first, so zsh skips the `#` comment lines
+when the block is pasted. `REF` is the demo referee id; there's no auth
+until Step 0.
 
 ```bash
 BASE=http://localhost:3000
-REF=000000000000000000000001   # demo referee id (no auth yet; Step 0)
+REF=000000000000000000000001
 post() { curl -s -X "${3:-POST}" "$BASE$1" -H 'Content-Type: application/json' -d "$2"; }
 
 # Game with one round (A correct, B wrong)

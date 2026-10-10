@@ -10,6 +10,9 @@ const pkg = JSON.parse(
   readFileSync(join(configDir, '../package.json'), 'utf-8'),
 ) as { version: string };
 
+// The e2e tests run their own API server on another port (playwright/playwright.config.ts).
+const apiTarget = process.env['VITE_API_TARGET'] ?? 'http://localhost:3000';
+
 // Load `.env` from the monorepo root (parent of `client/`), not only `client/.env`.
 export default defineConfig({
   root: __dirname,
@@ -22,8 +25,8 @@ export default defineConfig({
     port: 5200,
     host: '0.0.0.0',
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/ws': { target: 'ws://localhost:3000', ws: true },
+      '/api': apiTarget,
+      '/ws': { target: apiTarget.replace(/^http/, 'ws'), ws: true },
     },
   },
   preview: {

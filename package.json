@@ -23,6 +23,10 @@
     "seed:local": "node scripts/seed-local.mjs",
     "test:server": "jest --config server/jest.config.ts",
     "test:server:watch": "jest --config server/jest.config.ts --watch",
+    "test:e2e": "playwright test --config playwright/playwright.config.ts",
+    "test:e2e:ui": "playwright test --config playwright/playwright.config.ts --ui",
+    "test:e2e:report": "playwright show-report playwright/playwright-report",
+    "typecheck:e2e": "tsc -p playwright/tsconfig.json",
     "dev:land-grab-web": "npm run dev --workspace @emoji-app/land-grab-web",
     "dev:land-grab-mobile": "npm run start --workspace @emoji-app/land-grab-mobile",
     "build:land-grab-web": "npm run build --workspace @emoji-app/land-grab-web",
@@ -55,6 +59,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@radix-ui/react-checkbox": "^1.1.5",
     "@radix-ui/react-dialog": "^1.1.7",
     "@radix-ui/react-label": "^2.1.3",

@@ -181,12 +181,18 @@ export function PlayerBindingsPanel({
             const active = activeByBadge.get(badgeName);
             const busy = busyBadge === badgeName;
             return (
-              <div key={badgeName} className="flex items-center gap-1.5">
+              <div
+                key={badgeName}
+                className="flex items-center gap-1.5"
+                data-testid={`player-binding-${badgeName}`}
+              >
                 <span className="w-16 shrink-0 truncate text-xs font-medium" title={badgeName}>
                   {badgeName}
                 </span>
                 <Select
-                  value={active?.player.id}
+                  // '' (not undefined) shows the placeholder again after an unassign;
+                  // undefined would leave Radix showing its last uncontrolled pick.
+                  value={active?.player.id ?? ''}
                   onValueChange={(playerId) => void bind(badgeName, playerId)}
                   disabled={busy || players.length === 0}
                 >

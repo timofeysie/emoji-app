@@ -38,6 +38,44 @@ Do not install Expo at the repository root. Expo and React Native belong to
 the `@emoji-app/land-grab-mobile` workspace and are installed by the root
 command above.
 
+#### Local MongoDB
+
+The game API needs MongoDB. Locally it runs from Homebrew as a single-node
+replica set; transactions require one. One-time setup is in
+[`docs/db/mongo.md`](docs/db/mongo.md). Day to day:
+
+```bash
+brew services start mongodb/brew/mongodb-community@7.0
+brew services list
+mongosh --quiet --eval "rs.status().ok"
+```
+
+- `brew services list` should show `mongodb-community@7.0` as `started`.
+- The `mongosh` check prints `1` when the replica set is healthy.
+- It starts automatically after a reboot, so usually only the check is
+  needed.
+
+To stop it:
+
+```bash
+brew services stop mongodb/brew/mongodb-community@7.0
+```
+
+If the check fails:
+
+- `MongoNetworkError` / `ECONNREFUSED` means it isn't running: start it,
+  or look at `/opt/homebrew/var/log/mongodb/mongo.log`.
+- `NotYetInitialized` means the one-time `rs.initiate(...)` from
+  `docs/db/mongo.md` step 3 hasn't been run.
+
+`.env` needs `MONGODB_URI=mongodb://127.0.0.1:27017/emoji-app?directConnection=true`.
+When the server connects, `npm run dev` logs `MongoDB connected and indexes
+synchronized.` To look at the data:
+
+```bash
+mongosh emoji-app --quiet --eval "db.getCollectionNames()"
+```
+
 #### Main emoji application
 
 ```bash
@@ -57,6 +95,34 @@ npm run docker:run
 port 3000. Add `OPENAI_API_KEY` and any optional Cognito values to `.env`.
 
 Test the API at `http://localhost:3000/api/version`.
+
+#### e2e Playwright tests
+
+The e2e tests drive the game against a real server and the local MongoDB.
+Mongo must be running as a single-node replica set
+([`docs/db/mongo.md`](docs/db/mongo.md)). Install the browser once:
+
+```bash
+npx playwright install chromium
+```
+
+Then, from the repository root:
+
+```bash
+npm run test:e2e                       # all tests, headless
+npm run test:e2e -- players            # only spec files whose name matches
+npm run test:e2e -- -g "swap"          # only tests whose title matches
+npm run test:e2e -- --headed           # watch the browser
+npm run test:e2e:ui                    # Playwright UI mode, for debugging
+npm run test:e2e:report                # open the HTML report of the last run
+npm run typecheck:e2e
+```
+
+A run starts its own API server on port 3100 and Vite on port 5210, using
+the `emoji-app-e2e` database, which is dropped at the start of each run.
+Your dev servers (3000/5200) and the `emoji-app` database are not touched,
+so `npm run dev` can stay running. The plan and coverage are in
+[`docs/testing/playwright-plan.md`](docs/testing/playwright-plan.md).
 
 #### LandGrab
 
@@ -403,16 +469,14 @@ your `.env` has your Atlas URI:
 MONGODB_URI=mongodb+srv://...
 ```
 
-Alternatively, run MongoDB locally with Docker:
-
-```bash
-docker run -d -p 27017:27017 mongo:7
-```
-
+Alternatively, run MongoDB locally. It must be a **single-node replica
+set**, because guesses run in transactions and a plain `mongod` rejects
+them. See [Local MongoDB](#local-mongodb) above and
+[`docs/db/mongo.md`](docs/db/mongo.md), which covers Homebrew and Docker.
 Then set:
 
 ```env
-MONGODB_URI=mongodb://localhost:27017/emoji-app
+MONGODB_URI=mongodb://127.0.0.1:27017/emoji-app?directConnection=true
 ```
 
 ### How it fits together
