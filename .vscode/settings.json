@@ -28,5 +28,6 @@
         "activityBarTop.activeBorder": "#15202b",
         "statusBar.inactiveBackground": "#e8a23d"
     },
-    "peacock.color": "rgb(232, 162, 61)"
+    "peacock.color": "rgb(232, 162, 61)",
+    "js/ts.tsdk.path": "node_modules/typescript/lib"
 }
