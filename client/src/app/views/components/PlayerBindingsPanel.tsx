@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Loader2, Plus, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Plus, Send, X } from 'lucide-react';
 import { Button } from '../../shared/button';
 import { Input } from '../../shared/input';
 import {
@@ -43,15 +43,21 @@ async function errorMessage(res: Response): Promise<string> {
   }
 }
 
+type ExportResult = { ok: true; statementsSent: number } | { ok: false; message: string };
+
 /**
- * Referee assigns a player to each badge in the game (xAPI export Step 1a).
+ * Referee assigns a player to each badge in the game (xAPI export Step 1a),
+ * then exports the completed game's statements to the LRS (Step 1c).
  * `reloadKey` changes whenever badges, guesses or the game state change.
  */
 export function PlayerBindingsPanel({
   gameId,
+  completed,
   reloadKey,
 }: {
   gameId: string;
+  /** The "Export to LRS" action only ever shows once the game is completed. */
+  completed: boolean;
   reloadKey: string;
 }) {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -60,8 +66,11 @@ export function PlayerBindingsPanel({
   const [busyBadge, setBusyBadge] = useState<string | null>(null);
   const [newFirstName, setNewFirstName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportResult, setExportResult] = useState<ExportResult | null>(null);
 
   const load = useCallback(async () => {
+    setExportResult(null);
     try {
       const [playersRes, bindingsRes] = await Promise.all([
         fetch('/api/players', { credentials: 'same-origin' }),
@@ -134,6 +143,27 @@ export function PlayerBindingsPanel({
       setError('Network error — could not unassign player.');
     } finally {
       setBusyBadge(null);
+    }
+  };
+
+  const exportToLrs = async () => {
+    setExporting(true);
+    setExportResult(null);
+    try {
+      const res = await fetch(`/api/games/${gameId}/xapi-export`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      if (!res.ok) {
+        setExportResult({ ok: false, message: await errorMessage(res) });
+        return;
+      }
+      const body = (await res.json()) as { statementsSent: number };
+      setExportResult({ ok: true, statementsSent: body.statementsSent });
+    } catch {
+      setExportResult({ ok: false, message: 'Network error — could not export.' });
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -240,6 +270,43 @@ export function PlayerBindingsPanel({
             before exporting.
           </span>
         </p>
+      )}
+
+      {completed && (
+        <div className="flex flex-col gap-1.5 border-t pt-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="self-start"
+            onClick={() => void exportToLrs()}
+            disabled={exporting || missing.length > 0 || badgeNames.length === 0}
+            title={
+              missing.length > 0
+                ? 'Assign a player to every badge before exporting'
+                : undefined
+            }
+          >
+            {exporting ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : (
+              <Send className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+            )}
+            Export to LRS
+          </Button>
+          {exportResult &&
+            (exportResult.ok ? (
+              <p className="flex items-start gap-1.5 rounded-md bg-emerald-50 px-2 py-1.5 text-xs text-emerald-800">
+                <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                <span>
+                  Exported {exportResult.statementsSent} statement
+                  {exportResult.statementsSent === 1 ? '' : 's'} to the LRS.
+                </span>
+              </p>
+            ) : (
+              <p className="text-xs text-destructive">{exportResult.message}</p>
+            ))}
+        </div>
       )}
 
       <form

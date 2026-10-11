@@ -95,7 +95,7 @@ So "export to Moodle" is replaced with **"export to an LRS"**:
 | Milestone | Title | Status |
 | --- | --- | --- |
 | 0 | Access-control foundations (route prefixes, spectator share codes, device credentials) | ⏸ deferred until funded. Required before any school/children's pilot; not before the prototype (guardrails apply). |
-| 1 | Emit xAPI statements for completed games, export to a hosted LRS | 🟡 in progress (Step 1a implemented) |
+| 1 | Emit xAPI statements for completed games, export to a hosted LRS | 🟡 in progress (Steps 1a–1c implemented; see acceptance criteria) |
 | 2+ | cmi5, SCORM, QTI, OneRoster, LTI, Moodle (gradebook push / plugin / cmi5 launch) | ⏸ deferred indefinitely — see [Out of scope](#out-of-scope-for-this-plan) |
 
 ---
@@ -236,7 +236,7 @@ assigned player.
 | Scoring data | `getGameScores`, `computeQuestionResult`, `getGameGuessChart` (`game-data.repository.ts`) return per-pair rows | Reused as the source data for statement generation; no change to their shape |
 | Export | None exists | New module: xAPI statement builder + LRS delivery client |
 | API | `GET /api/games/:gameId/scores`, `/guess-chart` (`game-flow.controller.ts`) | New endpoint, e.g. `POST /api/games/:gameId/xapi-export` |
-| Client | No export UI | Small "assign player to badge" control + an "Export to LRS" action, shown only once a game is `completed` |
+| Client | No export UI | **Done.** "Assign player to badge" control (Step 1a) + an "Export to LRS" action, shown only once a game is `completed` |
 
 ---
 
@@ -398,6 +398,34 @@ access).
   or the LRS error — including a `409` as "already exported with a
   different shape", per `LRS.md`).
 
+**Implemented (2026-10-11):**
+
+- `server/src/xapi/lrs-client.ts`: `loadLrsConfigFromEnv()` (fails with a
+  clear message at export time, not startup, per `LRS.md` Step 3) and
+  `sendStatements()` — batches of 50, standard `/statements` `POST` only,
+  Basic Auth + `X-Experience-API-Version: 1.0.3`. Maps `409` to
+  `LrsConflictError`, anything else non-OK to `LrsRequestError`.
+- `server/src/xapi/xapi-export.controller.ts`:
+  `POST /api/games/:gameId/xapi-export`. Checks `state === 'completed'`,
+  blocks on `missingBadges` (reusing Step 1a's check), builds statements
+  via 1b, reports `{ ok, statementsSent }` or a mapped error.
+- `GameDataRepository.getGameExportData()` added: game + questions (with
+  `openedAt`) + raw guesses scoped to the current run, feeding 1b.
+- `.env.example` has `XAPI_LRS_ENDPOINT`/`KEY`/`SECRET` placeholders; `.env`
+  has real `emojiapp-dev` keys locally.
+- UI: `PlayerBindingsPanel.tsx` grew an "Export to LRS" button, shown only
+  when `completed`, disabled while `missingBadges` is non-empty, reporting
+  "Exported N statements to the LRS." or the server's error.
+- Verified against the real `emojiapp-dev` Veracity LRS (smoke test, then a
+  real exported game, confirmed via the LRS's own statement viewer) — see
+  `LRS.md`'s setup record — and covered by
+  `docs/testing/playwright-plan.md`'s Phase 4 (API + UI, against a stub
+  LRS).
+- Not yet: the `emojiapp-sandbox`/`emojiapp-pilot` LRSs (only `dev` exists
+  so far) and the staging Terraform wiring (`LRS.md` Step 3) — needed
+  before a real pilot or staging deploy, not before this milestone's
+  acceptance criteria.
+
 ### Acceptance criteria — Milestone 1
 
 - [ ] **Step 0 (deferred until funded):** every `/api/*` route except the explicit public ones
@@ -410,25 +438,27 @@ access).
       shows no player identity unless the game's first-name opt-in is on.
       An expired, revoked or wrong code gets 404, and repeated wrong codes
       are rate-limited.
-- [ ] A `Player` (first name + generated `externalId`, no email) can be
+- [x] A `Player` (first name + generated `externalId`, no email) can be
       created by the referee and bound to a badge for a specific game; the
       binding records who made it.
-- [ ] A game with any unassigned badge that recorded a guess cannot be
+- [x] A game with any unassigned badge that recorded a guess cannot be
       exported; the error names the missing badge.
-- [ ] Exporting a completed game produces one `answered` statement per
+- [x] Exporting a completed game produces one `answered` statement per
       guess and one `scored` statement per player, each with an `account`
       actor (`externalId`) and **no email or first name anywhere in the
       statement**,
       matching `getGameScores` / `computeQuestionResult`.
-- [ ] Statements are successfully written to a real LRS endpoint and are
+- [x] Statements are successfully written to a real LRS endpoint and are
       visible in that LRS's own statement viewer/dashboard — no Moodle
-      involved.
-- [ ] Re-running the export on the same game is safe: a byte-identical
+      involved. (`emojiapp-dev`; `-sandbox`/`-pilot` not yet created, see
+      Step 1c.)
+- [x] Re-running the export on the same game is safe: a byte-identical
       re-send is a no-op on the LRS (stable statement `id`s), and a
       changed re-send fails loudly with the LRS's `409` rather than
       silently duplicating or corrupting local game data.
-- [ ] None of Milestone 1 changes existing scoring, guessing, or game-state
-      behavior for games that are never exported.
+- [x] None of Milestone 1 changes existing scoring, guessing, or game-state
+      behavior for games that are never exported. (Confirmed: no existing
+      game-flow tests regressed.)
 
 ---
 

@@ -891,7 +891,11 @@ export function GameDetailView() {
               }}
             />
             <div className="mt-4">
-              <PlayerBindingsPanel gameId={game.id} reloadKey={playerBindingsReloadKey} />
+              <PlayerBindingsPanel
+                gameId={game.id}
+                completed={game.state === 'completed'}
+                reloadKey={playerBindingsReloadKey}
+              />
             </div>
           </motion.div>
         </div>

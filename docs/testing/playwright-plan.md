@@ -1,9 +1,8 @@
 # Playwright end-to-end tests: plan
 
-Status: **Phases 1–4 done** (2026-10-11, Phase 4 API half): 25 tests, all
-passing locally in about 15 s. Phase 4's UI item waits on the referee
-"Export to LRS" button. Run them with `npm run test:e2e` (local Mongo
-replica set required, see `mongo.md`).
+Status: **Phases 1–4 done** (2026-10-11): 28 tests, all passing locally in
+about 15 s. Run them with `npm run test:e2e` (local Mongo replica set
+required, see `mongo.md`).
 
 ### What changed from the plan while building it
 
@@ -100,6 +99,7 @@ playwright/
     player-bindings.ui.spec.ts
     game-flow.ui.spec.ts
     xapi-export.api.spec.ts
+    xapi-export.ui.spec.ts
 ```
 
 Root `package.json` scripts:
@@ -297,9 +297,16 @@ assertions), no auth check.
   - actor is `account` + `externalId` only.
 - [x] Re-export of an unchanged game is idempotent: same statement IDs,
       same count (no duplicates), same response.
-- [ ] The "Export to LRS" **UI** action (disabled/erroring while
-      `missingBadges` is non-empty) — waits on the referee-facing export
-      button, not yet built.
+
+**UI (`xapi-export.ui.spec.ts`).** The "Export to LRS" button lives in
+`PlayerBindingsPanel`, shown only once the game is `completed`:
+
+- [x] Hidden on a non-completed game.
+- [x] Disabled, with a title explaining why, while any guessed badge has
+      no player.
+- [x] Clicking it on a fully-bound completed game shows "Exported N
+      statements to the LRS."; re-clicking (re-export) shows the same
+      count.
 - [ ] Separately and by hand: one export to Veracity `emojiapp-dev`
       (`LRS.md`). Already done once (2026-10-11); not in the automated
       suite, to keep runs offline and free of keys.
