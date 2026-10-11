@@ -157,6 +157,34 @@ export type GameDetail = {
   boundPairs: BoundPairSummary[];
 };
 
+/** Question shape xAPI export needs (`openedAt`, for `result.duration`); not part of the UI's `QuestionDetail`. */
+export type GameExportQuestion = {
+  id: string;
+  text: string;
+  openedAt: string | null;
+  answerOptions: Array<{ slotLabel: SlotLabel; text: string; isCorrect: boolean }>;
+};
+
+/** One `Guess` row as xAPI export needs it. */
+export type GameExportGuess = {
+  id: string;
+  questionId: string;
+  badgeName: string;
+  stationName: string | null;
+  slotLabel: string;
+  createdAt: string;
+};
+
+export type GameExportData = {
+  id: string;
+  title: string;
+  state: GameState;
+  startedAt: string | null;
+  endedAt: string | null;
+  questions: GameExportQuestion[];
+  guesses: GameExportGuess[];
+};
+
 /** Player state inside a station snapshot; guess fields describe the open question. */
 export type PlayerSnapshot = {
   badgeName: string;
@@ -1177,6 +1205,77 @@ export class GameDataRepository {
       );
 
     return { gameId, scores };
+  }
+
+  /**
+   * Game, questions (with `openedAt`) and raw guesses for xAPI export
+   * (docs/xAPI/xapi-export-plan.md Step 1b/1c). Guesses are scoped to
+   * `game.startedAt` like `getGameScores`, so Play Again doesn't re-export
+   * a prior run. Every stored `Guess` has a `pairName` and `slotLabel`
+   * (`submitGuess` returns early without creating one otherwise), so guesses
+   * missing either are dropped rather than emitted half-formed.
+   */
+  async getGameExportData(gameId: string): Promise<GameExportData | null> {
+    const { Game, Question, AnswerOption, Guess } = this.mongoService.getModels();
+    const game = await Game.findById(asObjectId(gameId)).lean();
+    if (!game) {
+      return null;
+    }
+
+    const questions = await Question.find({ gameId: asObjectId(gameId) })
+      .sort({ sequence: 1 })
+      .lean();
+    const questionIds = questions.map((q) => q._id as Types.ObjectId);
+    const options =
+      questionIds.length > 0
+        ? await AnswerOption.find({ questionId: { $in: questionIds } }).lean()
+        : [];
+    const optsByQuestion = new Map<string, typeof options>();
+    for (const opt of options) {
+      const key = (opt.questionId as Types.ObjectId).toString();
+      optsByQuestion.set(key, [...(optsByQuestion.get(key) ?? []), opt]);
+    }
+
+    const guessFilter: Record<string, unknown> = { gameId: asObjectId(gameId) };
+    if (game.startedAt) {
+      guessFilter['createdAt'] = { $gte: game.startedAt };
+    }
+    const guesses = await Guess.find(guessFilter).lean();
+
+    return {
+      id: (game._id as Types.ObjectId).toString(),
+      title: game.title,
+      state: game.state as GameState,
+      startedAt: game.startedAt ? game.startedAt.toISOString() : null,
+      endedAt: game.endedAt ? game.endedAt.toISOString() : null,
+      questions: questions.map((q) => {
+        const qid = (q._id as Types.ObjectId).toString();
+        const opts = (optsByQuestion.get(qid) ?? []).slice().sort((a, b) => a.sequence - b.sequence);
+        return {
+          id: qid,
+          text: q.text,
+          openedAt: q.openedAt ? q.openedAt.toISOString() : null,
+          answerOptions: opts.map((o) => ({
+            slotLabel: o.slotLabel as SlotLabel,
+            text: o.text,
+            isCorrect: o.isCorrect,
+          })),
+        };
+      }),
+      guesses: guesses.flatMap((g) => {
+        if (!g.pairName || !g.slotLabel) return [];
+        return [
+          {
+            id: (g._id as Types.ObjectId).toString(),
+            questionId: (g.questionId as Types.ObjectId).toString(),
+            badgeName: g.pairName,
+            stationName: g.stationName ?? null,
+            slotLabel: g.slotLabel as string,
+            createdAt: (g as unknown as { createdAt: Date }).createdAt.toISOString(),
+          },
+        ];
+      }),
+    };
   }
 
   async listGames(): Promise<GameSummary[]> {

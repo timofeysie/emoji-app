@@ -618,12 +618,12 @@ Fill in as the setup is done:
 
 | Item | Value |
 | --- | --- |
-| Dev LRS name / endpoint | |
-| Sandbox LRS name / endpoint | |
-| Pilot LRS name / endpoint | |
-| Strict API Mode on (all three)? | |
-| Keys created (names only, never secrets) | |
-| Smoke test: PUT / GET / identical re-send / changed re-send status codes | |
+| Dev LRS name / endpoint | `emojiapp-dev` / `https://emojiapp-dev.lrs.io/xapi/` |
+| Sandbox LRS name / endpoint | not yet created |
+| Pilot LRS name / endpoint | not yet created |
+| Strict API Mode on (all three)? | On for `emojiapp-dev`; sandbox/pilot not yet created |
+| Keys created (names only, never secrets) | `emoji-app-server` (dev) |
+| Smoke test: PUT / GET / identical re-send / changed re-send status codes | PUT 204; GET 200 (statement returned, `authority.account.name` = `emoji-app-server`); identical re-send 204 (no duplicate); changed re-send 409 (`"...ids that are already in the DB, but one of the statements is different"`). Run 2026-10-11 against `emojiapp-dev`; smoke-test statement cleared afterward. |
 | Analytics dashboards available on free tier? | |
 | Base IRI decided | `https://kogs.link/xapi/emoji-app` ✅ |
 | Actor format decided | `account` + `externalId`, no email/name ✅ (2026-10-09) |

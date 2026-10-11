@@ -12,6 +12,7 @@ import { PairBindingsController } from './pair-bindings.controller';
 import { PlayersController } from './players.controller';
 import { PlayerRepository } from './persistence/player.repository';
 import { StationRosterSync } from './station-roster-sync';
+import { XapiExportController } from './xapi/xapi-export.controller';
 
 @Module({
   controllers: [
@@ -22,6 +23,7 @@ import { StationRosterSync } from './station-roster-sync';
     VersionController,
     PairBindingsController,
     PlayersController,
+    XapiExportController,
   ],
   providers: [
     BadgeStateService,

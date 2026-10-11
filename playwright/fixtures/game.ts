@@ -1,5 +1,6 @@
 import { test as base, request as playwrightRequest } from '@playwright/test';
 import { API_URL, Api, uniqueId, type SlotLabel } from './api';
+import { StubLrs } from './stub-lrs';
 
 /** A game built through the API. Badge keys are the logical names a test uses. */
 export type GameSetup = {
@@ -75,7 +76,7 @@ export class Games {
   }
 }
 
-export const test = base.extend<{ api: Api; games: Games }>({
+export const test = base.extend<{ api: Api; games: Games; stubLrs: StubLrs }>({
   api: async ({}, use) => {
     const context = await playwrightRequest.newContext({ baseURL: API_URL });
     await use(new Api(context));
@@ -83,6 +84,11 @@ export const test = base.extend<{ api: Api; games: Games }>({
   },
   games: async ({ api }, use) => {
     await use(new Games(api, uniqueId()));
+  },
+  stubLrs: async ({}, use) => {
+    const context = await playwrightRequest.newContext();
+    await use(new StubLrs(context));
+    await context.dispose();
   },
 });
 

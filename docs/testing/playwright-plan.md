@@ -1,8 +1,9 @@
 # Playwright end-to-end tests: plan
 
-Status: **Phases 1–3 done** (2026-10-10): 22 tests, all passing locally
-in about 15 s. Phase 4 waits for Step 1c. Run them with `npm run test:e2e`
-(local Mongo replica set required, see `mongo.md`).
+Status: **Phases 1–4 done** (2026-10-11, Phase 4 API half): 25 tests, all
+passing locally in about 15 s. Phase 4's UI item waits on the referee
+"Export to LRS" button. Run them with `npm run test:e2e` (local Mongo
+replica set required, see `mongo.md`).
 
 ### What changed from the plan while building it
 
@@ -87,15 +88,18 @@ playwright/
   playwright.config.ts      # projects, webServer, baseURL, workers
   tsconfig.json             # extends ../tsconfig.base.json; types: @playwright/test
   reset-e2e-db.mjs          # drops the e2e database before the API server starts
+  stub-lrs-server.mjs       # stub LRS for Step 1c export tests (Phase 4)
   fixtures/
     api.ts                  # typed API helpers (createGame, bindStation, guess, …)
     game.ts                 # test.extend fixtures: a game in a given state
+    stub-lrs.ts             # read back statements the server sent to the stub LRS
   tests/
     smoke.spec.ts
     players.api.spec.ts
     player-bindings.api.spec.ts
     player-bindings.ui.spec.ts
     game-flow.ui.spec.ts
+    xapi-export.api.spec.ts
 ```
 
 Root `package.json` scripts:
@@ -273,21 +277,32 @@ quietly break it. They come from `manual-tests.md`:
       → state chip shows `completed`.
 - [x] Scores (`GET /api/games/:id/scores`) match the scans.
 
-### Phase 4: Step 1c (export), when built
+### Phase 4: Step 1c (export)
 
-- [ ] The "Export to LRS" action is disabled or errors while
-      `missingBadges` is non-empty, and the error names the badge.
-- [ ] Export sends the expected statements. The export runs **on the
-      server**, so `page.route` can't see it. Point `XAPI_LRS_ENDPOINT` at
-      a **stub LRS**: a tiny HTTP server started by the Playwright config
-      that records `PUT/POST /statements` and returns 200/204, or 409 on
-      demand. Then assert:
-  - no `mbox` and no first name anywhere in the statements (D3);
-  - one `answered` per guess and one `scored` per player;
-  - re-export is idempotent (same statement IDs).
+**API (`xapi-export.api.spec.ts`).** The export runs **on the server**, so
+`page.route` can't see it. `playwright/stub-lrs-server.mjs` is a tiny HTTP
+server started as its own `webServer` entry; the e2e API server's
+`XAPI_LRS_ENDPOINT`/`KEY`/`SECRET` point at it instead of a real LRS. It
+implements the standard `/statements` resource only (`POST` ingest with
+id-conflict detection → 409 on genuine content change, `GET` list for test
+assertions), no auth check.
+
+- [x] Export is blocked (400) while any guessed badge has no player, and
+      the error's `missingBadges` names it.
+- [x] Export sends the expected statements, read back from the stub via
+      `stubLrs.statementsForGame(gameId)`:
+  - no `mbox`, no first name, anywhere in the statements (D3);
+  - one `answered` per guess and one `scored` per player, with the right
+    `result.success`/`result.score`;
+  - actor is `account` + `externalId` only.
+- [x] Re-export of an unchanged game is idempotent: same statement IDs,
+      same count (no duplicates), same response.
+- [ ] The "Export to LRS" **UI** action (disabled/erroring while
+      `missingBadges` is non-empty) — waits on the referee-facing export
+      button, not yet built.
 - [ ] Separately and by hand: one export to Veracity `emojiapp-dev`
-      (`LRS.md`). Not in the automated suite, to keep runs offline and
-      free of keys.
+      (`LRS.md`). Already done once (2026-10-11); not in the automated
+      suite, to keep runs offline and free of keys.
 
 ---
 
@@ -323,5 +338,5 @@ quietly break it. They come from `manual-tests.md`:
    UI, then Phase 3.
 2. **Express-served build vs Vite for local runs.** Recommendation: Vite
    (faster, hot reload while debugging with `--ui`); the built SPA in CI.
-3. **Stub LRS location** (Phase 4): a Playwright `webServer` entry or a
-   `global-setup` process. Decide when 1c's client exists.
+3. **Stub LRS location** (Phase 4): decided — a `webServer` entry
+   (`stub-lrs-server.mjs`), alongside the API and client processes.

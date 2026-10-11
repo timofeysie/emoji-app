@@ -2,7 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 const API_PORT = 3100;
 const CLIENT_PORT = 5210;
+const STUB_LRS_PORT = 3101;
 const API_URL = `http://localhost:${API_PORT}`;
+const STUB_LRS_URL = `http://localhost:${STUB_LRS_PORT}`;
 const MONGODB_URI = 'mongodb://127.0.0.1:27017/emoji-app-e2e?directConnection=true';
 
 /**
@@ -32,6 +34,16 @@ export default defineConfig({
   ],
   webServer: [
     {
+      command: `node playwright/stub-lrs-server.mjs`,
+      cwd: '..',
+      url: `${STUB_LRS_URL}/health`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: 'ignore',
+      stderr: 'pipe',
+      env: { STUB_LRS_PORT: String(STUB_LRS_PORT) },
+    },
+    {
       command: `node playwright/reset-e2e-db.mjs && npm run build:server && node dist/server/main.js`,
       cwd: '..',
       url: `${API_URL}/api/version`,
@@ -45,6 +57,10 @@ export default defineConfig({
         DISABLE_AUTH: 'true',
         NODE_ENV: 'test',
         OPENAI_API_KEY: 'e2e-dummy',
+        // Step 1c export (docs/xAPI/xapi-export-plan.md); stub LRS, not Veracity (Phase 4).
+        XAPI_LRS_ENDPOINT: `${STUB_LRS_URL}/xapi/`,
+        XAPI_LRS_KEY: 'e2e-stub-key',
+        XAPI_LRS_SECRET: 'e2e-stub-secret',
       },
     },
     {

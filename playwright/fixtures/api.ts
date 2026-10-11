@@ -202,4 +202,13 @@ export class Api {
       ),
     );
   }
+
+  /** Raw response, so a test can assert a non-200 status (e.g. missingBadges). */
+  async exportGameRaw(gameId: string): Promise<APIResponse> {
+    return this.request.post(`/api/games/${gameId}/xapi-export`);
+  }
+
+  async exportGame(gameId: string): Promise<{ ok: boolean; statementsSent: number }> {
+    return ok(await this.exportGameRaw(gameId));
+  }
 }
