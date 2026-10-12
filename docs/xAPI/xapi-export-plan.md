@@ -488,12 +488,13 @@ access).
   Veracity's DPA and data location before a school pilot (`security.md` →
   Third parties). `LRS.md`'s self-hosted options (SQL LRS, Learning
   Locker) are the fallback if that matters.
-- **Veracity free-tier reporting is unconfirmed.** It's unclear whether
-  the free plan includes Analytics dashboards or only the statement viewer.
-  `LRS.md` Step 5 checks this on `dev` after the first exports. If
-  dashboards aren't included, CSV export covers a single-learner pilot,
-  and Watershed Essentials is the fallback. Volume limits (100 MB, 10k
-  calls/day) are far above pilot needs.
+- **Veracity free-tier reporting: resolved, better than expected.**
+  Confirmed 2026-10-11 (`LRS.md` Step 5): the free plan includes a full
+  Analytics dashboard, not just the statement viewer, and its "Low Scoring
+  Objects" widget covers Q4 (weak questions) with no custom code. There's
+  no per-learner score-over-time widget, so Q3 still goes through CSV
+  export; Watershed Essentials stays the fallback only if that becomes a
+  chore. Volume limits (100 MB, 10k calls/day) are far above pilot needs.
 - **Manual identity mapping doesn't scale.** It's fine for a single-pilot
   scale (a handful of players); a real second user (e.g. a teacher's whole
   class) would need a less manual way to assign players to badges, which is

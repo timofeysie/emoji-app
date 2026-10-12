@@ -26,10 +26,12 @@ An **LRS dashboard is enough for the pilot**. Moodle is deferred (see
 stored and where we look at progress.
 
 **LRS: Veracity**, free hosted plan on `lrs.io` (we have an account). We use
-three LRSs: `dev`, `sandbox` and `pilot`. See
-[Veracity setup](#veracity-setup-chosen-lrs). Whether its free tier
-includes dashboards is still to be confirmed. If it doesn't, CSV export
-covers the pilot, and Watershed Essentials is the fallback.
+three LRSs: `dev`, `sandbox` and `pilot` (only `dev` created so far;
+`sandbox`/`pilot` deferred until staging/pilot work begins). See
+[Veracity setup](#veracity-setup-chosen-lrs). **Confirmed (2026-10-11):**
+the free plan includes a full Analytics dashboard (`emojiapp-dev`'s
+"LRS Overview"), not just the statement viewer — see
+[Step 5](#step-5--viewing-results-mapping-to-q1q6).
 
 ---
 
@@ -334,7 +336,7 @@ Learning Pool LRS (commercial Learning Locker), and LMSs with built-in LRSs
 | | Q1 game timeline | Q2 game scores | Q3 progress over time | Q4 weak questions | Q5 speed | Q6 distractors | Dev/pilot separation | Data stays with us |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Watershed Essentials | ✅ | ✅ | ✅ dashboard | ✅ activity report | ⚠️ verify | ⚠️ verify | ⚠️ verify | ❌ |
-| Veracity Free | ✅ viewer | ✅ viewer | ⚠️ raw list only (✅ if dashboards are included) | ❌ / ✅ if dashboards | ❌ / ⚠️ | ❌ / ⚠️ | ✅ 3 LRSs | ❌ |
+| Veracity Free | ✅ viewer | ✅ dashboard + viewer | ⚠️ CSV export (no per-learner trend widget) | ✅ dashboard ("Low Scoring Objects") | ⚠️ CSV export | ⚠️ CSV export | ✅ 3 LRSs | ❌ |
 | SCORM Cloud | ✅ viewer | ✅ viewer | ⚠️ raw list only | ❌ manual | ❌ | ❌ | ✅ per-app endpoints | ❌ |
 | SQL LRS (+ Superset) | ✅ | ✅ | ✅ with Superset | ✅ with Superset | ✅ with Superset | ✅ with Superset | ✅ separate containers | ✅ |
 | Learning Locker | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ stores | ✅ |
@@ -352,18 +354,23 @@ plans are priced for enterprises (thousands per month), so if we outgrow
 the free plan we'd move off it rather than upgrade.
 
 **Veracity free.** Fastest to set up, and having 3 LRSs is ideal for
-`dev` / `pilot` separation. **Whether the free tier includes dashboards
-is disputed.** The live pricing table (`lrs.io/home/lrs-pricing`, checked
-October 2026) lists only "Statement Viewer" for Free. It puts "Statement
-Viewer Customizations and Filters", "Saved Reports" and the "Analytics
-Platform" in Starter ($100/mo) and above. Some third-party summaries (and
-older Veracity material) describe the free plan as having full dashboards
-and custom analytics. Sign-up takes minutes, so check it directly.
+`dev` / `pilot` separation. **Confirmed (2026-10-11): the free plan
+includes a full Analytics dashboard**, not just the statement viewer —
+`emojiapp-dev`'s "LRS Overview" has preconfigured widgets (actors by
+event count, recently active objects, weekly traffic, actor behavior,
+high/low scoring objects, verb type, usage by authority). This contradicts
+the live pricing table (`lrs.io/home/lrs-pricing`, checked October 2026),
+which lists only "Statement Viewer" for Free and puts dashboards in
+Starter ($100/mo) — the account's actual behavior is what matters, and it
+has them.
 
-- **If dashboards are included:** Veracity becomes the strongest free
-  hosted option. Its three stores give `dev`/`pilot` separation, and its
-  dashboards cover Q3–Q4.
-- **If not:** it's fine for storage and Q1/Q2, but weak for Q3–Q6.
+Veracity is the strongest free hosted option: its three stores give
+`dev`/`pilot` separation, and the dashboard directly covers **Q2** (High/
+Low Scoring Objects) and **Q4** ("Low Scoring Objects" is exactly the weak-
+questions report). It does **not** have a per-learner score-over-time
+widget, so **Q3** still needs the CSV-export route; **Q5**/**Q6** (duration,
+distractor) aren't covered by any listed widget either, so those stay CSV
+export too, same as originally planned.
 
 **SCORM Cloud.** The best way to check that our statements are
 well-formed. Use it once during Step 1c as a conformance check, not as the
@@ -591,11 +598,16 @@ Export: in the statement viewer, the **"…"** menu downloads CSV
 > ⚠️ Widgets also offer an **embed** link, which makes that data
 > **public**. Never use it on `emojiapp-pilot`.
 
-**This settles the "does the free tier have dashboards?" question.** Open
-**Analytics** on `emojiapp-dev` after the first exports and note in the
-[setup record](#setup-record) whether dashboards are available. If they
-aren't, the CSV route covers Q3–Q6 for a single-learner pilot. Watershed
-Essentials remains the fallback if spreadsheets become a chore.
+**Settled (2026-10-11): yes, the free tier has dashboards.**
+`emojiapp-dev`'s **Analytics → LRS Overview** shows: basic stats (statement/
+agent/activity counts, storage, logs), actors with the most events,
+recently active objects, weekly traffic, actor behavior, most active
+parent contexts, **high scoring objects**, **low scoring objects**, verb
+type, and usage by authority. "Low Scoring Objects" directly answers Q4
+(weak questions) with no custom code. There's no per-learner
+score-over-time widget, so Q3 still goes through the CSV route; Watershed
+Essentials stays the fallback only if that spreadsheet step becomes a
+chore for the real pilot.
 
 ### Step 6 — Housekeeping
 
@@ -624,7 +636,7 @@ Fill in as the setup is done:
 | Strict API Mode on (all three)? | On for `emojiapp-dev`; sandbox/pilot not yet created |
 | Keys created (names only, never secrets) | `emoji-app-server` (dev) |
 | Smoke test: PUT / GET / identical re-send / changed re-send status codes | PUT 204; GET 200 (statement returned, `authority.account.name` = `emoji-app-server`); identical re-send 204 (no duplicate); changed re-send 409 (`"...ids that are already in the DB, but one of the statements is different"`). Run 2026-10-11 against `emojiapp-dev`; smoke-test statement cleared afterward. |
-| Analytics dashboards available on free tier? | |
+| Analytics dashboards available on free tier? | **Yes** (confirmed 2026-10-11) — "LRS Overview" with actors-by-events, recently active objects, weekly traffic, actor behavior, high/low scoring objects, verb type, usage by authority. No per-learner score-over-time widget (Q3 stays CSV export). |
 | Base IRI decided | `https://kogs.link/xapi/emoji-app` ✅ |
 | Actor format decided | `account` + `externalId`, no email/name ✅ (2026-10-09) |
 | Veracity hosting region(s) / AU hosting possible? | **Yes (assumed for the prototype, 2026-10-09; not yet confirmed by Veracity)** |
@@ -644,26 +656,26 @@ Fill in as the setup is done:
 These are refinements within `xapi-export-plan.md`'s existing scope, not new
 features:
 
-- [ ] Stable UUID v5 statement IDs and a per-game `context.registration`.
-- [ ] `answered` statements include the `choice` interaction definition,
+- [x] Stable UUID v5 statement IDs and a per-game `context.registration`.
+- [x] `answered` statements include the `choice` interaction definition,
       `result.response` and `result.duration`.
-- [ ] `scored` statements include `result.score.scaled`.
-- [ ] `timestamp` = event time (guess time / game end), not export time.
-- [ ] Config `XAPI_LRS_ENDPOINT` / `XAPI_LRS_KEY` / `XAPI_LRS_SECRET`
+- [x] `scored` statements include `result.score.scaled`.
+- [x] `timestamp` = event time (guess time / game end), not export time.
+- [x] Config `XAPI_LRS_ENDPOINT` / `XAPI_LRS_KEY` / `XAPI_LRS_SECRET`
       (Veracity `dev` LRS in development); add placeholders to
       `.env.example`.
-- [ ] Handle a 409 from the LRS as "already exported with a different
+- [x] Handle a 409 from the LRS as "already exported with a different
       shape" in the referee-facing error.
 
 ## Open questions
 
-- Veracity Free: does it include dashboards or only the statement viewer?
-  The pricing page and other summaries disagree; this gets answered at
-  [Step 5](#step-5--viewing-results-mapping-to-q1q6) of the Veracity setup.
-- Veracity: confirm the identical re-send and changed re-send status codes
-  ([Step 4](#step-4--smoke-test-before-any-code)).
 - Do we want word-level tracking across games (Q4 across games) soon? If
   so, the question model needs a content ID first.
+- ~~Veracity Free: does it include dashboards or only the statement
+  viewer?~~ **Resolved 2026-10-11: yes**, see
+  [Step 5](#step-5--viewing-results-mapping-to-q1q6).
+- ~~Veracity: confirm the identical re-send and changed re-send status
+  codes.~~ **Resolved**, see the [setup record](#setup-record).
 
 ---
 
