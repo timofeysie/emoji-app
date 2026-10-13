@@ -548,8 +548,8 @@ export class GameDataRepository {
         }
       } else if (input.slotLabel) {
         // Fallback path — no card group assigned; trust the slotLabel supplied
-        // by the Zero (resolved from its local NFC_CARD_MAP). Demo seed:
-        // R12 Monkey 5B:6F:B8:08 → A, W3 Clown DB:93:B7:08 → B.
+        // by the Zero (resolved from its local NFC_CARD_MAP). Seed quiz cards:
+        // 2B:73 → A, 4B:71 → B, DB:69 → C, 1B:5D → D (nfc-card.service.ts).
         resolvedSlotLabel = input.slotLabel;
       } else {
         // No map and no group — still return wrong so the badge can show red X.

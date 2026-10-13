@@ -577,8 +577,11 @@ export class GameFlowController {
 
     try {
       const groupId = await this.gameDataRepository.ensureNfcCardGroup({
-        name: 'Demo Set',
-        description: 'Hardcoded demo NFC cards (seed)',
+        // Renamed from 'Demo Set' (Monkey A / Clown B), which databases may
+        // still hold: ensureNfcCardGroup returns an existing same-name group
+        // unchanged, so a new name is what picks up the A–D quiz cards.
+        name: 'Quiz Cards A-D',
+        description: 'Hardcoded quiz NFC cards A–D (seed)',
         cards,
       });
       await this.gameDataRepository.assignNfcCardGroupToGame({ gameId, groupId });
