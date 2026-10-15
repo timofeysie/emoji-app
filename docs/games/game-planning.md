@@ -530,8 +530,8 @@ mistakes):
 | Part | Groups |
 | --- | --- |
 | Initial consonant | ㄱ ㄲ ㅋ · ㄷ ㄸ ㅌ · ㅂ ㅃ ㅍ · ㅈ ㅉ ㅊ · ㅅ ㅆ ㅇ · ㄴ ㄹ ㅁ · ㅇ ㅎ |
-| Vowel | ㅏ ㅓ ㅗ ㅜ ㅡ · ㅐ ㅔ · ㅑ ㅕ ㅛ ㅠ · ㅣ ㅢ ㅡ |
-| Final consonant | none ㄱ ㄴ ㄹ ㅁ ㅂ ㅇ |
+| Vowel | ㅏ ㅓ ㅗ ㅜ ㅡ · ㅐ ㅔ · ㅒ ㅖ · ㅑ ㅕ ㅛ ㅠ · ㅘ ㅝ · ㅙ ㅚ ㅞ ㅟ · ㅡ ㅢ ㅣ |
+| Final consonant | none ㄴ ㄹ ㅁ ㅇ · ㄱ ㄲ ㅋ · ㄷ ㅅ ㅆ ㅈ ㅊ ㅌ ㅎ (all sound like ㄷ at the end) · ㅂ ㅍ |
 
 Rules, from trying this on the ch. 26 list:
 
@@ -546,7 +546,8 @@ Rules, from trying this on the ch. 26 list:
    characters.
 3. **Remove real words.** At minimum, remove any distractor that is
    another term in the chapter. A change can still make a real word
-   outside the chapter (`독감` → `동감`, "sympathy"). That is rare and
+   outside the chapter (`붓다` → `벗다`, "to take off"; `걸리다` →
+   `굴리다`, "to roll"). That is rare and
    fine for the pilot. A small Korean word list can filter these later.
 4. **One-syllable words** (`열`, `목`) have only one syllable to change.
    That's fine, because rule 1 is then always met.
@@ -570,12 +571,17 @@ Nothing needs to be built to *track* speed. Showing it on the view screen
 
 ### Where it lives
 
-- `server/src/games/generators/vocab-choice.ts`: pure functions
-  `readingItems(terms, seed)` and `writingItems(terms, seed)`, with unit
-  tests using ch. 26 as a fixture (same style as
-  `statement-builder.spec.ts`).
+*Built 2026-10-13.*
+
+- `server/src/games/generators/vocab-choice.ts`: `termsFromChapter`,
+  `readingItem`, `writingItem`, `generateVocabQuiz({ terms, skills, count,
+  seed })` and `toQuestionInput` (options → cards `A`–`D`). Pure, tested
+  with ch. 26.
 - `server/src/games/generators/hangul.ts`: split, change and rebuild
-  syllables. Tests cover `간호사` and the rules above.
+  syllables, and `misspellings()` with the rules above. Tested.
+- `server/src/games/generators/seeded-random.ts`: seeded PRNG + shuffle.
+- `server/src/games/content/chapter26Data.json`: emoji-app's own copy of
+  the chapter (the test fixture and the script's default source).
 
 ---
 
@@ -642,11 +648,19 @@ referee flow, scoring and xAPI export work unchanged.
    again return a same-name group unchanged. A proper fix syncs the
    group's cards to the seed instead of renaming the group.
 2. **Generator** (`vocab-choice.ts` + `hangul.ts`, above), with tests.
-3. **Seed script** `scripts/create-vocab-game.ts --source chapter26Data.json
-   --skills reading,writing --count 10 --seed 26`. It creates one game with
-   numbered questions (`Question.sequence`; the view already shows
-   "Round N" and options `A`–`D`). It alternates reading and writing.
-   `Question.text` holds the prompt, for example `간호사` or `nurse`.
+   *Done 2026-10-13.*
+3. **Script** `npm run create:vocab-game -- [--source chapterNNData.json]
+   [--skills reading,writing] [--count 10] [--seed 26] [--server URL]
+   [--dry-run]` (`scripts/create-vocab-game.mjs`). It builds the server,
+   then creates one game with numbered questions (`Question.sequence`; the
+   view already shows "Round N" and options `A`–`D`). Questions alternate
+   reading and writing. `Question.text` holds the prompt, for example
+   `간호사` or `nurse`. `--dry-run` prints the questions without creating
+   anything. *Done 2026-10-13*; checked against a scratch database.
+
+   Created questions start as `draft`, like questions made in the UI.
+   Starting a game auto-opens only `closed` questions, so on the first run
+   the referee opens round 1 from the panel.
 4. **Play**: referee laptop (edit mode) opens the game for joining. The
    browser in view mode shows the questions. The controller starts the
    game and moves it along. Badges scan `A`–`D` cards.

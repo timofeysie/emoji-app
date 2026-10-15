@@ -1,0 +1,379 @@
+{
+    "id": "26",
+    "categoryMappingId": 0,
+    "chapter": "26",
+    "titleTarget": "주사 놓을게요.",
+    "titleNative": "I'll give you a shot.",
+    "dialog": [
+        {
+            "index": 0,
+            "speakerNameTarget": "간호사",
+            "speakerNameNative": "Nurse",
+            "speechTarget": "안녕하세요. 어디가 안 좋으세요?",
+            "speechNative": "Hello. What is bothering you?"
+        },
+        {
+            "index": 1,
+            "speakerNameTarget": "수민",
+            "speakerNameNative": "Su-min",
+            "speechTarget": "아, 감기 몸살이 심하게 걸려서요.",
+            "speechNative": "Oh, I have a severe cold and my body aches."
+        },
+        {
+            "index": 2,
+            "speakerNameTarget": "간호사",
+            "speakerNameNative": "Nurse",
+            "speechTarget": "네, 이거 작성해 주시고 잠시만 앉아서 기다려 주세요.",
+            "speechNative": "Okay. Please fill this in, and sit and wait for just a little bit."
+        },
+        {
+            "index": 3,
+            "speakerNameTarget": "수민",
+            "speakerNameNative": "Su-min",
+            "speechTarget": "네. 얼마나 기다려야 하나요?",
+            "speechNative": "Okay. How long should I wait?"
+        },
+        {
+            "index": 4,
+            "speakerNameTarget": "간호사",
+            "speakerNameNative": "Nurse",
+            "speechTarget": "십 분 정도만 기다려 주세요.",
+            "speechNative": "Please wait about ten minutes or so."
+        },
+        {
+            "index": 5,
+            "speakerNameTarget": "수민",
+            "speakerNameNative": "Su-min",
+            "speechTarget": "네.",
+            "speechNative": "Okay."
+        },
+        {
+            "index": 6,
+            "speakerNameTarget": "간호사",
+            "speakerNameNative": "Nurse",
+            "speechTarget": "김수민 씨, 들어오세요.",
+            "speechNative": "Sumin Kim, please come in."
+        },
+        {
+            "index": 7,
+            "speakerNameTarget": "수민",
+            "speakerNameNative": "Su-min",
+            "speechTarget": "네.",
+            "speechNative": "Yes."
+        },
+        {
+            "index": 8,
+            "speakerNameTarget": "의사",
+            "speakerNameNative": "Doctor",
+            "speechTarget": "안녕하세요.",
+            "speechNative": "Hello."
+        },
+        {
+            "index": 9,
+            "speakerNameTarget": "수민",
+            "speakerNameNative": "Su-min",
+            "speechTarget": "네, 안녕하세요.",
+            "speechNative": "Yes, hi."
+        },
+        {
+            "index": 10,
+            "speakerNameTarget": "의사",
+            "speakerNameNative": "Doctor",
+            "speechTarget": "감기 걸리셨어요?",
+            "speechNative": "Have you caught a cold?"
+        },
+        {
+            "index": 11,
+            "speakerNameTarget": "수민",
+            "speakerNameNative": "Su-min",
+            "speechTarget": "네. 추운 날씨에 계속 밖에서 활동했더니 감기에 제대로 걸린 것 같아요.",
+            "speechNative": "Yes. I stayed outside in the cold weather, so I think I've come down with a bad cold."
+        },
+        {
+            "index": 12,
+            "speakerNameTarget": "의사",
+            "speakerNameNative": "Doctor",
+            "speechTarget": "증상이 어떠세요?",
+            "speechNative": "What are your symptoms?"
+        },
+        {
+            "index": 13,
+            "speakerNameTarget": "수민",
+            "speakerNameNative": "Su-min",
+            "speechTarget": "목이 너무 따갑고 아프고요. 기운이 하나도 없어요.",
+            "speechNative": "My throat is really sore and painful. I have no energy."
+        },
+        {
+            "index": 14,
+            "speakerNameTarget": "의사",
+            "speakerNameNative": "Doctor",
+            "speechTarget": "아이고. 요즘 유행하는 독감에 걸리신 것 같네요. 자 그럼 한번 볼게요. 입 '아' 하고 벌려 보세요.",
+            "speechNative": "Oh... It looks like you’ve come down with the flu, which is going around these days. Well, let’s take a look. Open your mouth and say 'Ah'."
+        }
+    ],
+    "vocabulary": [
+        {
+            "id": 0,
+            "targetLanguageText": "독감",
+            "nativeLanguageText": "flu"
+        },
+        {
+            "id": 1,
+            "targetLanguageText": "벌리다",
+            "nativeLanguageText": "to open"
+        },
+        {
+            "id": 2,
+            "targetLanguageText": "편도선",
+            "nativeLanguageText": "tonsil"
+        },
+        {
+            "id": 3,
+            "targetLanguageText": "붓다",
+            "nativeLanguageText": "to swell up, to become swollen"
+        },
+        {
+            "id": 4,
+            "targetLanguageText": "열",
+            "nativeLanguageText": "fever"
+        },
+        {
+            "id": 5,
+            "targetLanguageText": "재다",
+            "nativeLanguageText": "to measure"
+        },
+        {
+            "id": 6,
+            "targetLanguageText": "보여 주다",
+            "nativeLanguageText": "to show"
+        },
+        {
+            "id": 7,
+            "targetLanguageText": "주사",
+            "nativeLanguageText": "injection, shot"
+        },
+        {
+            "id": 8,
+            "targetLanguageText": "주사를 놓다",
+            "nativeLanguageText": "to have a shot"
+        },
+        {
+            "id": 9,
+            "targetLanguageText": "괜찮다",
+            "nativeLanguageText": "to be okay, to be alright"
+        },
+        {
+            "id": 10,
+            "targetLanguageText": "눕다",
+            "nativeLanguageText": "to lie down"
+        },
+        {
+            "id": 11,
+            "targetLanguageText": "살짝",
+            "nativeLanguageText": "slightly"
+        },
+        {
+            "id": 12,
+            "targetLanguageText": "내리다",
+            "nativeLanguageText": "to lower, to take down"
+        },
+        {
+            "id": 13,
+            "targetLanguageText": "간호사",
+            "nativeLanguageText": "nurse"
+        },
+        {
+            "id": 14,
+            "targetLanguageText": "감기",
+            "nativeLanguageText": "cold"
+        },
+        {
+            "id": 15,
+            "targetLanguageText": "몸살",
+            "nativeLanguageText": "body ache"
+        },
+        {
+            "id": 16,
+            "targetLanguageText": "심하다",
+            "nativeLanguageText": "to be serious"
+        },
+        {
+            "id": 17,
+            "targetLanguageText": "걸리다",
+            "nativeLanguageText": "to get (sick), to catch a disease"
+        },
+        {
+            "id": 18,
+            "targetLanguageText": "작성하다",
+            "nativeLanguageText": "to fill out"
+        },
+        {
+            "id": 19,
+            "targetLanguageText": "잠시만",
+            "nativeLanguageText": "for a little bit, for just a little while"
+        },
+        {
+            "id": 20,
+            "targetLanguageText": "계속",
+            "nativeLanguageText": "continuously, consecutively"
+        },
+        {
+            "id": 21,
+            "targetLanguageText": "활동하다",
+            "nativeLanguageText": "to work, to act"
+        },
+        {
+            "id": 22,
+            "targetLanguageText": "제대로",
+            "nativeLanguageText": "properly, right"
+        },
+        {
+            "id": 23,
+            "targetLanguageText": "증상",
+            "nativeLanguageText": "symptom"
+        },
+        {
+            "id": 24,
+            "targetLanguageText": "목",
+            "nativeLanguageText": "throat"
+        },
+        {
+            "id": 25,
+            "targetLanguageText": "따갑다",
+            "nativeLanguageText": "to be sore"
+        },
+        {
+            "id": 26,
+            "targetLanguageText": "기운이 없다",
+            "nativeLanguageText": "to have no energy, to feel down"
+        },
+        {
+            "id": 27,
+            "targetLanguageText": "유행하다",
+            "nativeLanguageText": "to be popular, to be in fashion"
+        }
+    ],
+    "patterns": [
+        {
+            "id": 0,
+            "patternTarget": "VERB + -았/었/였더니",
+            "patternNative": "I PAST TENSE VERB and as a result...",
+            "type": "casual",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "밖에서 활동했더니 감기에 제대로 걸린 것 같아요.",
+            "exampleSentenceNative": "I stayed outside for a long time and I think I've come down with a bad cold.",
+            "sampleSentences": [
+                {
+                    "id": 0,
+                    "targetText": "너무 오래 달렸더니 어지러워요.",
+                    "nativeText": "I ran for a long time and now I'm dizzy."
+                },
+                {
+                    "id": 1,
+                    "targetText": "오늘 아침에 일찍 일어났더니 너무 졸려요.",
+                    "nativeText": "I woke up early this morning and as a result, I am so sleepy."
+                }
+            ],
+            "exercises": [
+                {
+                    "id": 1,
+                    "exercise": "I ate too much and now my stomach hurts. (to have a stomachache = 배 아프다, to eat too much = 너무 많이 먹다)",
+                    "answerKey": "너무 많이 먹었더니 배 아파요."
+                },
+                {
+                    "id": 2,
+                    "exercise": "I stayed home for a long time and as a result, I’m bored. (to feel bored = 심심하다, to stay home = 집에 있다, too long = 오래)",
+                    "answerKey": "더 오래 집에 있었더니 심심해요."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 0,
+                    "pattern": "VERB + -아/어/여서",
+                    "patternTargetText": "밖에서 활동해서 감기에 제대로 걸린 것 같아요.",
+                    "patternNativeText": "I stayed outside for a long time and I think I’ve come down with a bad cold.",
+                    "patternNote": "The sentence has the same meaning even without the word 더, which means “more”, here."
+                },
+                {
+                    "id": 1,
+                    "pattern": "VERB + -고 나니까",
+                    "patternTargetText": "밖에서 활동하고 나니까 감기에 제대로 걸린 것 같아요.",
+                    "patternNativeText": "After staying outside for a long time, I think I’ve come down with a bad cold."
+                }
+            ]
+        },
+        {
+            "id": 1,
+            "type": "formal",
+            "patternTarget": "VERB + -(으)면 VERB + -(으)ㄹ 거예요",
+            "patternNative": "After..., you will VERB. / If..., you will VERB.",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "주사 맞으면 좀 괜찮아질 거예요.",
+            "exampleSentenceNative": "After getting a shot, you will feel a little better.",
+            "exercises": [
+                {
+                    "id": 1,
+                    "exercise": "After you have taken some medicine, you will get better. (to have some medicine = 약 먹다, to get better = 낫다)",
+                    "answerKey": "약 먹으면 나을 거예요."
+                },
+                {
+                    "id": 2,
+                    "exercise": "If he comes back next month, we will meet again. (to come back = 돌아오다, next month = 다음 달)",
+                    "answerKey": "그 사람이 다음 달에 돌아오면 다시 만날 거예요."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 0,
+                    "pattern": "VERB + -(으)면 VERB + -(으)ᄅ 수도 있어요",
+                    "patternTargetText": "주사 맞으면 좀 괜찮아질 수도 있어요.",
+                    "patternNativeText": "If you get a shot, you might feel better."
+                },
+                {
+                    "id": 1,
+                    "pattern": "VERB + -(으)면 VERB + -아/어/여요",
+                    "patternTargetText": "주사 맞으면 좀 괜찮아져요.",
+                    "patternNativeText": "If you get a shot, you will get better."
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "type": "formal",
+            "patternTarget": "더 VERB + -아/어/여야 돼요",
+            "patternNative": "You need to VERB more.",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "더 내리셔야 돼요.",
+            "exampleSentenceNative": "You need to lower them a little more.",
+            "exercises": [
+                {
+                    "id": 1,
+                    "exercise": "It needs to be brighter. (to be brighter = 더 밝다)",
+                    "answerKey": "더 밝아야 돼요."
+                },
+                {
+                    "id": 2,
+                    "exercise": "You need to eat more. (to eat more = 더 먹다)",
+                    "answerKey": "더 먹어야 돼요."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 0,
+                    "pattern": "더 VERB + -아/어/여야 해요",
+                    "patternTargetText": "더 내리셔야 해요.",
+                    "patternNativeText": "You need to lower them a little more.",
+                    "patternNote": "*-야 해요 and -야 돼요 mean the same thing."
+                },
+                {
+                    "id": 1,
+                    "pattern": "더 VERB + -아/어/여야 돼",
+                    "type": "casual",
+                    "patternTargetText": "더 내려야 돼.",
+                    "patternNativeText": "You need to lower them a little more.",
+                    "patternNote": "*Removing -요 at the end makes the sentence more casual."
+                }
+            ]
+        }
+    ]
+}

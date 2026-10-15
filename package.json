@@ -21,6 +21,7 @@
     "docker:build": "docker build -t emoji-app .",
     "docker:run": "docker run -p 3000:3000 --env-file .env emoji-app",
     "seed:local": "node scripts/seed-local.mjs",
+    "create:vocab-game": "npm run build:server && node scripts/create-vocab-game.mjs",
     "test:server": "jest --config server/jest.config.ts",
     "test:server:watch": "jest --config server/jest.config.ts --watch",
     "test:e2e": "playwright test --config playwright/playwright.config.ts",

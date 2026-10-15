@@ -1,0 +1,148 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { createRng } from './seeded-random';
+import {
+  firstSense,
+  generateVocabQuiz,
+  readingItem,
+  termsFromChapter,
+  toQuestionInput,
+  VocabChoiceItem,
+  writingItem,
+} from './vocab-choice';
+
+const chapter26 = JSON.parse(
+  readFileSync(join(__dirname, '../content/chapter26Data.json'), 'utf8'),
+) as unknown;
+const terms = termsFromChapter(chapter26);
+const nurse = terms.find((term) => term.target === '간호사')!;
+
+function correct(item: VocabChoiceItem): string {
+  return item.options.find((option) => option.isCorrect)!.text;
+}
+
+describe('termsFromChapter', () => {
+  it('reads every ch. 26 vocabulary entry with a stable id', () => {
+    expect(terms).toHaveLength(28);
+    expect(terms[0]).toEqual({ id: 'ch26/vocabulary/0', target: '독감', native: 'flu' });
+    expect(nurse.id).toBe('ch26/vocabulary/13');
+  });
+
+  it('rejects data without a vocabulary list', () => {
+    expect(() => termsFromChapter({ chapter: '1' })).toThrow();
+  });
+});
+
+describe('firstSense', () => {
+  it('keeps the first comma-separated sense', () => {
+    expect(firstSense('to swell up, to become swollen')).toBe('to swell up');
+    expect(firstSense('to get (sick), to catch a disease')).toBe('to get (sick)');
+    expect(firstSense('nurse')).toBe('nurse');
+  });
+});
+
+describe('readingItem', () => {
+  it('asks for the meaning of the Korean word', () => {
+    const item = readingItem(nurse, terms, createRng(1))!;
+    expect(item.skill).toBe('reading');
+    expect(item.prompt).toBe('간호사');
+    expect(item.options).toHaveLength(4);
+    expect(correct(item)).toBe('nurse');
+    expect(item.options.filter((o) => o.isCorrect)).toHaveLength(1);
+    expect(new Set(item.options.map((o) => o.text)).size).toBe(4);
+  });
+
+  it('uses verb meanings as distractors for a verb', () => {
+    const swell = terms.find((term) => term.target === '붓다')!;
+    for (let seed = 1; seed <= 20; seed++) {
+      const item = readingItem(swell, terms, createRng(seed))!;
+      expect(correct(item)).toBe('to swell up');
+      for (const option of item.options) {
+        expect(option.text.startsWith('to ')).toBe(true);
+      }
+    }
+  });
+
+  it('uses non-verb meanings as distractors for a noun', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const item = readingItem(nurse, terms, createRng(seed))!;
+      for (const option of item.options) {
+        expect(option.text.startsWith('to ')).toBe(false);
+      }
+    }
+  });
+
+  it('returns null when the list is too short', () => {
+    expect(readingItem(nurse, [nurse, terms[0]], createRng(1))).toBeNull();
+  });
+});
+
+describe('writingItem', () => {
+  it('asks for the Korean spelling of the English word', () => {
+    const item = writingItem(nurse, terms, createRng(1))!;
+    expect(item.skill).toBe('writing');
+    expect(item.prompt).toBe('nurse');
+    expect(item.options).toHaveLength(4);
+    expect(correct(item)).toBe('간호사');
+    expect(new Set(item.options.map((o) => o.text)).size).toBe(4);
+  });
+
+  it('never offers another chapter word as a wrong spelling', () => {
+    const realWords = new Set(terms.map((term) => term.target));
+    for (const term of terms) {
+      const item = writingItem(term, terms, createRng(3));
+      expect(item).not.toBeNull();
+      for (const option of item!.options.filter((o) => !o.isCorrect)) {
+        expect(realWords.has(option.text)).toBe(false);
+      }
+    }
+  });
+});
+
+describe('generateVocabQuiz', () => {
+  const quiz = generateVocabQuiz({ terms, skills: ['reading', 'writing'], count: 10, seed: 26 });
+
+  it('makes the requested number of questions, alternating skills', () => {
+    expect(quiz).toHaveLength(10);
+    expect(quiz.map((item) => item.skill)).toEqual([
+      'reading', 'writing', 'reading', 'writing', 'reading',
+      'writing', 'reading', 'writing', 'reading', 'writing',
+    ]);
+  });
+
+  it('uses each term at most once', () => {
+    expect(new Set(quiz.map((item) => item.termId)).size).toBe(10);
+  });
+
+  it('is the same quiz for the same seed and differs for another', () => {
+    expect(generateVocabQuiz({ terms, skills: ['reading', 'writing'], count: 10, seed: 26 })).toEqual(quiz);
+    expect(generateVocabQuiz({ terms, skills: ['reading', 'writing'], count: 10, seed: 27 })).not.toEqual(quiz);
+  });
+
+  it('does not put the correct answer in the same slot every time', () => {
+    const slots = new Set(quiz.map((item) => item.options.findIndex((o) => o.isCorrect)));
+    expect(slots.size).toBeGreaterThan(1);
+  });
+
+  it('stops at the number of terms available', () => {
+    expect(generateVocabQuiz({ terms, skills: ['reading'], count: 100, seed: 1 })).toHaveLength(28);
+  });
+
+  it('requires a skill', () => {
+    expect(() => generateVocabQuiz({ terms, skills: [], count: 1, seed: 1 })).toThrow();
+  });
+});
+
+describe('toQuestionInput', () => {
+  it('maps options onto answer cards A–D in order', () => {
+    const item = readingItem(nurse, terms, createRng(1))!;
+    const input = toQuestionInput(item, 3);
+    expect(input.text).toBe('간호사');
+    expect(input.sequence).toBe(3);
+    expect(input.mode).toBe('standard');
+    expect(input.answerOptions.map((o) => o.slotLabel)).toEqual(['A', 'B', 'C', 'D']);
+    expect(input.answerOptions.map((o) => o.sequence)).toEqual([1, 2, 3, 4]);
+    expect(input.answerOptions.map((o) => o.text)).toEqual(item.options.map((o) => o.text));
+    expect(input.answerOptions.filter((o) => o.isCorrect)).toHaveLength(1);
+  });
+});
