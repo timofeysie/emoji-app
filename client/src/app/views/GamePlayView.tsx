@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
   ChevronLeft,
@@ -37,6 +37,26 @@ type PlayQuestion = {
   }>;
 };
 
+type PreviousResult = {
+  questionId: string;
+  text: string;
+  sequence: number;
+  answerOptions: Array<{
+    id: string;
+    slotLabel: string;
+    text: string;
+    sequence: number;
+    isCorrect: boolean;
+  }>;
+  scans: Array<{
+    pairName: string;
+    stationName?: string;
+    cardLabel: string | null;
+    slotLabel: string | null;
+    isCorrect: boolean;
+  }>;
+};
+
 type GamePlayDetail = {
   id: string;
   title: string;
@@ -49,22 +69,13 @@ type GamePlayDetail = {
   totalRounds: number;
   nextRoundSequence: number | null;
   currentQuestion: PlayQuestion | null;
-  previousResult: {
-    questionId: string;
-    text: string;
-    sequence: number;
-    scans: Array<{
-      pairName: string;
-      stationName?: string;
-      cardLabel: string | null;
-      slotLabel: string | null;
-      isCorrect: boolean;
-    }>;
-  } | null;
+  previousResult: PreviousResult | null;
 };
 
 const LIVE_STATES: GameState[] = ['lobby', 'active', 'paused'];
 const REFRESH_MS = 5_000;
+/** How long the answer stays on screen after a round closes. */
+const REVEAL_MS = 5_000;
 const stageSpring = {
   type: 'spring' as const,
   stiffness: 220,
@@ -81,6 +92,96 @@ function unavailableMessage(state: GameState): string {
   return 'This game was cancelled.';
 }
 
+/** Correct option green; options any player chose wrongly red, with who chose them. */
+function RoundReveal({ result }: { result: PreviousResult }) {
+  const pickedBy = (slotLabel: string) =>
+    result.scans.filter((scan) => scan.slotLabel === slotLabel).map((scan) => scan.pairName);
+  const optionSlots = new Set(result.answerOptions.map((option) => option.slotLabel));
+  const notOnAnOption = result.scans.filter(
+    (scan) => scan.slotLabel == null || !optionSlots.has(scan.slotLabel),
+  );
+
+  return (
+    <motion.section
+      key={`reveal-${result.questionId}`}
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, y: -28, scale: 0.92 }}
+      transition={stageSpring}
+      className="rounded-xl border bg-card p-5 shadow-sm"
+      aria-labelledby="round-reveal-heading"
+    >
+      <p
+        id="round-reveal-heading"
+        className="mb-4 text-sm font-semibold uppercase tracking-wide text-primary"
+      >
+        Round {result.sequence} · answer
+      </p>
+      <h2 className="text-xl font-semibold leading-snug">{result.text}</h2>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        {result.answerOptions.map((option, index) => {
+          const players = pickedBy(option.slotLabel);
+          const wrong = !option.isCorrect && players.length > 0;
+          return (
+            <motion.div
+              key={option.id}
+              initial={{ opacity: 0.6, scale: 0.97 }}
+              animate={{ opacity: option.isCorrect || wrong ? 1 : 0.55, scale: 1 }}
+              transition={{ ...stageSpring, delay: 0.1 + index * 0.06 }}
+              className={[
+                'flex min-w-0 items-start gap-3 rounded-lg border-2 p-3',
+                option.isCorrect
+                  ? 'border-green-600 bg-green-50 dark:bg-green-950/40'
+                  : wrong
+                    ? 'border-red-600 bg-red-50 dark:bg-red-950/40'
+                    : 'border-border bg-background',
+              ].join(' ')}
+            >
+              <span
+                className={[
+                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white',
+                  option.isCorrect ? 'bg-green-600' : wrong ? 'bg-red-600' : 'bg-muted-foreground',
+                ].join(' ')}
+              >
+                {option.slotLabel}
+              </span>
+              <div className="min-w-0 flex-1 pt-0.5">
+                <p className="text-sm font-medium">{option.text}</p>
+                {players.length > 0 && (
+                  <p className="mt-1 truncate text-xs capitalize text-muted-foreground">
+                    {players.join(', ')}
+                  </p>
+                )}
+              </div>
+              {option.isCorrect ? (
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600" aria-label="Correct answer" />
+              ) : wrong ? (
+                <XCircle className="h-5 w-5 shrink-0 text-red-600" aria-label="Chosen, wrong" />
+              ) : null}
+            </motion.div>
+          );
+        })}
+      </div>
+      {notOnAnOption.length > 0 && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          {notOnAnOption
+            .map((scan) =>
+              scan.cardLabel ? `${scan.pairName}: ${scan.cardLabel}` : `${scan.pairName}: no answer`,
+            )
+            .join(' · ')}
+        </p>
+      )}
+      <motion.div
+        className="mt-4 h-1 rounded-full bg-primary/60"
+        initial={{ width: '100%' }}
+        animate={{ width: '0%' }}
+        transition={{ duration: REVEAL_MS / 1000, ease: 'linear' }}
+        aria-hidden
+      />
+    </motion.section>
+  );
+}
+
 function readinessLabel(ready: boolean | null): string {
   if (ready === true) return 'ready';
   if (ready === false) return 'wait';
@@ -93,6 +194,9 @@ export function GamePlayView() {
   const [game, setGame] = useState<GamePlayDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  // Question id whose answer is on screen; set when we see that round close.
+  const [revealQuestionId, setRevealQuestionId] = useState<string | null>(null);
+  const lastOpenQuestionIdRef = useRef<string | null>(null);
 
   const loadGame = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {
@@ -156,6 +260,23 @@ export function GamePlayView() {
     }, REFRESH_MS);
     return () => window.clearInterval(id);
   }, [loadGame]);
+
+  useEffect(() => {
+    if (!game) return;
+    const openId = game.currentQuestion?.id ?? null;
+    const wasOpen = lastOpenQuestionIdRef.current;
+    lastOpenQuestionIdRef.current = openId;
+    // Only on a close we watched happen, not on loading a long-closed round.
+    if (wasOpen && !openId && game.previousResult?.questionId === wasOpen) {
+      setRevealQuestionId(wasOpen);
+    }
+  }, [game]);
+
+  useEffect(() => {
+    if (!revealQuestionId) return;
+    const id = window.setTimeout(() => setRevealQuestionId(null), REVEAL_MS);
+    return () => window.clearTimeout(id);
+  }, [revealQuestionId]);
 
   if (loading) {
     return (
@@ -313,6 +434,10 @@ export function GamePlayView() {
                 ))}
               </div>
             </motion.section>
+          ) : game.previousResult &&
+            game.previousResult.questionId === revealQuestionId &&
+            game.previousResult.answerOptions?.length > 0 ? (
+            <RoundReveal result={game.previousResult} />
           ) : game.previousResult ? (
             <motion.section
               key={`result-${game.previousResult.questionId}`}

@@ -60,7 +60,7 @@ type GameDetail = {
   title: string;
   state: GameState;
   boundPairs: BoundPair[];
-  questions: Array<{ state: string }>;
+  questions: Array<{ state: string; closedAt?: string | null }>;
 };
 
 /** A live station; binding it binds every badge as a player. `total` > 1 for a multi-badge roster. */
@@ -318,9 +318,12 @@ export function GameRefereePanel({
   };
 
   const lifecycleButtons = LIFECYCLE_BUTTONS[game.state] ?? [];
+  // Only after a round of this run has closed: before round 1 the chips show
+  // join status, not the ready / wait answer. Replay clears `closedAt`.
   const isBetweenRounds =
     game.state === 'active' &&
-    !game.questions.some((question) => question.state === 'open');
+    !game.questions.some((question) => question.state === 'open') &&
+    game.questions.some((question) => Boolean(question.closedAt));
 
   return (
     <div className="flex flex-col gap-5 rounded-lg border p-4">
@@ -378,6 +381,7 @@ export function GameRefereePanel({
                         key={bp.pairName}
                         bp={bp}
                         isBetweenRounds={isBetweenRounds}
+                        gameStarted={game.state !== 'lobby'}
                         connection={badgesLoaded ? chipConnection(known, bp.pairName) : null}
                       />
                     ))}
@@ -585,18 +589,21 @@ export function GameRefereePanel({
 }
 
 /**
- * One player (badge): offline / not connected first, then joined before the
- * game and readiness between rounds.
+ * One player (badge): offline / not connected first, then joined ("ready to
+ * start" in the lobby, "joined" once started) and readiness between rounds.
  */
 function PlayerChip({
   bp,
   isBetweenRounds,
+  gameStarted,
   connection,
 }: {
   bp: BoundPair;
   isBetweenRounds: boolean;
+  gameStarted: boolean;
   connection: ChipConnection;
 }) {
+  const joinedLabel = gameStarted ? 'joined' : 'ready to start';
   if (connection) {
     const label = connection === 'offline' ? 'offline' : 'not connected';
     return (
@@ -675,9 +682,9 @@ function PlayerChip({
             exit={{ opacity: 0, scale: 0.5 }}
             transition={chipSpring}
           >
-            <CheckCircle2 className="h-3 w-3" aria-label="Ready to start" />
-            <TextReveal revealKey="ready-to-start" className="text-[10px]">
-              · ready to start
+            <CheckCircle2 className="h-3 w-3" aria-label={joinedLabel} />
+            <TextReveal revealKey={joinedLabel} className="text-[10px]">
+              · {joinedLabel}
             </TextReveal>
           </motion.span>
         ) : (

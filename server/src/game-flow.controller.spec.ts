@@ -250,6 +250,15 @@ describe('GameFlowController', () => {
           questionId: '507f1f77bcf86cd799439015',
           text: 'Completed question',
           sequence: 1,
+          answerOptions: [
+            {
+              id: '507f1f77bcf86cd799439016',
+              slotLabel: 'A',
+              text: 'Correct answer',
+              sequence: 1,
+              isCorrect: true,
+            },
+          ],
           scans: [
             {
               pairName: 'green',

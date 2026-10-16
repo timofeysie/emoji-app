@@ -148,10 +148,10 @@ straight to the join choice.
 | 3 | **Open for Joining** | Zero and badges show the join choice (`KEY1 JOIN  KEY3 NO`) | `lobby`. Referee chip: `waiting to join` |
 | 4 | Press **KEY1** on the Zero | Every connected badge joins (white outline) | Chip: `ready to start` |
 | 5 | Open the play view (`/games/:gameId/play`) on the players' screen | — | — |
-| 6 | **Start Game** | Green square | `active` |
+| 6 | **Start Game** | Green square | `active`. Chip: `joined` |
 | 7 | **Open** round 1 on the game page. Only needed on the game's first run, see below | `?` on badges, NFC armed | Round 1 `open`. The play view shows the prompt and `A`–`D` |
 | 8 | Players scan an answer card | Badge: green outline (card read), then **blue circle** (correct) or **red X** (wrong) | One guess per badge per round |
-| 9 | Round closes when every joined badge has answered, or the referee clicks **Close** | `KEY1 READY  KEY3 WAIT` | Round `closed` |
+| 9 | Round closes when every joined badge has answered, or the referee clicks **Close** | `KEY1 READY  KEY3 WAIT` | Round `closed`. Chip: `awaiting response`, then `ready` / `wait` |
 | 10 | Players press **KEY1 / KEY3** (ready / wait). Referee **Opens** the next round | `?` again | Next round `open` |
 | 11 | After the last round, **End Game** | Fireworks (winner) / rain (loser) | `completed`. Finishing round 10 does **not** end the game |
 

@@ -245,6 +245,17 @@ export class GameFlowController {
               questionId: previousQuestion.id,
               text: previousQuestion.text,
               sequence: previousQuestion.sequence,
+              // The round is closed, so the answer can be shown.
+              answerOptions: previousQuestion.answerOptions
+                .slice()
+                .sort((a, b) => a.sequence - b.sequence)
+                .map((option) => ({
+                  id: option.id,
+                  slotLabel: option.slotLabel,
+                  text: option.text,
+                  sequence: option.sequence,
+                  isCorrect: option.isCorrect,
+                })),
               scans: Object.entries(previousChartQuestion?.byPair ?? {}).map(
                 ([pairName, scan]) => ({
                   pairName,
