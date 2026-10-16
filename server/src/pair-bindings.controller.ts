@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Logger, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { GameDataRepository } from './persistence/game-data.repository';
@@ -40,6 +40,8 @@ function getValidationErrors(error: ZodError): Array<{ path: string; message: st
 
 @Controller('api')
 export class PairBindingsController {
+  private readonly logger = new Logger(PairBindingsController.name);
+
   private readonly questionCloser: QuestionCloser;
 
   constructor(
@@ -92,9 +94,41 @@ export class PairBindingsController {
         stationName: pairName,
         added: badgeNames,
       });
+      await this.sendSnapshotToStation(pairName);
       res.status(201).json({ ok: true, badgeNames });
     } catch (error) {
       res.status(500).json({ error: 'Failed to bind pair', message: String(error) });
+    }
+  }
+
+  /**
+   * Tell the station's Zero which game it is now bound to. Without this a
+   * station bound after the lobby opened never hears `game.opened`, so it shows
+   * no join option and ignores scans until it reconnects. Sends the same
+   * snapshot as GET /api/pairs/:pairName, as the `controller.welcome` the Zero
+   * applies on reconnect. A Zero that is offline fetches it itself later.
+   */
+  private async sendSnapshotToStation(pairName: string): Promise<void> {
+    try {
+      const snapshot = await this.gameDataRepository.getBinding(pairName);
+      if (!snapshot) {
+        return;
+      }
+      this.badgeStateService.sendToPairNames([snapshot.stationName], {
+        type: 'controller.welcome',
+        pairName: snapshot.stationName,
+        gameId: snapshot.gameId,
+        state: snapshot.state,
+        joined: snapshot.joined,
+        openQuestionId: snapshot.openQuestionId,
+        readyForNextQuestion: snapshot.readyForNextQuestion,
+        roundsComplete: snapshot.roundsComplete,
+        players: snapshot.players,
+        serverTime: new Date().toISOString(),
+      });
+    } catch (error) {
+      // The binding is saved; the Zero still gets the snapshot on reconnect.
+      this.logger.warn(`Could not send binding snapshot to '${pairName}': ${String(error)}`);
     }
   }
 

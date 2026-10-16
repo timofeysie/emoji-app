@@ -209,6 +209,57 @@ describe('PairBindingsController', () => {
       );
     });
 
+    it('sends the bound Zero its snapshot so it can join an open lobby', async () => {
+      const res = createResponseMock();
+      repository.bindStation.mockResolvedValue(['power-cable', 'black']);
+      repository.getBinding.mockResolvedValue(
+        snapshot({
+          pairName: 'power-cable',
+          stationName: 'power-cable',
+          state: 'lobby',
+          joined: false,
+          players: [
+            {
+              badgeName: 'power-cable',
+              joined: false,
+              readyForNextQuestion: null,
+              guessed: false,
+              slotLabel: null,
+              isCorrect: null,
+            },
+          ],
+        }),
+      );
+
+      await controller.bindPair(GAME_ID, { pairName: 'power-cable' }, res as unknown as Response);
+
+      expect(repository.getBinding).toHaveBeenCalledWith('power-cable');
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['power-cable'],
+        expect.objectContaining({
+          type: 'controller.welcome',
+          pairName: 'power-cable',
+          gameId: GAME_ID,
+          state: 'lobby',
+          joined: false,
+          openQuestionId: null,
+          players: [expect.objectContaining({ badgeName: 'power-cable', joined: false })],
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+
+    it('still binds when the snapshot cannot be read', async () => {
+      const res = createResponseMock();
+      repository.bindStation.mockResolvedValue(['white']);
+      repository.getBinding.mockRejectedValue(new Error('db down'));
+
+      await controller.bindPair(GAME_ID, { pairName: 'white' }, res as unknown as Response);
+
+      expect(badgeStateService.sendToPairNames).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+
     it('returns 409 when a roster name belongs to another station', async () => {
       const res = createResponseMock();
       badgeStateService.getStationRoster.mockReturnValue(['white', 'red-2']);

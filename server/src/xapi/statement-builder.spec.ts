@@ -324,12 +324,42 @@ describe('buildGameStatements', () => {
     expect(() => buildGameStatements(input)).toThrow(UnattributedBadgeError);
   });
 
-  it('throws UnattributedBadgeError for a score row whose badge has no covering binding', () => {
+  it('throws UnattributedBadgeError for a score row whose badge guessed but has no covering binding', () => {
+    // The guess at 09:14 is covered; the player was unassigned before the 09:20 end.
     const input: BuildGameStatementsInput = {
       ...baseInput,
-      guesses: [],
-      playerBindings: [],
+      playerBindings: [
+        { ...baseInput.playerBindings[0], unassignedAt: iso('2026-10-05T09:18:00.000Z') },
+      ],
     };
     expect(() => buildGameStatements(input)).toThrow(UnattributedBadgeError);
+  });
+
+  it('skips the score of a badge that never guessed and has no player', () => {
+    // e.g. a station badge that was bound but didn't join.
+    const input: BuildGameStatementsInput = {
+      ...baseInput,
+      scores: [...baseInput.scores, { badgeName: 'badge-blue', correct: 0, total: 1 }],
+    };
+    const statements = buildGameStatements(input);
+    expect(statements.map((s) => s.verb.id)).toEqual([
+      'http://adlnet.gov/expapi/verbs/answered',
+      'http://adlnet.gov/expapi/verbs/scored',
+    ]);
+    expect(statements.every((s) => s.actor.account.name === EXTERNAL_ID)).toBe(true);
+  });
+
+  it('still scores a badge that never guessed when it has a player', () => {
+    const otherPlayerId = '6650c00000000000000000c2';
+    const input: BuildGameStatementsInput = {
+      ...baseInput,
+      scores: [...baseInput.scores, { badgeName: 'badge-blue', correct: 0, total: 1 }],
+      playerBindings: [
+        ...baseInput.playerBindings,
+        { badgeName: 'badge-blue', playerId: otherPlayerId, assignedAt: iso('2026-10-05T08:55:00.000Z') },
+      ],
+      players: [...baseInput.players, { id: otherPlayerId, externalId: 'bbbbbbbb-5b8d-4e6a-9c0f-1d2e3f4a5b6c' }],
+    };
+    expect(buildGameStatements(input)).toHaveLength(3);
   });
 });

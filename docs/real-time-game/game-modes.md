@@ -315,7 +315,7 @@ built, use direct API calls.
 
 | Referee action | API call | Zero reacts | Pico reacts |
 | --- | --- | --- | --- |
-| Bind controller to game | `POST /api/games/:id/pairs { pairName }` | Next WS connect: receives `controller.welcome` with game snapshot | — |
+| Bind controller to game | `POST /api/games/:id/pairs { pairName }` | Immediately (if connected) and on every WS connect: receives `controller.welcome` with game snapshot | — |
 | Open for joining (lobby) | `POST /api/games/:id/state { state: "lobby" }` | Shows yellow centre with green/red choices | Shows the same three shapes |
 | Player presses KEY1 | Zero posts `POST /api/games/:id/join` | Shows white outline | Shows white outline |
 | Start game | `POST /api/games/:id/state { state: "active" }` | Green square, then question mark | Green square, then question mark; round 1 opens automatically |
@@ -374,7 +374,10 @@ Referee (app)              Server             Zero               Pico
 
 ### Current implementation notes
 
-- Start Game automatically opens only the first round.
+- Start Game automatically opens only the first round, and only if that
+  round is `closed`. New rounds start as `draft`, so on a game's first run
+  the referee opens round 1. After Play Again or Restart, rounds are reset
+  to `closed` and open automatically (see `../games/game-flow.md`).
 - Later questions stay hidden from the player view until the referee opens them.
 - The server automatically closes a round after every joined player submits a
   guess.

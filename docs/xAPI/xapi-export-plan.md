@@ -151,7 +151,9 @@ assigned player.
 - One **scored** statement per player per game, built from the existing
   `getGameScores` row: verb `http://adlnet.gov/expapi/verbs/scored`,
   object = the `Game` (as an Activity keyed by `gameId`), `result.score.raw`
-  / `.max` from `correct` / `total`.
+  / `.max` from `correct` / `total`. A row for a badge with no guesses and
+  no player at game end (bound but never joined) is skipped instead of
+  blocking export.
 - `context.extensions` carries `gameId`, `stationName`, `badgeName` for
   traceability back to our own records. These are custom extensions, not
   standard xAPI vocabulary — fine for our own round-trip, not assumed

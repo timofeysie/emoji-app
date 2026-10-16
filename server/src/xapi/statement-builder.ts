@@ -314,7 +314,9 @@ export function buildScoredStatement(input: {
  * network or database calls — so it can be unit-tested and inspected without
  * an LRS. Throws `UnattributedBadgeError` if any guess or score row's badge
  * has no covering `PlayerBinding`; callers should already have checked this
- * via `PlayerRepository.getGamePlayerBindings`'s `missingBadges`.
+ * via `PlayerRepository.getGamePlayerBindings`'s `missingBadges`. A score row
+ * for a badge with no guesses and no player at game end is skipped, so a badge that never
+ * joined doesn't block export. One with a player still gets its 0 score.
  */
 export function buildGameStatements(input: BuildGameStatementsInput): XApiStatement[] {
   const { game, questions, guesses, scores, playerBindings, players } = input;
@@ -349,7 +351,16 @@ export function buildGameStatements(input: BuildGameStatementsInput): XApiStatem
   // `scored` row aggregates the whole game, so attribute it to whoever held
   // the badge when the game ended.
   const resolveScoreAt = toDate(game.endedAt);
+  const badgesWithGuesses = new Set(guesses.map((guess) => guess.badgeName));
   for (const score of scores) {
+    // A bound badge that never played (didn't join, or made no guesses) and
+    // has no player has nothing to report; skip it rather than block export.
+    if (
+      !badgesWithGuesses.has(score.badgeName) &&
+      !bindingAt((bindingsByBadge.get(score.badgeName) ?? []).map(toBindingRange), resolveScoreAt)
+    ) {
+      continue;
+    }
     const { playerId, externalId } = resolvePlayerForBadge(
       score.badgeName,
       resolveScoreAt,
