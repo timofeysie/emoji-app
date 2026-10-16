@@ -95,6 +95,8 @@ type Question = {
   sequence: number;
   mode: QuestionMode;
   state: string;
+  /** Set when the round closes; cleared by Play Again / Restart. */
+  closedAt?: string | null;
   /** Guesses already recorded for this question (any pair). */
   guessCount?: number;
   answerOptions: AnswerOption[];
@@ -396,6 +398,8 @@ function QuestionCard({
 
   const isActive = gameState === 'active';
   const isOpen = question.state === 'open';
+  // Played in this run: lighter, so the rounds still to come stand out.
+  const isFinished = !isOpen && Boolean(question.closedAt);
   const hasAnswers = (question.guessCount ?? 0) > 0;
   const openLabel = hasAnswers ? 'Reopen' : 'Open';
 
@@ -420,11 +424,24 @@ function QuestionCard({
         className="flex w-full items-start gap-3 px-4 py-3 text-left"
         onClick={() => setExpanded((v) => !v)}
       >
-        <span className="mt-0.5 shrink-0 text-xs font-bold text-muted-foreground">
+        <span
+          className={cn(
+            'mt-0.5 shrink-0 text-xs text-muted-foreground',
+            isFinished ? 'font-medium' : 'font-bold',
+            isOpen && 'text-primary',
+          )}
+        >
           Round {question.sequence}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="font-medium leading-snug">{question.text}</p>
+          <p
+            className={cn(
+              'leading-snug',
+              isOpen ? 'font-bold' : isFinished ? 'font-normal text-muted-foreground' : 'font-medium',
+            )}
+          >
+            {question.text}
+          </p>
           {guesses.length > 0 ? (
             <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
               {guesses.map((guess) => (

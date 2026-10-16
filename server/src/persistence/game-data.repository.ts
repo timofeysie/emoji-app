@@ -1409,6 +1409,7 @@ export class GameDataRepository {
         sequence: q.sequence,
         mode: q.mode as QuestionMode,
         state: q.state,
+        closedAt: q.closedAt ? q.closedAt.toISOString() : null,
         guessCount: guessCounts.get(qid) ?? 0,
         answerOptions: opts.map((o) => ({
           id: (o._id as Types.ObjectId).toString(),
