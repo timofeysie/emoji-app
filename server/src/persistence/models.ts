@@ -9,8 +9,11 @@ import {
 import {
   assignmentReasonValues,
   badgeStatusValues,
+  gameKindValues,
   gameNfcCardGroupAssignmentStatusValues,
   gameStateValues,
+  leitnerPickReasonValues,
+  leitnerScopeValues,
   nfcCardGroupStatusValues,
   nfcCardStatusValues,
   participantRoleValues,
@@ -43,10 +46,38 @@ const badgeSchema = new Schema(
 );
 badgeSchema.index({ externalBadgeId: 1 }, { unique: true });
 
+/** The plan a solo Leitner game was made from (docs/xAPI/leitner-method.md, Step 3). */
+const leitnerPlanSchema = new Schema(
+  {
+    playerId: { type: objectId, ref: 'Player', required: true },
+    book: { type: String, required: true },
+    chapter: { type: String, required: true },
+    scope: { type: String, required: true, enum: leitnerScopeValues },
+    aspects: { type: [String], required: true },
+    seed: { type: Number, required: true },
+    plannedAt: { type: Date, required: true },
+    picks: [
+      new Schema(
+        {
+          learningObjectId: { type: String, required: true },
+          aspect: { type: String, required: true },
+          sourceRef: { type: String, required: true },
+          reason: { type: String, required: true, enum: leitnerPickReasonValues },
+        },
+        { _id: false },
+      ),
+    ],
+  },
+  { _id: false },
+);
+
 const gameSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
     state: { type: String, required: true, enum: gameStateValues, default: 'draft' },
+    /** Missing on games made before this field: read as `class`. */
+    kind: { type: String, enum: gameKindValues, default: 'class', immutable: true },
+    leitner: { type: leitnerPlanSchema, default: undefined, immutable: true },
     createdByUserId: { type: objectId, ref: 'User', required: true, immutable: true },
     startedAt: { type: Date },
     endedAt: { type: Date },
@@ -148,6 +179,27 @@ playerBindingSchema.index(
   },
 );
 
+/**
+ * What a question tests, for Leitner tracking and xAPI `grouping`
+ * (docs/xAPI/leitner-method.md → Statement changes). All or nothing: an
+ * untagged question exports exactly as before.
+ */
+const questionLearningSchema = new Schema(
+  {
+    /** `korean-language-book/vocabulary/시험/test`. */
+    learningObjectId: { type: String, required: true },
+    /** Where it came from: `ch27/vocabulary/1`. */
+    sourceRef: { type: String, required: true },
+    /** `reading`, `writing`, … */
+    aspect: { type: String, required: true },
+    /** Korean, e.g. `시험`. */
+    target: { type: String, required: true },
+    /** English as the source gives it, e.g. `test, exam`. */
+    native: { type: String, required: true },
+  },
+  { _id: false },
+);
+
 const questionSchema = new Schema(
   {
     gameId: { type: objectId, ref: 'Game', required: true, immutable: true },
@@ -157,6 +209,7 @@ const questionSchema = new Schema(
     state: { type: String, required: true, enum: questionStateValues, default: 'draft' },
     openedAt: { type: Date },
     closedAt: { type: Date },
+    learning: { type: questionLearningSchema, default: undefined, immutable: true },
     createdByUserId: { type: objectId, ref: 'User', required: true, immutable: true },
   },
   { timestamps: true, collection: 'questions' },

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { LearningTag } from '../../learning/learning-object';
 import { misspellings } from './hangul';
 import { createRng, Rng, shuffle } from './seeded-random';
 
@@ -33,6 +34,11 @@ export type VocabChoiceItem = {
   prompt: string;
   /** Already shuffled; exactly one is correct. */
   options: ChoiceOption[];
+  /**
+   * Leitner tag without the aspect (that's `skill`). Set for Leitner games
+   * only; class-game items leave it out (docs/xAPI/leitner-method.md L6).
+   */
+  learning?: Omit<LearningTag, 'aspect'>;
 };
 
 const chapterSchema = z.object({
@@ -178,5 +184,6 @@ export function toQuestionInput(item: VocabChoiceItem, sequence: number) {
       slotLabel: QUIZ_SLOT_LABELS[index],
       isCorrect: option.isCorrect,
     })),
+    ...(item.learning ? { learning: { ...item.learning, aspect: item.skill } } : {}),
   };
 }

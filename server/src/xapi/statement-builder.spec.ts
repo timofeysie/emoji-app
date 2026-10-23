@@ -14,6 +14,7 @@ import {
   type BuildGameStatementsInput,
 } from './statement-builder';
 import { playerLabel } from '../persistence/player.repository';
+import { answersFromStatements, foldTracks } from '../learning/leitner';
 
 const GAME_ID = '6650f00000000000000000f0';
 const QUESTION_ID = '6650a00000000000000000a0';
@@ -361,5 +362,123 @@ describe('buildGameStatements', () => {
       players: [...baseInput.players, { id: otherPlayerId, externalId: 'bbbbbbbb-5b8d-4e6a-9c0f-1d2e3f4a5b6c' }],
     };
     expect(buildGameStatements(input)).toHaveLength(3);
+  });
+});
+
+describe('Leitner learning tags (docs/xAPI/leitner-method.md → Statement changes)', () => {
+  const learning = {
+    learningObjectId: 'korean-language-book/vocabulary/보여 주다/to-show',
+    sourceRef: 'ch27/vocabulary/5',
+    aspect: 'writing',
+    target: '보여 주다',
+    native: 'to show',
+  };
+  const question = {
+    id: QUESTION_ID,
+    text: 'to show',
+    openedAt: iso('2026-10-05T09:14:00.000Z'),
+    answerOptions: [
+      { slotLabel: 'A', text: '보여 주다', isCorrect: true },
+      { slotLabel: 'B', text: '보여 추다', isCorrect: false },
+    ],
+  };
+  const guess = {
+    id: GUESS_ID,
+    questionId: QUESTION_ID,
+    badgeName: 'badge-red',
+    stationName: 'station-1',
+    slotLabel: 'A',
+    createdAt: iso('2026-10-05T09:14:03.000Z'),
+  };
+  const build = (q: object, gameKind?: 'class' | 'leitner-solo') =>
+    buildAnsweredStatement({ gameId: GAME_ID, guess, question: q as typeof question, externalId: EXTERNAL_ID, gameKind });
+
+  it('adds the learning object, chapter and book as grouping, with percent-encoded Hangul', () => {
+    const statement = build({ ...question, learning }, 'leitner-solo');
+    expect(statement.context.contextActivities).toEqual({
+      parent: [{ id: gameActivityId(GAME_ID) }],
+      grouping: [
+        {
+          id: `${XAPI_BASE_IRI}/content/korean-language-book/vocabulary/%EB%B3%B4%EC%97%AC%20%EC%A3%BC%EB%8B%A4/to-show`,
+          definition: {
+            type: `${XAPI_BASE_IRI}/activity-types/vocabulary-sense`,
+            name: { ko: '보여 주다', 'en-US': 'to show' },
+          },
+        },
+        {
+          id: `${XAPI_BASE_IRI}/content/korean-language-book/ch27`,
+          definition: { type: `${XAPI_BASE_IRI}/activity-types/chapter` },
+        },
+        {
+          id: `${XAPI_BASE_IRI}/content/korean-language-book`,
+          definition: { type: `${XAPI_BASE_IRI}/activity-types/book` },
+        },
+      ],
+    });
+  });
+
+  it('adds source-ref, aspect and game-kind after the existing extensions', () => {
+    expect(build({ ...question, learning }, 'leitner-solo').context.extensions).toEqual({
+      [`${XAPI_BASE_IRI}/ext/game-id`]: GAME_ID,
+      [`${XAPI_BASE_IRI}/ext/station-name`]: 'station-1',
+      [`${XAPI_BASE_IRI}/ext/badge-name`]: 'badge-red',
+      [`${XAPI_BASE_IRI}/ext/source-ref`]: 'ch27/vocabulary/5',
+      [`${XAPI_BASE_IRI}/ext/aspect`]: 'writing',
+      [`${XAPI_BASE_IRI}/ext/game-kind`]: 'leitner-solo',
+    });
+  });
+
+  it('defaults game-kind to class', () => {
+    expect(build({ ...question, learning }).context.extensions[`${XAPI_BASE_IRI}/ext/game-kind`]).toBe('class');
+  });
+
+  it('leaves untagged questions byte-for-byte unchanged, whatever the game kind (no 409 on re-export)', () => {
+    const untagged = build(question);
+    expect(untagged.context.contextActivities).not.toHaveProperty('grouping');
+    expect(JSON.stringify(build({ ...question, learning: null }, 'leitner-solo'))).toBe(JSON.stringify(untagged));
+    expect(JSON.stringify(build({ ...question, learning: undefined }))).toBe(JSON.stringify(untagged));
+  });
+
+  it('throws rather than emit a statement from a malformed stored tag', () => {
+    expect(() => build({ ...question, learning: { ...learning, sourceRef: 'nope' } })).toThrow(/Malformed learning tag/);
+  });
+
+  it('is read back by the Leitner fold as the right track (builder ↔ fold contract)', () => {
+    const statements = buildGameStatements({
+      game: {
+        id: GAME_ID,
+        title: 'Ch. 27 review',
+        kind: 'leitner-solo',
+        startedAt: iso('2026-10-05T09:00:00.000Z'),
+        endedAt: iso('2026-10-05T09:20:00.000Z'),
+      },
+      questions: [{ ...question, learning }],
+      guesses: [guess],
+      scores: [{ badgeName: 'badge-red', correct: 1, total: 1 }],
+      playerBindings: [
+        { badgeName: 'badge-red', playerId: PLAYER_ID, assignedAt: iso('2026-10-05T08:55:00.000Z'), unassignedAt: null },
+      ],
+      players: [{ id: PLAYER_ID, externalId: EXTERNAL_ID }],
+    });
+    // Round-trip through JSON, as the LRS would store and return it.
+    const stored = JSON.parse(JSON.stringify(statements)) as unknown[];
+
+    const answers = answersFromStatements(stored, 'korean-language-book');
+    expect(answers).toEqual([
+      {
+        statementId: answeredStatementId(GAME_ID, GUESS_ID),
+        learningObjectId: 'korean-language-book/vocabulary/보여 주다/to-show',
+        aspect: 'writing',
+        sourceRef: 'ch27/vocabulary/5',
+        success: true,
+        timestamp: '2026-10-05T09:14:03.000Z',
+      },
+    ]);
+    expect(foldTracks(answers)[0]).toMatchObject({ level: 1, status: 'active', sources: ['ch27/vocabulary/5'] });
+  });
+
+  it('is ignored by the fold when it comes from a class game (v1)', () => {
+    const stored = JSON.parse(JSON.stringify([build({ ...question, learning }, 'class')])) as unknown[];
+    expect(answersFromStatements(stored, 'korean-language-book')).toEqual([]);
   });
 });

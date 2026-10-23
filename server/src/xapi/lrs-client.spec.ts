@@ -1,4 +1,5 @@
 import {
+  fetchStatements,
   loadLrsConfigFromEnv,
   LrsConflictError,
   LrsRequestError,
@@ -103,5 +104,75 @@ describe('sendStatements', () => {
       .mockResolvedValue({ ok: false, status: 400, text: async () => 'bad request' }) as unknown as typeof fetch;
 
     await expect(sendStatements(CONFIG, [statement('a')])).rejects.toBeInstanceOf(LrsRequestError);
+  });
+});
+
+describe('fetchStatements', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  function page(statements: unknown[], more = '') {
+    return { ok: true, status: 200, json: async () => ({ statements, more }), text: async () => '' };
+  }
+
+  it('GETs the standard /statements resource with the query, Basic Auth and the version header', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(page([{ id: 'a' }]));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const agent = { objectType: 'Agent', account: { homePage: 'https://kogs.link', name: 'x-1' } };
+
+    const statements = await fetchStatements(CONFIG, {
+      agent,
+      verb: 'http://adlnet.gov/expapi/verbs/answered',
+      activity: 'https://kogs.link/xapi/emoji-app/content/korean-language-book',
+      relatedActivities: true,
+      limit: 500,
+    });
+
+    expect(statements).toEqual([{ id: 'a' }]);
+    const [url, init] = fetchMock.mock.calls[0];
+    const parsed = new URL(url);
+    expect(`${parsed.origin}${parsed.pathname}`).toBe('https://emojiapp-dev.lrs.io/xapi/statements');
+    expect(JSON.parse(parsed.searchParams.get('agent')!)).toEqual(agent);
+    expect(parsed.searchParams.get('verb')).toBe('http://adlnet.gov/expapi/verbs/answered');
+    expect(parsed.searchParams.get('activity')).toBe('https://kogs.link/xapi/emoji-app/content/korean-language-book');
+    expect(parsed.searchParams.get('related_activities')).toBe('true');
+    expect(parsed.searchParams.get('limit')).toBe('500');
+    expect(init.method).toBe('GET');
+    expect(init.headers['X-Experience-API-Version']).toBe('1.0.3');
+    expect(init.headers['Authorization']).toBe(`Basic ${Buffer.from('emoji-app-server:secret').toString('base64')}`);
+  });
+
+  it('follows `more` until it is empty', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(page([{ id: 'a' }], '/xapi/statements?more=p2'))
+      .mockResolvedValueOnce(page([{ id: 'b' }], ''));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    expect(await fetchStatements(CONFIG, {})).toEqual([{ id: 'a' }, { id: 'b' }]);
+    expect(fetchMock.mock.calls[1][0]).toBe('https://emojiapp-dev.lrs.io/xapi/statements?more=p2');
+  });
+
+  it('refuses a `more` link on another origin, so credentials stay with the LRS', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(page([], 'https://evil.example/statements?more=x'));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(fetchStatements(CONFIG, {})).rejects.toBeInstanceOf(LrsRequestError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps a non-OK status or a body without statements to LrsRequestError', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: false, status: 401, text: async () => 'unauthorised' }) as unknown as typeof fetch;
+    await expect(fetchStatements(CONFIG, {})).rejects.toMatchObject({ status: 401 });
+
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({}) }) as unknown as typeof fetch;
+    await expect(fetchStatements(CONFIG, {})).rejects.toBeInstanceOf(LrsRequestError);
   });
 });

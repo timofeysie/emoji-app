@@ -63,7 +63,7 @@ export class XapiExportController {
     let statements: XApiStatement[];
     try {
       statements = buildGameStatements({
-        game: { id: game.id, title: game.title, startedAt: game.startedAt, endedAt: game.endedAt },
+        game: { id: game.id, title: game.title, kind: game.kind, startedAt: game.startedAt, endedAt: game.endedAt },
         questions: game.questions,
         guesses: game.guesses,
         scores,

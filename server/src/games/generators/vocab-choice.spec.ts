@@ -145,4 +145,20 @@ describe('toQuestionInput', () => {
     expect(input.answerOptions.map((o) => o.text)).toEqual(item.options.map((o) => o.text));
     expect(input.answerOptions.filter((o) => o.isCorrect)).toHaveLength(1);
   });
+
+  it('adds no learning tag to class-game items', () => {
+    const input = toQuestionInput(readingItem(nurse, terms, createRng(1))!, 1);
+    expect(input).not.toHaveProperty('learning');
+  });
+
+  it("passes a Leitner item's tag through, with the skill as the aspect", () => {
+    const learning = {
+      learningObjectId: 'korean-language-book/vocabulary/간호사/nurse',
+      sourceRef: 'ch26/vocabulary/13',
+      target: '간호사',
+      native: 'nurse',
+    };
+    const item = { ...writingItem(nurse, terms, createRng(1))!, learning };
+    expect(toQuestionInput(item, 1).learning).toEqual({ ...learning, aspect: 'writing' });
+  });
 });

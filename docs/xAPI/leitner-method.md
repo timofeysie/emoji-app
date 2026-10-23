@@ -339,8 +339,7 @@ past and future) produce exactly today's statements.
       {
         "id": "https://kogs.link/xapi/emoji-app/content/korean-language-book/ch27",
         "definition": {
-          "type": "https://kogs.link/xapi/emoji-app/activity-types/chapter",
-          "name": { "ko": "그냥 몸이 좀 안 좋네.", "en-US": "I just don’t feel well." }
+          "type": "https://kogs.link/xapi/emoji-app/activity-types/chapter"
         }
       },
       {
@@ -380,11 +379,11 @@ past and future) produce exactly today's statements.
 
 | Layer | Change |
 | --- | --- |
-| `Game` model | `kind: 'class' \| 'leitner-solo'` (default `class`, so existing games are unaffected). For Leitner games, `leitner: { playerId, book, chapter, scope, aspects, seed, plannedAt, picks[] }`. |
-| `Question` model | Optional `learningObjectId`, `sourceRef`, `aspect`, `learningObjectName: { target, native }` (all immutable) |
-| `vocab-choice.ts` | Items carry these fields, and `toQuestionInput` passes them through. Untagged output is unchanged, so `create:vocab-game` is unaffected. |
-| `GameDataRepository.getGameExportData` | Returns the new question fields and `game.kind` |
-| `statement-builder.ts` | Adds `grouping` and the extensions **only when `learningObjectId` is set**. Specs prove untagged output is byte-for-byte unchanged. |
+| `Game` model | `kind: 'class' \| 'leitner-solo'` (default `class`, immutable). Games stored before it have no `kind` and read as `class`. For Leitner games, an immutable `leitner: { playerId, book, chapter, scope, aspects, seed, plannedAt, picks[] }`. Step 3 is what sets them. |
+| `Question` model | Optional, immutable `learning: { learningObjectId, sourceRef, aspect, target, native }`, as **one sub-document**, so a question is either fully tagged or not at all. `learningTagSchema` (`learning/learning-object.ts`) validates it in `POST /api/questions`. |
+| `vocab-choice.ts` | Items can carry `learning` (without `aspect`), and `toQuestionInput` adds `aspect = skill`. Untagged items give exactly the old output, so `create:vocab-game` is unaffected. |
+| `GameDataRepository` | `createQuestionWithOptions` stores `learning`. `getGameExportData` returns it and `game.kind`. |
+| `statement-builder.ts` | Adds `grouping` and the extensions **only when `learning` is set**. Specs prove untagged output is byte-for-byte unchanged, and that a built statement is read back by the fold as the right track. The chapter grouping carries only its type, so the builder needs no content lookup. |
 
 ---
 
@@ -452,11 +451,16 @@ deleted, because their plan is stale.
 ### API
 
 ```
-GET  /api/players/:playerId/progress?book=korean-language-book&chapter=27&scope=chapter|review
-→ { player: { id, label }, asOf, statementCount,
-    tracks: TrackState[],               // in scope; new tracks for this chapter included
-    summary: { new, active: { L0, L1, L2, L3 }, retired },
-    pendingExport: [{ gameId, endedAt, error? }] }
+GET  /api/players/:playerId/progress?chapter=27
+       [&book=korean-language-book][&scope=chapter|review][&aspects=reading,writing][&now=<iso>]
+→ 200 { player: { id, label }, book, chapter, scope, aspects, asOf,
+        statementCount, answerCount,    // fetched from the LRS / counted for Leitner
+        summary: { new, active: { L0, L1, L2, L3 }, retired, due },
+        tracks: (TrackState & { due, inChapter, word, gloss })[] }
+        // chapter × aspects with new ones included; review adds other played chapters' tracks
+→ 400 bad id/query · 404 unknown player, book or chapter · 422 unregistered senses
+→ 503 LRS not configured · 502 LRS request failed
+// Step 3 adds pendingExport: [{ gameId, endedAt, error? }] once Leitner games exist.
 
 POST /api/leitner-games
   { playerId, book: 'korean-language-book', chapter: 27,
@@ -665,19 +669,23 @@ aspects default to `scored`.
 
 - [x] Chapters 26–30 in `server/src/games/content/` (identical to the
       language-learning-app copies).
-- [ ] Content registry (`(book, chapter) → file`, `sourceRef → (word,
-      sense)`), and make sure the build and Docker image ship the JSON.
+- [x] Content registry: `learning/book-content.ts` imports the chapter
+      and registry JSON as modules (`resolveJsonModule`), so `tsc` ships
+      them in `dist/server`, which is what the Docker image copies. Done
+      with Step 2.
 - [x] `content:senses` script, `sense-registry.ts` and
       `korean-language-book-senses.json` for ch. 26–30. Specs cover new
       word, matching gloss, homograph conflict, hand-resolved homographs,
       in-chapter repeats, the ch. 28 swap, stale entries, and that the
       committed registry is up to date.
-- [ ] Learning-object ID/IRI helpers (percent-encode, build the ID/IRI
-      from word + sense). `normaliseWord` and `senseSlug` already exist in
-      `sense-registry.ts`.
-- [ ] `Game.kind` (default `class`) and `Game.leitner`; `Question`
-      learning-object fields.
-- [ ] `statement-builder.ts`: `grouping` (sense, chapter, book) and the
+- [x] Learning-object ID/IRI helpers: `learning/learning-object.ts`
+      (ids, percent-encoded IRIs, parsing, extension and activity-type
+      IRIs). The base IRI moved to `xapi/iris.ts` so this and
+      `statement-builder.ts` don't import each other. Done with Step 2.
+- [x] `Game.kind` (default `class`) and `Game.leitner`; `Question.learning`
+      tag, accepted by `POST /api/questions` and stored and exported by the
+      repository.
+- [x] `statement-builder.ts`: `grouping` (sense, chapter, book) and the
       `source-ref` / `aspect` / `game-kind` extensions, only when tagged.
       Specs prove untagged output is unchanged.
 - [ ] Manual: a tagged test game exported to `emojiapp-dev` with Strict
@@ -686,15 +694,20 @@ aspects default to `scored`.
 
 ### Step 2: Read path and progress
 
-- [ ] `fetchStatements` with `more` paging (mocked-`fetch` spec).
-- [ ] `foldTracks` + `LeitnerConfig`, with specs for each rule: promote
+- [x] `fetchStatements` with `more` paging (mocked-`fetch` spec). It
+      refuses a `more` link on another origin. Checked read-only against
+      `emojiapp-dev` (2026-10-23): Veracity accepts the
+      `activity` + `related_activities` query, and paging follows `more`.
+- [x] `foldTracks` + `LeitnerConfig` (`learning/leitner.ts`), with specs for each rule: promote
       when due, no promotion when not due, **demote one and due now**, L0
       floor, **retire on a due pass at L3**, retired is final, no
       retirement from a not-due pass, slow answers count (L12), grace
       window, out-of-order input, other `game-kind`s ignored, one sense
       from two chapters folds into one track, two senses of one word stay
       separate.
-- [ ] `GET /api/players/:playerId/progress` with both scopes.
+- [x] `GET /api/players/:playerId/progress` with both scopes
+      (`learning/progress.controller.ts`). `pendingExport` comes with
+      Step 3.
 
 ### Step 3: Planner, game creation, lifecycle
 

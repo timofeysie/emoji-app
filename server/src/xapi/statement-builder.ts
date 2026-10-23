@@ -1,15 +1,23 @@
 import { v5 as uuidv5 } from 'uuid';
 import { bindingAt, BindingRange, playerLabel } from '../persistence/player.repository';
+import type { GameKind } from '../persistence/domain-types';
+import {
+  BOOK_TYPE,
+  bookIri,
+  CHAPTER_TYPE,
+  chapterIri,
+  chapterOfSourceRef,
+  EXT_ASPECT,
+  EXT_GAME_KIND,
+  EXT_SOURCE_REF,
+  learningObjectIri,
+  parseLearningObjectId,
+  VOCABULARY_SENSE_TYPE,
+  type LearningTag,
+} from '../learning/learning-object';
+import { ANSWERED_VERB_ID, XAPI_BASE_IRI, XAPI_HOMEPAGE } from './iris';
 
-/**
- * Base IRI and actor format are locked in docs/xAPI/LRS.md once pilot
- * statements exist — do not change (xapi-export-plan.md: "effectively
- * permanent").
- */
-export const XAPI_BASE_IRI = 'https://kogs.link/xapi/emoji-app';
-export const XAPI_HOMEPAGE = 'https://kogs.link';
-
-const ANSWERED_VERB_ID = 'http://adlnet.gov/expapi/verbs/answered';
+export { XAPI_BASE_IRI, XAPI_HOMEPAGE };
 const SCORED_VERB_ID = 'http://adlnet.gov/expapi/verbs/scored';
 const CMI_INTERACTION_TYPE = 'http://adlnet.gov/expapi/activities/cmi.interaction';
 const ASSESSMENT_TYPE = 'http://adlnet.gov/expapi/activities/assessment';
@@ -84,6 +92,12 @@ export type XApiAssessmentDefinition = {
 
 export type XApiScore = { raw: number; min: number; max: number; scaled: number };
 
+/** A `context.contextActivities.grouping` entry (learning object, chapter, book). */
+export type XApiGroupingActivity = {
+  id: string;
+  definition: { type: string; name?: Record<string, string> };
+};
+
 export type XApiAnsweredStatement = {
   id: string;
   actor: XApiActor;
@@ -93,7 +107,7 @@ export type XApiAnsweredStatement = {
   timestamp: string;
   context: {
     registration: string;
-    contextActivities: { parent: [{ id: string }] };
+    contextActivities: { parent: [{ id: string }]; grouping?: XApiGroupingActivity[] };
     extensions: Record<string, string>;
   };
 };
@@ -133,6 +147,8 @@ export type QuestionInput = {
   openedAt?: Date | string | null;
   /** In the order choices should be shown; not re-sorted. */
   answerOptions: AnswerOptionInput[];
+  /** Leitner tag; when absent the statement is exactly the untagged shape. */
+  learning?: LearningTag | null;
 };
 
 export type GuessInput = {
@@ -167,6 +183,8 @@ export type PlayerInput = {
 export type GameInput = {
   id: string;
   title: string;
+  /** Goes in `ext/game-kind` on tagged statements; defaults to `class`. */
+  kind?: GameKind;
   startedAt: Date | string;
   endedAt: Date | string;
 };
@@ -221,13 +239,48 @@ function resolvePlayerForBadge(
   return { playerId: binding.playerId, externalId };
 }
 
+/**
+ * `grouping` (learning object, chapter, book) and the source-ref / aspect /
+ * game-kind extensions for a tagged question (docs/xAPI/leitner-method.md →
+ * Statement changes). The Leitner fold reads exactly these.
+ */
+function learningContext(
+  learning: LearningTag,
+  gameKind: GameKind,
+): { grouping: XApiGroupingActivity[]; extensions: Record<string, string> } {
+  const key = parseLearningObjectId(learning.learningObjectId);
+  const chapter = chapterOfSourceRef(learning.sourceRef);
+  if (!key || !chapter) {
+    throw new Error(
+      `Malformed learning tag '${learning.learningObjectId}' / '${learning.sourceRef}'; it should have been rejected on create.`,
+    );
+  }
+  return {
+    grouping: [
+      {
+        id: learningObjectIri(key),
+        definition: { type: VOCABULARY_SENSE_TYPE, name: { ko: learning.target, 'en-US': learning.native } },
+      },
+      { id: chapterIri(key.book, chapter), definition: { type: CHAPTER_TYPE } },
+      { id: bookIri(key.book), definition: { type: BOOK_TYPE } },
+    ],
+    extensions: {
+      [EXT_SOURCE_REF]: learning.sourceRef,
+      [EXT_ASPECT]: learning.aspect,
+      [EXT_GAME_KIND]: gameKind,
+    },
+  };
+}
+
 export function buildAnsweredStatement(input: {
   gameId: string;
   guess: GuessInput;
   question: QuestionInput;
   externalId: string;
+  gameKind?: GameKind;
 }): XApiAnsweredStatement {
   const { gameId, guess, question, externalId } = input;
+  const learning = question.learning ? learningContext(question.learning, input.gameKind ?? 'class') : null;
   const correctSlotLabels = question.answerOptions
     .filter((option) => option.isCorrect)
     .map((option) => option.slotLabel);
@@ -268,11 +321,15 @@ export function buildAnsweredStatement(input: {
     timestamp: toDate(guess.createdAt).toISOString(),
     context: {
       registration: gameRegistration(gameId),
-      contextActivities: { parent: [{ id: gameActivityId(gameId) }] },
+      contextActivities: {
+        parent: [{ id: gameActivityId(gameId) }],
+        ...(learning ? { grouping: learning.grouping } : {}),
+      },
       extensions: {
         [EXT_GAME_ID]: gameId,
         [EXT_STATION_NAME]: guess.stationName ?? guess.badgeName,
         [EXT_BADGE_NAME]: guess.badgeName,
+        ...learning?.extensions,
       },
     },
   };
@@ -344,7 +401,7 @@ export function buildGameStatements(input: BuildGameStatementsInput): XApiStatem
       bindingsByBadge,
       externalIdByPlayerId,
     );
-    statements.push(buildAnsweredStatement({ gameId: game.id, guess, question, externalId }));
+    statements.push(buildAnsweredStatement({ gameId: game.id, guess, question, externalId, gameKind: game.kind }));
   }
 
   // One badge can hold several bindings over a game (swap/replacement); the

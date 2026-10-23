@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ClientSession, Types } from 'mongoose';
 import { MongoService } from './mongo.service';
-import { GameState, PlayMode, QuestionMode, SlotLabel } from './domain-types';
+import { GameKind, GameState, PlayMode, QuestionMode, SlotLabel } from './domain-types';
+import type { LearningTag } from '../learning/learning-object';
 import { asObjectId } from './models';
 import { shortCardLabel } from '../nfc-card.service';
 
@@ -29,6 +30,8 @@ export type CreateQuestionInput = {
     slotLabel: SlotLabel;
     isCorrect: boolean;
   }>;
+  /** What the question tests; omitted for untagged (class-game) questions. */
+  learning?: LearningTag;
 };
 
 export type SubmitGuessInput = {
@@ -163,6 +166,7 @@ export type GameExportQuestion = {
   text: string;
   openedAt: string | null;
   answerOptions: Array<{ slotLabel: SlotLabel; text: string; isCorrect: boolean }>;
+  learning: LearningTag | null;
 };
 
 /** One `Guess` row as xAPI export needs it. */
@@ -178,6 +182,7 @@ export type GameExportGuess = {
 export type GameExportData = {
   id: string;
   title: string;
+  kind: GameKind;
   state: GameState;
   startedAt: string | null;
   endedAt: string | null;
@@ -296,6 +301,7 @@ export class GameDataRepository {
       sequence: input.sequence,
       mode: input.mode,
       state: 'draft',
+      ...(input.learning ? { learning: input.learning } : {}),
     });
 
     await AnswerOption.insertMany(
@@ -1245,6 +1251,7 @@ export class GameDataRepository {
     return {
       id: (game._id as Types.ObjectId).toString(),
       title: game.title,
+      kind: (game.kind ?? 'class') as GameKind,
       state: game.state as GameState,
       startedAt: game.startedAt ? game.startedAt.toISOString() : null,
       endedAt: game.endedAt ? game.endedAt.toISOString() : null,
@@ -1260,6 +1267,15 @@ export class GameDataRepository {
             text: o.text,
             isCorrect: o.isCorrect,
           })),
+          learning: q.learning
+            ? {
+                learningObjectId: q.learning.learningObjectId,
+                sourceRef: q.learning.sourceRef,
+                aspect: q.learning.aspect,
+                target: q.learning.target,
+                native: q.learning.native,
+              }
+            : null,
         };
       }),
       guesses: guesses.flatMap((g) => {

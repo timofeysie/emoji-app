@@ -80,6 +80,61 @@ describe('GameFlowController', () => {
     badgeStateService.getStationRoster.mockReturnValue(null);
   });
 
+  describe('createQuestion learning tag', () => {
+    const question = {
+      gameId: '507f1f77bcf86cd799439011',
+      createdByUserId: '507f1f77bcf86cd799439012',
+      text: '시험',
+      sequence: 1,
+      mode: 'standard',
+      answerOptions: [
+        { text: 'test', sequence: 1, slotLabel: 'A', isCorrect: true },
+        { text: 'class', sequence: 2, slotLabel: 'B', isCorrect: false },
+      ],
+    };
+    const learning = {
+      learningObjectId: 'korean-language-book/vocabulary/시험/test',
+      sourceRef: 'ch27/vocabulary/1',
+      aspect: 'reading',
+      target: '시험',
+      native: 'test, exam',
+    };
+
+    it('passes a valid tag through to the repository', async () => {
+      repository.createQuestionWithOptions.mockResolvedValue('q1');
+      const res = createResponseMock();
+
+      await controller.createQuestion({ ...question, learning }, res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(repository.createQuestionWithOptions).toHaveBeenCalledWith(expect.objectContaining({ learning }));
+    });
+
+    it('leaves untagged questions untagged (class games)', async () => {
+      repository.createQuestionWithOptions.mockResolvedValue('q1');
+      const res = createResponseMock();
+
+      await controller.createQuestion(question, res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(repository.createQuestionWithOptions.mock.calls[0][0]).not.toHaveProperty('learning');
+    });
+
+    it.each([
+      ['a malformed learning object id', { learningObjectId: 'korean-language-book/시험' }],
+      ['a sourceRef that is not a chapter entry', { sourceRef: 'vocabulary/1' }],
+      ['an aspect that is not a slug', { aspect: 'Reading Skill' }],
+      ['an unknown field', { extra: true }],
+    ])('rejects %s', async (_label, change) => {
+      const res = createResponseMock();
+
+      await controller.createQuestion({ ...question, learning: { ...learning, ...change } }, res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(repository.createQuestionWithOptions).not.toHaveBeenCalled();
+    });
+  });
+
   it('returns 400 for invalid game creation payload', async () => {
     const res = createResponseMock();
 

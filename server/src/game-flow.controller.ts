@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { GameDataRepository } from './persistence/game-data.repository';
+import { learningTagSchema } from './learning/learning-object';
 import { BadgeStateService } from './badge-state.service';
 import { NfcCardService, shortCardLabel } from './nfc-card.service';
 import type { SlotLabel } from './persistence/domain-types';
@@ -79,6 +80,8 @@ const createQuestionSchema = z.object({
       }),
     )
     .min(2),
+  /** Leitner tag (docs/xAPI/leitner-method.md); class games leave it out. */
+  learning: learningTagSchema.optional(),
 });
 
 const setQuestionStateSchema = z.object({

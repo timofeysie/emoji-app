@@ -96,6 +96,12 @@ export class PlayerRepository {
     return toPlayerSummary(player);
   }
 
+  async getPlayer(playerId: string): Promise<PlayerSummary | null> {
+    const { Player } = this.mongoService.getModels();
+    const player = await Player.findById(asObjectId(playerId)).lean();
+    return player ? toPlayerSummary(player) : null;
+  }
+
   async listPlayers(): Promise<PlayerSummary[]> {
     const { Player } = this.mongoService.getModels();
     const players = await Player.find({}).sort({ firstName: 1 }).lean();

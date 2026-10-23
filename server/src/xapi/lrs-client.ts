@@ -87,3 +87,69 @@ export async function sendStatements(
 
   return { sent: statements.length };
 }
+
+const MAX_PAGES = 100;
+
+export type StatementQuery = {
+  /** Account actor, e.g. `{ objectType: 'Agent', account: { homePage, name } }`. */
+  agent?: unknown;
+  verb?: string;
+  activity?: string;
+  /** Match `activity` against context activities (grouping) too. */
+  relatedActivities?: boolean;
+  since?: string;
+  /** Page size; the LRS may cap it. */
+  limit?: number;
+};
+
+/**
+ * Reads statements from the standard xAPI `GET /statements` resource and
+ * follows `more` until it's empty (docs/xAPI/leitner-method.md → Reading
+ * from the LRS). Voided statements are excluded by the LRS. A `more` link
+ * on another origin is refused, so credentials only go to the configured LRS.
+ */
+export async function fetchStatements(config: LrsConfig, query: StatementQuery): Promise<unknown[]> {
+  const endpoint = config.endpoint.endsWith('/') ? config.endpoint.slice(0, -1) : config.endpoint;
+  const authHeader = `Basic ${Buffer.from(`${config.key}:${config.secret}`).toString('base64')}`;
+  const origin = new URL(endpoint).origin;
+
+  const params = new URLSearchParams();
+  if (query.agent !== undefined) params.set('agent', JSON.stringify(query.agent));
+  if (query.verb) params.set('verb', query.verb);
+  if (query.activity) params.set('activity', query.activity);
+  if (query.relatedActivities) params.set('related_activities', 'true');
+  if (query.since) params.set('since', query.since);
+  if (query.limit) params.set('limit', String(query.limit));
+
+  const statements: unknown[] = [];
+  let url: string | null = `${endpoint}/statements?${params.toString()}`;
+  for (let page = 0; url; page++) {
+    if (page >= MAX_PAGES) {
+      throw new LrsRequestError(0, `Stopped after ${MAX_PAGES} pages of statements.`);
+    }
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Authorization: authHeader, 'X-Experience-API-Version': XAPI_VERSION_HEADER },
+    });
+    if (!response.ok) {
+      throw new LrsRequestError(response.status, await response.text());
+    }
+
+    const body = (await response.json()) as { statements?: unknown; more?: unknown };
+    if (!Array.isArray(body.statements)) {
+      throw new LrsRequestError(response.status, 'Response has no statements array.');
+    }
+    statements.push(...body.statements);
+
+    if (typeof body.more === 'string' && body.more.length > 0) {
+      const next = new URL(body.more, `${endpoint}/`);
+      if (next.origin !== origin) {
+        throw new LrsRequestError(response.status, `Refusing 'more' link to another origin: ${next.origin}`);
+      }
+      url = next.toString();
+    } else {
+      url = null;
+    }
+  }
+  return statements;
+}
