@@ -1270,6 +1270,7 @@ export class GameDataRepository {
           learning: q.learning
             ? {
                 learningObjectId: q.learning.learningObjectId,
+                book: q.learning.book,
                 sourceRef: q.learning.sourceRef,
                 aspect: q.learning.aspect,
                 target: q.learning.target,

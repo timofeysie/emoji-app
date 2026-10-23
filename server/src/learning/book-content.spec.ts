@@ -19,10 +19,12 @@ describe('korean-language-book content', () => {
     const objects = chapterLearningObjects(content, '27');
     expect(objects).toHaveLength(14);
     expect(objects[1]).toEqual({
-      book: KOREAN_BOOK,
+      language: 'ko',
+      kind: 'lexeme',
       word: '시험',
       sense: 'test',
-      id: 'korean-language-book/vocabulary/시험/test',
+      id: 'ko/lexeme/시험/test',
+      book: KOREAN_BOOK,
       gloss: 'test, exam',
       sourceRefs: ['ch27/vocabulary/1'],
     });
@@ -31,6 +33,11 @@ describe('korean-language-book content', () => {
   it('gives a word shared by two chapters the same id (L2)', () => {
     const show = (chapter: string) => chapterLearningObjects(content, chapter).find((object) => object.word === '보여 주다');
     expect(show('26')?.id).toBe(show('27')?.id);
+    expect(show('27')?.id).toBe('ko/expression/보여 주다/to-show');
+  });
+
+  it('indexes every sense in the language registry by id', () => {
+    expect(content.senseById.get('ko/lexeme/독감/flu')).toMatchObject({ word: '독감', gloss: 'flu' });
   });
 
   it('merges a word listed twice in one chapter into one learning object', () => {
@@ -60,28 +67,45 @@ describe('chapterLearningObjects', () => {
 
   it('keeps two senses of one word apart', () => {
     const content = buildBookContent(
+      'test-book',
       {
-        book: 'test-book',
+        language: 'ko',
         words: {
           배: [
-            { sense: 'pear', gloss: 'pear', sources: ['ch1/vocabulary/0'] },
-            { sense: 'ship', gloss: 'ship', sources: ['ch1/vocabulary/1'] },
+            { sense: 'pear', kind: 'lexeme', gloss: 'pear', sources: ['test-book/ch1/vocabulary/0'] },
+            { sense: 'ship', kind: 'lexeme', gloss: 'ship', sources: ['test-book/ch1/vocabulary/1'] },
           ],
-          시험: [{ sense: 'test', gloss: 'test', sources: ['ch1/vocabulary/2'] }],
+          시험: [{ sense: 'test', kind: 'lexeme', gloss: 'test', sources: ['test-book/ch1/vocabulary/2'] }],
         },
       },
       [chapter],
     );
     expect(chapterLearningObjects(content, '1').map((object) => object.id)).toEqual([
-      'test-book/vocabulary/배/pear',
-      'test-book/vocabulary/배/ship',
-      'test-book/vocabulary/시험/test',
+      'ko/lexeme/배/pear',
+      'ko/lexeme/배/ship',
+      'ko/lexeme/시험/test',
     ]);
+  });
+
+  it("ignores another book's sources for the same chapter number", () => {
+    const content = buildBookContent(
+      'test-book',
+      {
+        language: 'ko',
+        words: {
+          배: [{ sense: 'pear', kind: 'lexeme', gloss: 'pear', sources: ['other-book/ch1/vocabulary/0'] }],
+        },
+      },
+      [chapter],
+    );
+    expect(() => chapterLearningObjects(content, '1')).toThrow(UnregisteredSensesError);
+    expect(content.senseById.has('ko/lexeme/배/pear')).toBe(true);
   });
 
   it('refuses a chapter with unregistered entries', () => {
     const content = buildBookContent(
-      { book: 'test-book', words: { 배: [{ sense: 'pear', gloss: 'pear', sources: ['ch1/vocabulary/0'] }] } },
+      'test-book',
+      { language: 'ko', words: { 배: [{ sense: 'pear', kind: 'lexeme', gloss: 'pear', sources: ['test-book/ch1/vocabulary/0'] }] } },
       [chapter],
     );
     expect(() => chapterLearningObjects(content, '1')).toThrow(UnregisteredSensesError);

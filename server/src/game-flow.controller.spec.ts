@@ -93,7 +93,8 @@ describe('GameFlowController', () => {
       ],
     };
     const learning = {
-      learningObjectId: 'korean-language-book/vocabulary/시험/test',
+      learningObjectId: 'ko/lexeme/시험/test',
+      book: 'korean-language-book',
       sourceRef: 'ch27/vocabulary/1',
       aspect: 'reading',
       target: '시험',
@@ -121,7 +122,9 @@ describe('GameFlowController', () => {
     });
 
     it.each([
-      ['a malformed learning object id', { learningObjectId: 'korean-language-book/시험' }],
+      ['a malformed learning object id', { learningObjectId: 'ko/시험/test' }],
+      ['an old book-scoped learning object id', { learningObjectId: 'korean-language-book/vocabulary/시험/test' }],
+      ['a book that is not a slug', { book: 'Korean Book' }],
       ['a sourceRef that is not a chapter entry', { sourceRef: 'vocabulary/1' }],
       ['an aspect that is not a slug', { aspect: 'Reading Skill' }],
       ['an unknown field', { extra: true }],

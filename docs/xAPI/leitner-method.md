@@ -1,6 +1,9 @@
 # Leitner spaced repetition from LRS data
 
-Status: **plan**, not implemented. Builds on the Milestone 1 export
+Status: Steps 1–2 **built** (content, identity, tagging, read path,
+progress), Steps 3–4 **planned**. Identity and statements follow
+[`learning-objects.md`](./learning-objects.md) decisions A1–A3 (L16–L18).
+Builds on the Milestone 1 export
 (`xapi-export-plan.md`, `LRS.md`), the player/badge binding model
 (`security.md` D2–D4) and the Phase 0 vocab generator
 (`docs/games/game-planning.md` → Cheap generator).
@@ -10,6 +13,10 @@ Related:
 - [`LRS.md`](./LRS.md): statement design, Veracity setup, and the "Open
   point" about cross-game tracking that this plan resolves
 - [`xapi-export-plan.md`](./xapi-export-plan.md): Milestone 1 export
+- [`learning-objects.md`](./learning-objects.md): parts and wholes
+  (phrases, grammar, sentences, competencies). Its decisions A1–A3
+  (language-scoped IRIs, `assessed` statements, kind in the IRI) are
+  adopted here as L16–L18.
 - [`security.md`](./security.md): actor = `Player.externalId`, no names in
   the LRS
 - [`../games/game-planning.md`](../games/game-planning.md): content/item
@@ -43,6 +50,9 @@ Related:
 | L13 | 2026-10-23 | A track at **L3 that passes a question is retired** and never appears in a future game. |
 | L14 | 2026-10-23 | With review scope, earlier-chapter words **compete freely** with the current chapter by level and due date. There's no cap for now. |
 | L15 | 2026-10-23 | **"Earlier chapters"** means **any other chapter of the book the student has already played**, whatever its number. Chapters can be played out of order. |
+| L16 | 2026-10-23 | **Learning-object identity is language-scoped** (`learning-objects.md` A1): `ko/lexeme/시험/test`, IRI `{base}/lo/ko/lexeme/%EC%8B%9C%ED%97%98/test`. The book, chapter and entry are **provenance** only (grouping and `ext/source-ref`), so the same sense taught by two books is one track. The sense registry is per language (`ko-senses.json`). This narrows L1: the book ID names provenance, not learning objects. |
+| L17 | 2026-10-23 | **Evidence is `assessed` statements** (`learning-objects.md` A2). Each tagged guess gives one `answered` statement (what happened) plus one `assessed` statement per observation (what it shows), about the learning object itself. The fold reads **only** `assessed`. Today's scorer, `choice-whole@1`, gives one direct observation on the whole. |
+| L18 | 2026-10-23 | **The kind is part of the identity** (`learning-objects.md` A3): `lexeme` (one word in one sense, activity type `…/activity-types/lexeme-sense`) or `expression` (multi-word entry, `…/activity-types/expression`). The registry stores it per sense; new senses default to `expression` when the word contains a space. |
 
 ---
 
@@ -75,7 +85,7 @@ LRS as statements.
 | Play Again/Restart | Yes                                               | **No.** Single-use. The next session gets a new game.                                 |
 | xAPI export        | Manual (Milestone 1)                              | **Automatic** when the game completes                                                 |
 | Kept afterwards    | Yes                                               | **No.** Deleted as soon as the export succeeds (L10).                                 |
-| Statement tagging  | None (statements identical to today)              | Learning object, source, aspect, game kind                                            |
+| Statement tagging  | None (statements identical to today)              | Learning object, source, aspect, game kind, plus an `assessed` statement per guess (L17) |
 | Affects Leitner levels | **No** (v1)                                   | Yes, for that student only                                                            |
 
 Class games stay untagged in v1. Their statements don't change, they
@@ -93,7 +103,7 @@ running over statements read back from the LRS.
 
 | Need | Today | Change |
 | --- | --- | --- |
-| Know which **learning object** a guess was about, across games and chapters | ❌ Question activity IDs are per game (`…/games/{gameId}/questions/{questionId}`) | Add the learning object's activity to `context.contextActivities.grouping` on each `answered` statement ([Statement changes](#statement-changes)). This is the fix `LRS.md` → "Open point" already proposes. |
+| Know which **learning object** a guess was about, across games, chapters and books | ❌ Question activity IDs are per game (`…/games/{gameId}/questions/{questionId}`) | Add the learning object's activity to `grouping` on each `answered` statement, and send an `assessed` statement whose **object is the learning object** ([Statement changes](#statement-changes)). This is the fix `LRS.md` → "Open point" already proposes. |
 | Know the **source** and the **aspect** | ❌ Not recorded | Chapter grouping plus the `…/ext/source-ref` and `…/ext/aspect` extensions |
 | **Read** statements back | ❌ `lrs-client.ts` only `POST`s | Add a standard `GET /statements` query with paging ([Reading from the LRS](#reading-from-the-lrs)) |
 | Per-student separation | ✅ `actor.account.name` = `Player.externalId`, and the query filters by `agent` | None. This is what makes L4 hold. |
@@ -103,7 +113,7 @@ running over statements read back from the LRS.
 
 **Why the levels are derived from statements and not stored.** Leitner
 state, retirement included, is a pure function of one student's
-`answered` statements. That means we can change the rules and recompute
+`assessed` statements. That means we can change the rules and recompute
 history without a migration. Voided statements drop out automatically. It
 also means **Leitner games can be deleted right after export (L10)**,
 because nothing in our database is needed to work out the next game.
@@ -125,11 +135,12 @@ planning the next game ([Game lifecycle](#leitner-game-lifecycle)).
 
 | Term | Meaning | Pilot example |
 | --- | --- | --- |
-| **Learning object** | One thing being learned. For vocabulary, a **word in one sense**. | `시험` meaning "test", whichever chapter it's in |
+| **Learning object** | One thing being learned. For vocabulary, a **word in one sense**, of kind `lexeme` or `expression` (L18). | `ko/lexeme/시험/test`, whichever book or chapter teaches it |
 | **Sense** | One meaning of a word, with a short permanent slug | `배` → `pear`, `ship`, `stomach` |
-| **Source** | Where the student met it: book, chapter, section and entry, written as a `sourceRef` | `ch27/vocabulary/1` in `korean-language-book` |
+| **Source** | Where the student met it: book, chapter, section and entry. A `sourceRef` is per book; statements, tracks and the registry use the book-qualified form. | `ch27/vocabulary/1` in `korean-language-book` → `korean-language-book/ch27/vocabulary/1` |
 | **Aspect** | The skill or angle tested. It's an open string, chosen by the game creator. | `reading` (Korean → pick meaning), `writing` (English → pick spelling) |
-| **Track** | One `(student, learning object, aspect)`. Each track has its own level and schedule. | Player 7F3A × `시험/test` × `reading` |
+| **Track** | One `(student, learning object, aspect)`. Each track has its own level and schedule. | Player 7F3A × `ko/lexeme/시험/test` × `reading` |
+| **Observation** | One piece of evidence about one learning object from one guess, sent as an `assessed` statement (L17) | `ko/lexeme/시험/test`, reading, success, direct |
 | **Level** | Proficiency 0–3 on a track. It is the Leitner box. | — |
 | **Retired** | The final state after passing at L3. A retired track is never asked again (L13). | — |
 | **Due** | The track's next review time has passed | — |
@@ -148,9 +159,9 @@ writing.
 | `speaking` | scored | ❌ | Deferred until the referee can judge answers |
 | `confidence` | **rated** | ❌ | Self-rating, not right or wrong. See [Confidence](#confidence-and-other-rated-aspects). |
 
-**Grammar** fits better as a *kind of learning object* (chapter
-`patterns`, `sourceRef` `ch27/patterns/0`), with its own aspects, than as
-an aspect of a word. The model doesn't force this, though.
+**Grammar** is a *kind of learning object* (chapter `patterns`,
+`sourceRef` `ch27/patterns/0`, id `ko/pattern/…`), with its own aspects,
+not an aspect of a word. See `learning-objects.md`.
 
 ---
 
@@ -164,7 +175,9 @@ an aspect of a word. The model doesn't force this, though.
 | **3** | Proficient | 7 days |
 | **Retired** | Passed a due question at L3 | Never (L13) |
 
-The fold applies each answer on a track, oldest first:
+The fold applies each observation on a track, oldest first. Today every
+observation is a guess on that learning object, so "answer" below means
+one direct observation:
 
 1. **Correct and due, at L0–L2** → level goes up 1.
    `dueAt = answeredAt + interval[newLevel]`.
@@ -207,7 +220,7 @@ retirement rule are in one `LeitnerConfig`.
 
 ```ts
 type TrackState = {
-  learningObjectId: string; // 'korean-language-book/vocabulary/시험/test'
+  learningObjectId: string; // 'ko/lexeme/시험/test'
   aspect: string;           // 'reading'
   status: 'new' | 'active' | 'retired';
   level: 0 | 1 | 2 | 3;     // stays 3 when retired
@@ -218,52 +231,62 @@ type TrackState = {
   seenCount: number;
   correctCount: number;
   incorrectCount: number;
-  sources: string[];        // where it was asked: ['ch26/vocabulary/6', 'ch27/vocabulary/5']
+  sources: string[];        // where it was asked: ['korean-language-book/ch26/vocabulary/6', …]
 };
 ```
 
 ---
 
-## Learning-object identity: word, sense and source (L1, L2, L9)
+## Learning-object identity: language, kind, word and sense (L2, L9, L16, L18)
 
-A vocabulary learning object is **one word in one sense**. The **source**
-entry (`sourceRef`) decides which sense, using a checked-in **sense
-registry** for the book.
+A vocabulary learning object is **one word in one sense**, scoped to the
+**language**, not the book (L16). The **source** entry (`sourceRef`)
+decides which sense, using a checked-in **sense registry** for the
+language.
 
 ```
-learningObjectId = korean-language-book/vocabulary/{word}/{sense}
-IRI = {base}/content/korean-language-book/vocabulary/{enc(word)}/{sense}
+learningObjectId = {language}/{kind}/{word}/{sense}
+IRI = {base}/lo/{language}/{kind}/{enc(word)}/{sense}
 
-시험 "test, exam"  → …/vocabulary/%EC%8B%9C%ED%97%98/test
-배   "pear"        → …/vocabulary/%EB%B0%B0/pear
-배   "ship"        → …/vocabulary/%EB%B0%B0/ship
-배   "stomach"     → …/vocabulary/%EB%B0%B0/stomach
+시험 "test, exam"   → ko/lexeme/시험/test           …/lo/ko/lexeme/%EC%8B%9C%ED%97%98/test
+보여 주다 "to show"  → ko/expression/보여 주다/to-show  …/lo/ko/expression/%EB%B3%B4%EC%97%AC%20%EC%A3%BC%EB%8B%A4/to-show
+배 "pear" / "ship"  → ko/lexeme/배/pear, ko/lexeme/배/ship
 ```
 
+- `language` is an ISO 639 code (`ko`).
+- `kind` (L18) is `lexeme` (activity type `…/activity-types/lexeme-sense`)
+  or `expression` (`…/activity-types/expression`). Grammar patterns,
+  sentences and competencies get their own id shapes when they're built
+  (`learning-objects.md` → Identity versus provenance).
 - `word` is `NFC(target).trim()`, with internal spaces collapsed to one.
-  `enc` is `encodeURIComponent` on the UTF-8 form (**L9**), so `보여 주다`
-  becomes `%EB%B3%B4%EC%97%AC%20%EC%A3%BC%EB%8B%A4`.
+  `enc` is `encodeURIComponent` on the UTF-8 form (**L9**).
 - `sense` is an ASCII slug (`[a-z0-9-]`) chosen when the sense is first
   registered, from its first English gloss (`to show` → `to-show`). Every
   word has a sense segment, including words with one meaning, so the IRI
   shape never changes when a second meaning shows up later.
+- **No book in the IRI.** The book (`{base}/content/korean-language-book`)
+  and chapter (`…/ch27`) stay as **provenance** activities in `grouping`,
+  and the entry is the book-qualified `ext/source-ref`.
 - These IRIs are **permanent once pilot statements exist**, like the base
-  IRI.
+  IRI. Code: `server/src/learning/learning-object.ts`.
 
 ### The sense registry
 
-`server/src/games/content/korean-language-book-senses.json`, next to the
-chapter files and committed to git. Code: `server/src/learning/sense-registry.ts`.
+`server/src/games/content/ko-senses.json`, next to the chapter files and
+committed to git: **one registry per language**, fed by every book (L16).
+Code: `server/src/learning/sense-registry.ts`.
 
 ```json
 {
-  "book": "korean-language-book",
+  "language": "ko",
   "words": {
-    "시험": [{ "sense": "test", "gloss": "test, exam", "sources": ["ch27/vocabulary/1"] }],
-    "보여 주다": [{ "sense": "to-show", "gloss": "to show", "sources": ["ch26/vocabulary/6", "ch27/vocabulary/5"] }],
+    "시험": [{ "sense": "test", "kind": "lexeme", "gloss": "test, exam",
+               "sources": ["korean-language-book/ch27/vocabulary/1"] }],
+    "보여 주다": [{ "sense": "to-show", "kind": "expression", "gloss": "to show",
+                  "sources": ["korean-language-book/ch26/vocabulary/6", "korean-language-book/ch27/vocabulary/5"] }],
     "배": [
-      { "sense": "pear", "gloss": "pear", "sources": ["ch12/vocabulary/4"] },
-      { "sense": "ship", "gloss": "ship", "sources": ["ch19/vocabulary/7"] }
+      { "sense": "pear", "kind": "lexeme", "gloss": "pear", "sources": ["korean-language-book/ch12/vocabulary/4"] },
+      { "sense": "ship", "kind": "lexeme", "gloss": "ship", "sources": ["other-book/ch3/vocabulary/7"] }
     ]
   }
 }
@@ -271,9 +294,16 @@ chapter files and committed to git. Code: `server/src/learning/sense-registry.ts
 
 (The `배` sources are illustrative. Chapters 26–30 contain no homographs.)
 
-`npm run content:senses` reads every `chapterNNData.json` in the content
-folder, in chapter order, and looks at each vocabulary entry not yet
-listed by `sourceRef`. `--check` changes nothing and exits 1 if the
+Sources are **book-qualified**, so a second book attaches its entries to
+the same senses, and its words get the same learning objects. `kind` is
+set when a sense is first registered (`expression` if the word contains a
+space, otherwise `lexeme`). A person may correct it in the file, but only
+before any pilot statement uses that sense, because the kind is in the IRI.
+
+`npm run content:senses [-- --book <id> --language ko]` reads every
+`chapterNNData.json` in the content folder as chapters of `--book`
+(default `korean-language-book`), in chapter order, and looks at each
+vocabulary entry not yet listed by its qualified `sourceRef`. `--check` changes nothing and exits 1 if the
 registry is out of date, and a spec runs the same check, so a chapter
 added without updating the registry fails the tests. Entries are matched
 like this:
@@ -286,12 +316,12 @@ like this:
 | The same word listed twice in one chapter with the same gloss | Both `sourceRef`s go to one sense (ch. 29 has six such repeats, e.g. `지하철` at entries 14 and 23) |
 
 At runtime, planning and statement building **only look up**
-`sourceRef → (word, sense)`. A chapter with any unregistered entry is
+`(book, sourceRef) → learning object`. A chapter with any unregistered entry is
 refused with a clear error, so a learning object's ID never depends on a
 guess made at play time.
 
 Generated for chapters 26–30 (2026-10-23): 155 entries → **146 words,
-146 senses**, with no conflicts. Nine entries attached to an existing
+146 senses** (135 `lexeme`, 11 `expression`), with no conflicts. Nine entries attached to an existing
 sense:
 - `보여 주다` and `괜찮다` appear in both ch. 26 and ch. 27 (L2 in practice).
 - `타다` appears in ch. 28 ("to ride") and ch. 29 ("to take, to ride").
@@ -314,14 +344,19 @@ fix them before grammar becomes a learning-object kind.
 
 When the content library (`game-planning.md` Phase 1) lands, the registry
 becomes `ContentItem` data with the same keys, so the IRIs don't change.
+Its `partOf` decompositions (`learning-objects.md` → Composition) go here
+too.
 
 ---
 
 ## Statement changes
 
-Only `answered` statements on **tagged questions** change, which in v1
-means questions in Leitner games. Untagged questions (all class games,
-past and future) produce exactly today's statements.
+Only **tagged questions** change, which in v1 means questions in Leitner
+games. Untagged questions (all class games, past and future) produce
+exactly today's statements, and no `assessed` statements.
+
+**`answered` (what happened, L17).** Its context gains the learning object
+and its provenance:
 
 ```json
 "context": {
@@ -330,17 +365,15 @@ past and future) produce exactly today's statements.
     "parent": [{ "id": "https://kogs.link/xapi/emoji-app/games/6650f…" }],
     "grouping": [
       {
-        "id": "https://kogs.link/xapi/emoji-app/content/korean-language-book/vocabulary/%EC%8B%9C%ED%97%98/test",
+        "id": "https://kogs.link/xapi/emoji-app/lo/ko/lexeme/%EC%8B%9C%ED%97%98/test",
         "definition": {
-          "type": "https://kogs.link/xapi/emoji-app/activity-types/vocabulary-sense",
+          "type": "https://kogs.link/xapi/emoji-app/activity-types/lexeme-sense",
           "name": { "ko": "시험", "en-US": "test, exam" }
         }
       },
       {
         "id": "https://kogs.link/xapi/emoji-app/content/korean-language-book/ch27",
-        "definition": {
-          "type": "https://kogs.link/xapi/emoji-app/activity-types/chapter"
-        }
+        "definition": { "type": "https://kogs.link/xapi/emoji-app/activity-types/chapter" }
       },
       {
         "id": "https://kogs.link/xapi/emoji-app/content/korean-language-book",
@@ -350,23 +383,62 @@ past and future) produce exactly today's statements.
   },
   "extensions": {
     "…existing game-id / station-name / badge-name…": "…",
-    "https://kogs.link/xapi/emoji-app/ext/source-ref": "ch27/vocabulary/1",
+    "https://kogs.link/xapi/emoji-app/ext/source-ref": "korean-language-book/ch27/vocabulary/1",
     "https://kogs.link/xapi/emoji-app/ext/aspect": "reading",
     "https://kogs.link/xapi/emoji-app/ext/game-kind": "leitner-solo"
   }
 }
 ```
 
-- **Learning object (word + sense)**: what's tracked.
-- **Chapter** grouping and the **`source-ref`** extension record where the
-  student met it (L2), down to section and entry. `TrackState.sources` is
-  built from these.
-- **Book**: lets the progress query pull **all** of a student's evidence
-  for the book in one filter. This is needed for cross-chapter learning
-  objects and review scope, because xAPI's `activity` filter matches exact
-  IDs only.
+**`assessed` (what it shows, L17).** It comes straight after its `answered`
+statement, one per observation:
+
+```json
+{
+  "id": "<UUID v5 of gameId:guessId:assessed:<learning-object IRI>:<aspect>:<scorer>>",
+  "actor": "…same as the answered statement…",
+  "verb": { "id": "https://kogs.link/xapi/emoji-app/verbs/assessed", "display": { "en-US": "was assessed on" } },
+  "object": {
+    "objectType": "Activity",
+    "id": "https://kogs.link/xapi/emoji-app/lo/ko/lexeme/%EC%8B%9C%ED%97%98/test",
+    "definition": { "type": "…/activity-types/lexeme-sense", "name": { "ko": "시험", "en-US": "test, exam" } }
+  },
+  "result": { "success": true },
+  "timestamp": "…same as the answered statement…",
+  "context": {
+    "registration": "…same…",
+    "statement": { "objectType": "StatementRef", "id": "<the answered statement id>" },
+    "contextActivities": {
+      "parent": [{ "id": "…/games/{gameId}/questions/{questionId}" }],
+      "grouping": ["…chapter…", "…book…"]
+    },
+    "extensions": {
+      "…/ext/game-id": "6650f…",
+      "…/ext/aspect": "reading",
+      "…/ext/role": "whole",
+      "…/ext/strength": "direct",
+      "…/ext/source-ref": "korean-language-book/ch27/vocabulary/1",
+      "…/ext/game-kind": "leitner-solo",
+      "…/ext/scorer": "choice-whole@1"
+    }
+  }
+}
+```
+
+- **Learning object** (language, kind, word, sense): what's tracked. It's
+  the `assessed` object, and grouping on `answered`, so
+  `activity={learning object}&related_activities=true` returns every
+  attempt and every observation for it.
+- **Chapter** and **book** grouping and the **`source-ref`** extension
+  record where the student met it (L2), down to section and entry.
+  `TrackState.sources` is built from `source-ref`.
 - **`aspect`** is an extension, not part of the activity ID, so the LRS
   sees one activity per learning object.
+- **`role`** (`whole` | `part`) and **`strength`** (`direct` | `indirect`)
+  say how the observation relates to the item. Only `whole` / `direct`
+  exists today. **`scorer`** names the versioned function that produced
+  it; it's in the ID seed, so re-scoring with a new version never collides
+  (`learning-objects.md` → Re-scoring).
 - **`game-kind`** marks where evidence came from (`leitner-solo` now, and
   later `class` / `leitner-group`). The fold filters on it locally, which
   leaves the multi-player phase free to decide whether class evidence
@@ -380,10 +452,11 @@ past and future) produce exactly today's statements.
 | Layer | Change |
 | --- | --- |
 | `Game` model | `kind: 'class' \| 'leitner-solo'` (default `class`, immutable). Games stored before it have no `kind` and read as `class`. For Leitner games, an immutable `leitner: { playerId, book, chapter, scope, aspects, seed, plannedAt, picks[] }`. Step 3 is what sets them. |
-| `Question` model | Optional, immutable `learning: { learningObjectId, sourceRef, aspect, target, native }`, as **one sub-document**, so a question is either fully tagged or not at all. `learningTagSchema` (`learning/learning-object.ts`) validates it in `POST /api/questions`. |
+| `Question` model | Optional, immutable `learning: { learningObjectId, book, sourceRef, aspect, target, native }`, as **one sub-document**, so a question is either fully tagged or not at all. `learningTagSchema` (`learning/learning-object.ts`) validates it in `POST /api/questions`. |
 | `vocab-choice.ts` | Items can carry `learning` (without `aspect`), and `toQuestionInput` adds `aspect = skill`. Untagged items give exactly the old output, so `create:vocab-game` is unaffected. |
 | `GameDataRepository` | `createQuestionWithOptions` stores `learning`. `getGameExportData` returns it and `game.kind`. |
-| `statement-builder.ts` | Adds `grouping` and the extensions **only when `learning` is set**. Specs prove untagged output is byte-for-byte unchanged, and that a built statement is read back by the fold as the right track. The chapter grouping carries only its type, so the builder needs no content lookup. |
+| `learning/observations.ts` | `Observation` and the `choice-whole@1` scorer (one direct observation on the tagged whole). Diagnostic scorers come later (`learning-objects.md`). |
+| `statement-builder.ts` | Adds `grouping` and the extensions, and the `assessed` statements, **only when `learning` is set**. Specs prove untagged output is byte-for-byte unchanged, and that built statements are read back by the fold as the right track. The chapter grouping carries only its type, so the builder needs no content lookup. |
 
 ---
 
@@ -394,16 +467,20 @@ Add `fetchStatements(config, query)` to `lrs-client.ts`:
 ```
 GET {endpoint}/statements
   ?agent={"objectType":"Agent","account":{"homePage":"https://kogs.link","name":"<externalId>"}}
-  &verb=http://adlnet.gov/expapi/verbs/answered
-  &activity=https://kogs.link/xapi/emoji-app/content/korean-language-book
-  &related_activities=true
+  &verb=https://kogs.link/xapi/emoji-app/verbs/assessed
   &limit=500
 X-Experience-API-Version: 1.0.3
 ```
 
 - **`agent` is what makes the tracks per student (L4).** Only that
   student's statements are read.
-- The whole book comes back in one query, so **both scopes (L11) use the
+- **`verb=assessed`** is the one evidence path (L17). There's **no
+  activity filter**: learning objects are language-scoped (L16), so
+  evidence from every book and chapter counts. The fold keeps the book's
+  language (`ko`). If this ever returns too much, filter by the book or
+  chapter grouping with `activity` + `related_activities=true`, which
+  `assessed` statements carry.
+- Everything comes back in one query, so **both scopes (L11) use the
   same data**. Scope only changes which tracks the planner considers.
 - **Follow `more`** until it's empty. Then **sort locally** by
   `timestamp`, then `id`, because the LRS's default order is `stored`
@@ -454,9 +531,9 @@ deleted, because their plan is stale.
 GET  /api/players/:playerId/progress?chapter=27
        [&book=korean-language-book][&scope=chapter|review][&aspects=reading,writing][&now=<iso>]
 → 200 { player: { id, label }, book, chapter, scope, aspects, asOf,
-        statementCount, answerCount,    // fetched from the LRS / counted for Leitner
+        statementCount, observationCount,  // assessed statements fetched / counted for Leitner
         summary: { new, active: { L0, L1, L2, L3 }, retired, due },
-        tracks: (TrackState & { due, inChapter, word, gloss })[] }
+        tracks: (TrackState & { due, inChapter, kind, word, gloss })[] }
         // chapter × aspects with new ones included; review adds other played chapters' tracks
 → 400 bad id/query · 404 unknown player, book or chapter · 422 unregistered senses
 → 503 LRS not configured · 502 LRS request failed
@@ -483,12 +560,13 @@ Planning runs on the server, and review scope can reach any chapter the
 student has played,
 so the server needs **every chapter of the book we use** at runtime.
 Chapters 26–30 are in `server/src/games/content/`, next to
-`korean-language-book-senses.json` (emoji-app owns its copy;
+`ko-senses.json` (emoji-app owns its copy;
 `game-planning.md` → Storage decision). Make
 sure the build ships them: either import them as modules with
 `resolveJsonModule`, or add a copy step to `build:server` and the Docker
-build. A small `content/index.ts` registry maps `(book, chapter) → file`
-and `sourceRef → (word, sense)`.
+build. `learning/book-content.ts` maps `(book, chapter) → vocabulary` and
+`(book, sourceRef) → learning object` (built: modules via
+`resolveJsonModule`).
 
 ---
 
@@ -537,7 +615,7 @@ planNextGame({
   chapterObjects: LearningObject[],  // this chapter's senses, de-duplicated
   reviewObjects: LearningObject[],   // scope 'review': senses met in other played chapters; else []
   aspects: ['reading', 'writing'],
-  tracks: TrackState[],              // this student's, whole book
+  tracks: TrackState[],              // this student's, whole language (L16)
   now, count: 10, maxNew: 4, fill: true, seed, config: LeitnerConfig,
 }) → { picks: { learningObjectId, aspect, sourceRef, reason }[], report }
 ```
@@ -652,7 +730,8 @@ This is deferred until after v1. Confidence isn't right or wrong:
 - Ask it **with the existing hardware**: "How sure are you about 시험?",
   cards A–D = 0–3.
 - Record it as an `answered` statement with `aspect: 'confidence'` and
-  the rating in `result.score.raw`, with no `result.success`. It's still
+  the rating in `result.score.raw`, with no `result.success`, and an
+  `assessed` statement carrying the same rating (a `rated@1` scorer). It's still
   `choice` on the wire; the authored `likert` type goes in an extension.
 - The track's level is the **latest rating**, with no schedule and no
   retirement. The planner uses it as a tie-breaker (at equal level, ask
@@ -674,7 +753,7 @@ aspects default to `scored`.
       them in `dist/server`, which is what the Docker image copies. Done
       with Step 2.
 - [x] `content:senses` script, `sense-registry.ts` and
-      `korean-language-book-senses.json` for ch. 26–30. Specs cover new
+      `korean-language-book-senses.json` (now `ko-senses.json`, Step 2b) for ch. 26–30. Specs cover new
       word, matching gloss, homograph conflict, hand-resolved homographs,
       in-chapter repeats, the ch. 28 swap, stale entries, and that the
       committed registry is up to date.
@@ -688,9 +767,18 @@ aspects default to `scored`.
 - [x] `statement-builder.ts`: `grouping` (sense, chapter, book) and the
       `source-ref` / `aspect` / `game-kind` extensions, only when tagged.
       Specs prove untagged output is unchanged.
-- [ ] Manual: a tagged test game exported to `emojiapp-dev` with Strict
-      API Mode on is accepted, and the percent-encoded IRIs show in the
-      viewer.
+- [x] Manual: tagged statements sent to `emojiapp-dev` with Strict API
+      Mode on are accepted (2026-10-23, first shape, before L16–L18). These were 3 `answered` + 1 `scored`
+      statements from the real builder for a throwaway actor
+      (`leitner-smoke-…`), covering a plain word, a space (`보여 주다`),
+      parentheses (`(돈을) 모으다`) and a wrong answer. Read back with the
+      progress query:
+      - book filter → 3, ch. 27 → 2, ch. 30 → 1;
+      - percent-encoded IRIs, grouping names and all six extensions come
+        back exactly as sent;
+      - the fold over the returned statements gives L1 / L0 / L1 as
+        expected.
+      Superseded by the re-run under Step 2b (below).
 
 ### Step 2: Read path and progress
 
@@ -708,6 +796,36 @@ aspects default to `scored`.
 - [x] `GET /api/players/:playerId/progress` with both scopes
       (`learning/progress.controller.ts`). `pendingExport` comes with
       Step 3.
+- Reworked by Step 2b (below): `assessed` only, no book filter.
+
+### Step 2b: Adopt `learning-objects.md` A1–A3 (L16–L18), before the pilot
+
+- [x] Language-scoped ids and IRIs with the kind (`ko/lexeme/…`,
+      `{base}/lo/ko/lexeme/…`), activity types `lexeme-sense` /
+      `expression`, book-qualified source refs (`learning-object.ts`).
+- [x] Registry moved to `ko-senses.json` (language, `kind` per sense,
+      qualified sources), migrated mechanically: same 146 words and senses.
+      `updateSenseRegistry` takes the book, and only checks that book's
+      entries for staleness. `content:senses` gains `--language`.
+- [x] `Question.learning` gains `book`; `learningTagSchema` rejects the old
+      book-scoped ids.
+- [x] `assessed` statements from the builder (`choice-whole@1`), right
+      after each tagged `answered` statement; ID seeded with the scorer.
+- [x] The fold reads only `assessed`, direct observations, in the book's
+      language (`observationsFromStatements`). The progress query drops the
+      book filter and returns `observationCount` and `kind`.
+- [x] Manual, re-run (2026-10-23): the real builder sent 3 `answered` + 3
+      `assessed` + 1 `scored` for a throwaway actor (`leitner-smoke-0a7b…`)
+      to `emojiapp-dev`, Strict API Mode on. All accepted, including
+      `context.statement` (StatementRef). Read back:
+      - `verb=assessed` (the progress query) → 3; book grouping → 3;
+        ch. 30 → 1;
+      - `activity={보여 주다}` + related → its `answered` and `assessed`;
+      - IRIs, StatementRefs, activity types and all seven extensions come
+        back exactly as sent;
+      - the fold gives L1 / L0 / L1 as expected.
+      Clear `emojiapp-dev` before the pilot: it now holds two smoke-test
+      actors (`leitner-smoke-c312…` with the old shape, `leitner-smoke-0a7b…`).
 
 ### Step 3: Planner, game creation, lifecycle
 
@@ -772,8 +890,9 @@ On `emojiapp-dev` with one test student:
   UUID v5 ID seeded from the triggering statement.
 - Confidence (above), then listening and speaking when their generators
   exist.
-- Grammar: chapter `patterns` as learning objects, using
-  `pattern.cloze.ending` from `game-planning.md`.
+- Grammar: chapter `patterns` as learning objects (`ko/pattern/…`), using
+  `pattern.cloze.ending` from `game-planning.md` and a diagnostic scorer
+  (`learning-objects.md`).
 - Speed: revisit L12 with pilot data (`result.duration` is already
   recorded, so any rule can be applied to history).
 

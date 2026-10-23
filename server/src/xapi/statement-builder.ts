@@ -9,13 +9,18 @@ import {
   chapterOfSourceRef,
   EXT_ASPECT,
   EXT_GAME_KIND,
+  EXT_ROLE,
+  EXT_SCORER,
   EXT_SOURCE_REF,
+  EXT_STRENGTH,
+  LEARNING_OBJECT_TYPES,
   learningObjectIri,
   parseLearningObjectId,
-  VOCABULARY_SENSE_TYPE,
+  qualifiedSourceRef,
   type LearningTag,
 } from '../learning/learning-object';
-import { ANSWERED_VERB_ID, XAPI_BASE_IRI, XAPI_HOMEPAGE } from './iris';
+import { CHOICE_WHOLE_SCORER, scoreChoiceWhole, type Observation } from '../learning/observations';
+import { ANSWERED_VERB_ID, ASSESSED_VERB_ID, XAPI_BASE_IRI, XAPI_HOMEPAGE } from './iris';
 
 export { XAPI_BASE_IRI, XAPI_HOMEPAGE };
 const SCORED_VERB_ID = 'http://adlnet.gov/expapi/verbs/scored';
@@ -53,6 +58,17 @@ export function gameRegistration(gameId: string): string {
 
 export function answeredStatementId(gameId: string, guessId: string): string {
   return xapiUuid(`${gameId}:${guessId}:answered`);
+}
+
+/** The scorer is in the seed, so re-scoring with a new version never collides (409). */
+export function assessedStatementId(
+  gameId: string,
+  guessId: string,
+  learningObjectIri: string,
+  aspect: string,
+  scorer: string,
+): string {
+  return xapiUuid(`${gameId}:${guessId}:assessed:${learningObjectIri}:${aspect}:${scorer}`);
 }
 
 export function scoredStatementId(gameId: string, playerId: string): string {
@@ -122,7 +138,24 @@ export type XApiScoredStatement = {
   context: { registration: string };
 };
 
-export type XApiStatement = XApiAnsweredStatement | XApiScoredStatement;
+/** One observation about one learning object (docs/xAPI/learning-objects.md → A2). */
+export type XApiAssessedStatement = {
+  id: string;
+  actor: XApiActor;
+  verb: { id: string; display: { 'en-US': 'was assessed on' } };
+  object: { objectType: 'Activity'; id: string; definition: { type: string; name: Record<string, string> } };
+  result: { success: boolean };
+  timestamp: string;
+  context: {
+    registration: string;
+    /** The `answered` statement this observation was scored from. */
+    statement: { objectType: 'StatementRef'; id: string };
+    contextActivities: { parent: [{ id: string }]; grouping: XApiGroupingActivity[] };
+    extensions: Record<string, string>;
+  };
+};
+
+export type XApiStatement = XApiAnsweredStatement | XApiAssessedStatement | XApiScoredStatement;
 
 function toDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
@@ -239,15 +272,21 @@ function resolvePlayerForBadge(
   return { playerId: binding.playerId, externalId };
 }
 
+type LearningContext = {
+  /** The learning-object activity: `grouping` on `answered`, the object of `assessed`. */
+  learningObject: XApiGroupingActivity & { definition: { name: Record<string, string> } };
+  /** Chapter and book: where it was taught. */
+  provenance: XApiGroupingActivity[];
+  sourceRef: string;
+  gameKind: GameKind;
+};
+
 /**
- * `grouping` (learning object, chapter, book) and the source-ref / aspect /
- * game-kind extensions for a tagged question (docs/xAPI/leitner-method.md →
- * Statement changes). The Leitner fold reads exactly these.
+ * The learning object and its provenance for a tagged question
+ * (docs/xAPI/leitner-method.md → Statement changes; learning-objects.md →
+ * A1–A3). Throws on a tag that should have been rejected on create.
  */
-function learningContext(
-  learning: LearningTag,
-  gameKind: GameKind,
-): { grouping: XApiGroupingActivity[]; extensions: Record<string, string> } {
+function learningContext(learning: LearningTag, gameKind: GameKind): LearningContext {
   const key = parseLearningObjectId(learning.learningObjectId);
   const chapter = chapterOfSourceRef(learning.sourceRef);
   if (!key || !chapter) {
@@ -256,19 +295,19 @@ function learningContext(
     );
   }
   return {
-    grouping: [
-      {
-        id: learningObjectIri(key),
-        definition: { type: VOCABULARY_SENSE_TYPE, name: { ko: learning.target, 'en-US': learning.native } },
+    learningObject: {
+      id: learningObjectIri(key),
+      definition: {
+        type: LEARNING_OBJECT_TYPES[key.kind],
+        name: { [key.language]: learning.target, 'en-US': learning.native },
       },
-      { id: chapterIri(key.book, chapter), definition: { type: CHAPTER_TYPE } },
-      { id: bookIri(key.book), definition: { type: BOOK_TYPE } },
-    ],
-    extensions: {
-      [EXT_SOURCE_REF]: learning.sourceRef,
-      [EXT_ASPECT]: learning.aspect,
-      [EXT_GAME_KIND]: gameKind,
     },
+    provenance: [
+      { id: chapterIri(learning.book, chapter), definition: { type: CHAPTER_TYPE } },
+      { id: bookIri(learning.book), definition: { type: BOOK_TYPE } },
+    ],
+    sourceRef: qualifiedSourceRef(learning.book, learning.sourceRef),
+    gameKind,
   };
 }
 
@@ -323,13 +362,62 @@ export function buildAnsweredStatement(input: {
       registration: gameRegistration(gameId),
       contextActivities: {
         parent: [{ id: gameActivityId(gameId) }],
-        ...(learning ? { grouping: learning.grouping } : {}),
+        ...(learning ? { grouping: [learning.learningObject, ...learning.provenance] } : {}),
       },
       extensions: {
         [EXT_GAME_ID]: gameId,
         [EXT_STATION_NAME]: guess.stationName ?? guess.badgeName,
         [EXT_BADGE_NAME]: guess.badgeName,
-        ...learning?.extensions,
+        ...(learning && question.learning
+          ? {
+              [EXT_SOURCE_REF]: learning.sourceRef,
+              [EXT_ASPECT]: question.learning.aspect,
+              [EXT_GAME_KIND]: learning.gameKind,
+            }
+          : {}),
+      },
+    },
+  };
+}
+
+/**
+ * One `assessed` statement per observation, about the learning object
+ * itself, pointing back at the `answered` statement it was scored from.
+ * Same actor, time and registration as that statement.
+ */
+export function buildAssessedStatement(input: {
+  gameId: string;
+  guessId: string;
+  answered: XApiAnsweredStatement;
+  learning: LearningTag;
+  gameKind?: GameKind;
+  observation: Observation;
+  scorer: string;
+}): XApiAssessedStatement {
+  const { gameId, guessId, answered, observation, scorer } = input;
+  if (observation.learningObjectId !== input.learning.learningObjectId) {
+    throw new Error(`Observation on '${observation.learningObjectId}' has no names; only the tagged learning object is supported.`);
+  }
+  const context = learningContext(input.learning, input.gameKind ?? 'class');
+  return {
+    id: assessedStatementId(gameId, guessId, context.learningObject.id, observation.aspect, scorer),
+    actor: answered.actor,
+    verb: { id: ASSESSED_VERB_ID, display: { 'en-US': 'was assessed on' } },
+    object: { objectType: 'Activity', ...context.learningObject },
+    result: { success: observation.success },
+    timestamp: answered.timestamp,
+    context: {
+      registration: answered.context.registration,
+      statement: { objectType: 'StatementRef', id: answered.id },
+      contextActivities: { parent: [{ id: answered.object.id }], grouping: context.provenance },
+      extensions: {
+        [EXT_GAME_ID]: gameId,
+        [EXT_ASPECT]: observation.aspect,
+        [EXT_ROLE]: observation.role,
+        [EXT_STRENGTH]: observation.strength,
+        [EXT_SOURCE_REF]: context.sourceRef,
+        [EXT_GAME_KIND]: context.gameKind,
+        [EXT_SCORER]: scorer,
       },
     },
   };
@@ -367,7 +455,8 @@ export function buildScoredStatement(input: {
 
 /**
  * The full statement set for one completed game: one `answered` statement per
- * `Guess`, then one `scored` statement per `getGameScores` row. Pure — no
+ * `Guess` (each followed by its `assessed` statements when the question is
+ * tagged), then one `scored` statement per `getGameScores` row. Pure — no
  * network or database calls — so it can be unit-tested and inspected without
  * an LRS. Throws `UnattributedBadgeError` if any guess or score row's badge
  * has no covering `PlayerBinding`; callers should already have checked this
@@ -401,7 +490,23 @@ export function buildGameStatements(input: BuildGameStatementsInput): XApiStatem
       bindingsByBadge,
       externalIdByPlayerId,
     );
-    statements.push(buildAnsweredStatement({ gameId: game.id, guess, question, externalId, gameKind: game.kind }));
+    const answered = buildAnsweredStatement({ gameId: game.id, guess, question, externalId, gameKind: game.kind });
+    statements.push(answered);
+    if (question.learning) {
+      for (const observation of scoreChoiceWhole(question.learning, answered.result.success)) {
+        statements.push(
+          buildAssessedStatement({
+            gameId: game.id,
+            guessId: guess.id,
+            answered,
+            learning: question.learning,
+            gameKind: game.kind,
+            observation,
+            scorer: CHOICE_WHOLE_SCORER,
+          }),
+        );
+      }
+    }
   }
 
   // One badge can hold several bindings over a game (swap/replacement); the

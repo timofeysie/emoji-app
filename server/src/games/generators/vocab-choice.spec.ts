@@ -153,7 +153,8 @@ describe('toQuestionInput', () => {
 
   it("passes a Leitner item's tag through, with the skill as the aspect", () => {
     const learning = {
-      learningObjectId: 'korean-language-book/vocabulary/간호사/nurse',
+      learningObjectId: 'ko/lexeme/간호사/nurse',
+      book: 'korean-language-book',
       sourceRef: 'ch26/vocabulary/13',
       target: '간호사',
       native: 'nurse',

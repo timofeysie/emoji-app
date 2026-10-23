@@ -8,3 +8,9 @@ export const XAPI_BASE_IRI = 'https://kogs.link/xapi/emoji-app';
 export const XAPI_HOMEPAGE = 'https://kogs.link';
 
 export const ANSWERED_VERB_ID = 'http://adlnet.gov/expapi/verbs/answered';
+
+/**
+ * Ours (docs/xAPI/learning-objects.md → A2): one `assessed` statement per
+ * observation about a learning object. The Leitner fold reads only these.
+ */
+export const ASSESSED_VERB_ID = `${XAPI_BASE_IRI}/verbs/assessed`;

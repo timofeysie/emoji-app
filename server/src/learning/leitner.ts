@@ -1,18 +1,20 @@
 import { z } from 'zod';
-import { ANSWERED_VERB_ID } from '../xapi/iris';
+import { ASSESSED_VERB_ID } from '../xapi/iris';
 import {
   EXT_ASPECT,
   EXT_GAME_KIND,
   EXT_SOURCE_REF,
+  EXT_STRENGTH,
   learningObjectId,
   parseLearningObjectIri,
 } from './learning-object';
 
 /**
- * Leitner levels from a student's `answered` statements
- * (docs/xAPI/leitner-method.md → The Leitner rules). Pure: the same
- * statements and config always give the same tracks, so rules can change
- * and history is simply recomputed.
+ * Leitner levels from a student's `assessed` statements
+ * (docs/xAPI/leitner-method.md → The Leitner rules; learning-objects.md →
+ * A2: observations are the one evidence path). Pure: the same statements
+ * and config always give the same tracks, so rules can change and history
+ * is simply recomputed.
  */
 
 export type Level = 0 | 1 | 2 | 3;
@@ -35,11 +37,12 @@ export const DEFAULT_LEITNER_CONFIG: LeitnerConfig = {
   countedGameKinds: ['leitner-solo'],
 };
 
-/** One scored answer on one track, taken from an `answered` statement. */
-export type LeitnerAnswer = {
+/** One observation on one track, taken from an `assessed` statement. */
+export type LeitnerObservation = {
   statementId: string;
   learningObjectId: string;
   aspect: string;
+  /** Book-qualified: `korean-language-book/ch27/vocabulary/1`. */
   sourceRef: string;
   success: boolean;
   /** ISO 8601, when the guess was made. */
@@ -62,38 +65,40 @@ export type TrackState = {
   seenCount: number;
   correctCount: number;
   incorrectCount: number;
-  /** Where it was asked, first seen first: `['ch26/vocabulary/6', 'ch27/vocabulary/5']`. */
+  /** Where it was asked, first seen first: `['korean-language-book/ch26/vocabulary/6', …]`. */
   sources: string[];
 };
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-const answeredStatementSchema = z.object({
+const assessedStatementSchema = z.object({
   id: z.string().min(1),
-  verb: z.object({ id: z.literal(ANSWERED_VERB_ID) }),
+  verb: z.object({ id: z.literal(ASSESSED_VERB_ID) }),
+  object: z.object({ id: z.string() }),
   timestamp: z.string().refine((value) => !Number.isNaN(Date.parse(value))),
   result: z.object({ success: z.boolean() }),
-  context: z.object({
-    contextActivities: z.object({ grouping: z.array(z.object({ id: z.string() })) }),
-    extensions: z.record(z.string(), z.unknown()),
-  }),
+  context: z.object({ extensions: z.record(z.string(), z.unknown()) }),
 });
 
 /**
- * The `answered` statements that count for Leitner in `book`: tagged with
- * one learning object of that book, an aspect, a source and a counted game
- * kind. Anything else (class games, scored statements, untagged or
- * malformed statements, rated aspects with no `success`) is skipped.
+ * The `assessed` statements that count for Leitner in `language`: about one
+ * learning object in that language, with an aspect, a source and a counted
+ * game kind. Anything else (other verbs, class games, malformed statements,
+ * rated aspects with no `success`) is skipped.
+ *
+ * Only `direct` observations count for now. No scorer emits `indirect` ones
+ * yet; the strength policy (learning-objects.md → Strength matters) comes
+ * with the first that does, and recomputing history picks them up.
  */
-export function answersFromStatements(
+export function observationsFromStatements(
   statements: readonly unknown[],
-  book: string,
+  language: string,
   config: LeitnerConfig = DEFAULT_LEITNER_CONFIG,
-): LeitnerAnswer[] {
-  const answers: LeitnerAnswer[] = [];
+): LeitnerObservation[] {
+  const observations: LeitnerObservation[] = [];
   for (const raw of statements) {
-    const parsed = answeredStatementSchema.safeParse(raw);
+    const parsed = assessedStatementSchema.safeParse(raw);
     if (!parsed.success) continue;
     const statement = parsed.data;
     const extensions = statement.context.extensions;
@@ -104,22 +109,21 @@ export function answersFromStatements(
     if (typeof gameKind !== 'string' || !config.countedGameKinds.includes(gameKind)) continue;
     if (typeof aspect !== 'string' || aspect.length === 0) continue;
     if (typeof sourceRef !== 'string' || sourceRef.length === 0) continue;
+    if (extensions[EXT_STRENGTH] !== 'direct') continue;
 
-    const objects = statement.context.contextActivities.grouping
-      .map((activity) => parseLearningObjectIri(activity.id))
-      .filter((key) => key !== null && key.book === book);
-    if (objects.length !== 1 || !objects[0]) continue;
+    const key = parseLearningObjectIri(statement.object.id);
+    if (!key || key.language !== language) continue;
 
-    answers.push({
+    observations.push({
       statementId: statement.id,
-      learningObjectId: learningObjectId(objects[0]),
+      learningObjectId: learningObjectId(key),
       aspect,
       sourceRef,
       success: statement.result.success,
       timestamp: new Date(statement.timestamp).toISOString(),
     });
   }
-  return answers;
+  return observations;
 }
 
 export function newTrack(learningObjectId: string, aspect: string): TrackState {
@@ -147,7 +151,7 @@ export function isDue(track: TrackState, at: Date, config: LeitnerConfig = DEFAU
 }
 
 /**
- * One answer, by the rules:
+ * One observation, by the rules:
  * 1. correct and due at L0–L2 → up one level, due after its interval;
  * 2. correct and due at L3 → retired (L13);
  * 3. correct but not due → counts only (no cramming);
@@ -155,9 +159,9 @@ export function isDue(track: TrackState, at: Date, config: LeitnerConfig = DEFAU
  * 5. retired is final: counts only.
  * Speed is ignored (L12).
  */
-export function applyAnswer(
+export function applyObservation(
   track: TrackState,
-  answer: LeitnerAnswer,
+  answer: LeitnerObservation,
   config: LeitnerConfig = DEFAULT_LEITNER_CONFIG,
 ): TrackState {
   const at = new Date(answer.timestamp);
@@ -199,9 +203,9 @@ function trackKey(learningObjectId: string, aspect: string): string {
   return JSON.stringify([learningObjectId, aspect]);
 }
 
-/** Every track with evidence, folded oldest answer first (ties by statement id). */
+/** Every track with evidence, folded oldest observation first (ties by statement id). */
 export function foldTracks(
-  answers: readonly LeitnerAnswer[],
+  answers: readonly LeitnerObservation[],
   config: LeitnerConfig = DEFAULT_LEITNER_CONFIG,
 ): TrackState[] {
   const ordered = [...answers].sort(
@@ -213,7 +217,7 @@ export function foldTracks(
   for (const answer of ordered) {
     const key = trackKey(answer.learningObjectId, answer.aspect);
     const track = tracks.get(key) ?? newTrack(answer.learningObjectId, answer.aspect);
-    tracks.set(key, applyAnswer(track, answer, config));
+    tracks.set(key, applyObservation(track, answer, config));
   }
   return [...tracks.values()];
 }

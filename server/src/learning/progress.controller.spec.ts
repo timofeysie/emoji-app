@@ -1,6 +1,6 @@
 import type { Response } from 'express';
 import { PlayerRepository } from '../persistence/player.repository';
-import { taggedAnswer } from '../test/leitner-statements';
+import { assessedStatement } from '../test/leitner-statements';
 import { LearningProgressController } from './progress.controller';
 
 type ResponseMock = Pick<Response, 'status' | 'json'> & {
@@ -49,7 +49,7 @@ describe('LearningProgressController', () => {
 
   it("returns the chapter's tracks from this student's statements", async () => {
     const fetchMock = lrsReturns([
-      taggedAnswer({ id: 'a', word: '시험', sense: 'test', success: true, timestamp: '2026-10-22T18:00:00Z' }),
+      assessedStatement({ id: 'a', word: '시험', sense: 'test', success: true, timestamp: '2026-10-22T18:00:00Z' }),
     ]);
     const res = createResponseMock();
 
@@ -66,6 +66,8 @@ describe('LearningProgressController', () => {
     expect(body.tracks).toHaveLength(28);
     expect(body.summary).toMatchObject({ new: 27, active: { L1: 1 } });
     expect(body.tracks.find((track: { word: string; aspect: string }) => track.word === '시험' && track.aspect === 'reading')).toMatchObject({
+      learningObjectId: 'ko/lexeme/시험/test',
+      kind: 'lexeme',
       level: 1,
       gloss: 'test, exam',
       due: false,
@@ -73,12 +75,13 @@ describe('LearningProgressController', () => {
 
     const url = new URL(fetchMock.mock.calls[0][0]);
     expect(JSON.parse(url.searchParams.get('agent')!).account.name).toBe(EXTERNAL_ID);
-    expect(url.searchParams.get('activity')).toBe('https://kogs.link/xapi/emoji-app/content/korean-language-book');
+    expect(url.searchParams.get('verb')).toBe('https://kogs.link/xapi/emoji-app/verbs/assessed');
+    expect(url.searchParams.has('activity')).toBe(false);
   });
 
   it('adds tracks from other played chapters for review scope', async () => {
     lrsReturns([
-      taggedAnswer({
+      assessedStatement({
         id: 'a',
         word: '독감',
         sense: 'flu',

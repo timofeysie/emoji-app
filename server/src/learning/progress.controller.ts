@@ -2,7 +2,7 @@ import { Controller, Get, Param, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { PlayerRepository } from '../persistence/player.repository';
-import { ANSWERED_VERB_ID, XAPI_HOMEPAGE } from '../xapi/iris';
+import { ASSESSED_VERB_ID, XAPI_HOMEPAGE } from '../xapi/iris';
 import { fetchStatements, loadLrsConfigFromEnv, LrsRequestError, type LrsConfig } from '../xapi/lrs-client';
 import {
   chapterLearningObjects,
@@ -11,8 +11,8 @@ import {
   UnknownChapterError,
   UnregisteredSensesError,
 } from './book-content';
-import { answersFromStatements, buildProgress, DEFAULT_LEITNER_CONFIG, foldTracks } from './leitner';
-import { bookIri, KOREAN_BOOK, parseLearningObjectId } from './learning-object';
+import { buildProgress, DEFAULT_LEITNER_CONFIG, foldTracks, observationsFromStatements } from './leitner';
+import { KOREAN_BOOK } from './learning-object';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 const slugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
@@ -44,7 +44,7 @@ function getValidationErrors(error: ZodError): Array<{ path: string; message: st
 
 /**
  * A student's Leitner progress for one chapter, derived from their
- * `answered` statements in the LRS (docs/xAPI/leitner-method.md → API).
+ * `assessed` statements in the LRS (docs/xAPI/leitner-method.md → API).
  * The server reads the LRS so each environment uses its own (staging →
  * pilot). Referee-only once Step 0 auth lands.
  */
@@ -102,29 +102,26 @@ export class LearningProgressController {
         return;
       }
 
-      // `agent` keeps tracks per student (L4); the book activity pulls every
-      // chapter's evidence in one query (shared words, review scope).
+      // `agent` keeps tracks per student (L4). No activity filter: learning
+      // objects are language-scoped (A1), so evidence from every book and
+      // chapter counts (shared words, review scope); the fold keeps this
+      // book's language.
       const statements = await fetchStatements(config, {
         agent: { objectType: 'Agent', account: { homePage: XAPI_HOMEPAGE, name: player.externalId } },
-        verb: ANSWERED_VERB_ID,
-        activity: bookIri(book),
-        relatedActivities: true,
+        verb: ASSESSED_VERB_ID,
         limit: PAGE_SIZE,
       });
-      const answers = answersFromStatements(statements, book, DEFAULT_LEITNER_CONFIG);
+      const observations = observationsFromStatements(statements, content.language, DEFAULT_LEITNER_CONFIG);
       const now = nowParam ? new Date(nowParam) : new Date();
       const { tracks, summary } = buildProgress({
         chapterObjectIds: objects.map((object) => object.id),
         aspects,
-        tracks: foldTracks(answers, DEFAULT_LEITNER_CONFIG),
+        tracks: foldTracks(observations, DEFAULT_LEITNER_CONFIG),
         scope,
         now,
       });
 
       const glossById = new Map(objects.map((object) => [object.id, object.gloss]));
-      const senseGloss = new Map(
-        [...content.senseBySourceRef.values()].map((sense) => [`${sense.word}/${sense.sense}`, sense.gloss]),
-      );
       res.status(200).json({
         player: { id: player.id, label: player.label },
         book,
@@ -133,15 +130,15 @@ export class LearningProgressController {
         aspects,
         asOf: now.toISOString(),
         statementCount: statements.length,
-        answerCount: answers.length,
+        observationCount: observations.length,
         summary,
         tracks: tracks.map((track) => {
-          const key = parseLearningObjectId(track.learningObjectId);
+          const sense = content.senseById.get(track.learningObjectId);
           return {
             ...track,
-            word: key?.word ?? null,
-            gloss:
-              glossById.get(track.learningObjectId) ?? (key ? senseGloss.get(`${key.word}/${key.sense}`) : null) ?? null,
+            kind: sense?.kind ?? null,
+            word: sense?.word ?? null,
+            gloss: glossById.get(track.learningObjectId) ?? sense?.gloss ?? null,
           };
         }),
       });

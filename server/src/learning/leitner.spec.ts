@@ -1,35 +1,36 @@
-import { taggedAnswer } from '../test/leitner-statements';
+import { assessedStatement } from '../test/leitner-statements';
+import { ANSWERED_VERB_ID } from '../xapi/iris';
 import {
-  answersFromStatements,
-  applyAnswer,
+  applyObservation,
   buildProgress,
   DEFAULT_LEITNER_CONFIG,
   foldTracks,
   isDue,
-  LeitnerAnswer,
+  LeitnerObservation,
   newTrack,
+  observationsFromStatements,
   TrackState,
 } from './leitner';
-import { KOREAN_BOOK } from './learning-object';
+import { KOREAN } from './learning-object';
 
-const EXAM = 'korean-language-book/vocabulary/시험/test';
-const SHOW = 'korean-language-book/vocabulary/보여 주다/to-show';
+const EXAM = 'ko/lexeme/시험/test';
+const SHOW = 'ko/expression/보여 주다/to-show';
 
 let seq = 0;
-function answer(success: boolean, timestamp: string, overrides: Partial<LeitnerAnswer> = {}): LeitnerAnswer {
+function answer(success: boolean, timestamp: string, overrides: Partial<LeitnerObservation> = {}): LeitnerObservation {
   seq++;
   return {
     statementId: `s${String(seq).padStart(4, '0')}`,
     learningObjectId: EXAM,
     aspect: 'reading',
-    sourceRef: 'ch27/vocabulary/1',
+    sourceRef: 'korean-language-book/ch27/vocabulary/1',
     success,
     timestamp: new Date(timestamp).toISOString(),
     ...overrides,
   };
 }
 
-function fold(...answers: LeitnerAnswer[]): TrackState {
+function fold(...answers: LeitnerObservation[]): TrackState {
   const tracks = foldTracks(answers);
   expect(tracks).toHaveLength(1);
   return tracks[0];
@@ -92,7 +93,7 @@ describe('Leitner rules', () => {
 
   it('can reset to 0 instead, by config', () => {
     const l2 = fold(answer(true, '2026-10-01T18:00:00Z'), answer(true, '2026-10-02T18:00:00Z'));
-    const reset = applyAnswer(l2, answer(false, '2026-10-05T18:00:00Z'), {
+    const reset = applyObservation(l2, answer(false, '2026-10-05T18:00:00Z'), {
       ...DEFAULT_LEITNER_CONFIG,
       onIncorrect: 'reset',
     });
@@ -143,12 +144,12 @@ describe('Leitner rules', () => {
   });
 
   it('ignores speed: a slow correct answer still promotes (L12)', () => {
-    // LeitnerAnswer carries no duration at all; the statement's result.duration is never read.
+    // LeitnerObservation carries no duration at all; a statement's result.duration is never read.
     const statements = [
-      { ...taggedAnswer({ id: 'slow', word: '시험', sense: 'test', success: true, timestamp: '2026-10-01T18:00:00Z' }) },
+      { ...assessedStatement({ id: 'slow', word: '시험', sense: 'test', success: true, timestamp: '2026-10-01T18:00:00Z' }) },
     ];
     (statements[0]['result'] as Record<string, unknown>)['duration'] = 'PT95S';
-    expect(foldTracks(answersFromStatements(statements, KOREAN_BOOK))[0].level).toBe(1);
+    expect(foldTracks(observationsFromStatements(statements, KOREAN))[0].level).toBe(1);
   });
 
   it('folds out-of-order input oldest first', () => {
@@ -174,23 +175,23 @@ describe('Leitner rules', () => {
 
   it('folds one sense met in two chapters into one track and records both sources (L2)', () => {
     const track = fold(
-      answer(true, '2026-10-01T18:00:00Z', { learningObjectId: SHOW, sourceRef: 'ch26/vocabulary/6' }),
-      answer(true, '2026-10-02T18:00:00Z', { learningObjectId: SHOW, sourceRef: 'ch27/vocabulary/5' }),
+      answer(true, '2026-10-01T18:00:00Z', { learningObjectId: SHOW, sourceRef: 'korean-language-book/ch26/vocabulary/6' }),
+      answer(true, '2026-10-02T18:00:00Z', { learningObjectId: SHOW, sourceRef: 'korean-language-book/ch27/vocabulary/5' }),
     );
-    expect(track).toMatchObject({ level: 2, sources: ['ch26/vocabulary/6', 'ch27/vocabulary/5'] });
+    expect(track).toMatchObject({ level: 2, sources: ['korean-language-book/ch26/vocabulary/6', 'korean-language-book/ch27/vocabulary/5'] });
   });
 });
 
-describe('answersFromStatements', () => {
+describe('observationsFromStatements', () => {
   const base = { word: '시험', sense: 'test', success: true, timestamp: '2026-10-01T18:00:00Z' };
 
-  it('reads a tagged Leitner statement', () => {
-    expect(answersFromStatements([taggedAnswer({ id: 'a', ...base })], KOREAN_BOOK)).toEqual([
+  it('reads a direct assessed statement', () => {
+    expect(observationsFromStatements([assessedStatement({ id: 'a', ...base })], KOREAN)).toEqual([
       {
         statementId: 'a',
         learningObjectId: EXAM,
         aspect: 'reading',
-        sourceRef: 'ch27/vocabulary/1',
+        sourceRef: 'korean-language-book/ch27/vocabulary/1',
         success: true,
         timestamp: '2026-10-01T18:00:00.000Z',
       },
@@ -199,35 +200,53 @@ describe('answersFromStatements', () => {
 
   it('keeps two senses of one word on separate tracks', () => {
     const tracks = foldTracks(
-      answersFromStatements(
+      observationsFromStatements(
         [
-          taggedAnswer({ id: 'a', ...base, word: '배', sense: 'pear' }),
-          taggedAnswer({ id: 'b', ...base, word: '배', sense: 'ship', success: false }),
+          assessedStatement({ id: 'a', ...base, word: '배', sense: 'pear' }),
+          assessedStatement({ id: 'b', ...base, word: '배', sense: 'ship', success: false }),
         ],
-        KOREAN_BOOK,
+        KOREAN,
       ),
     );
     expect(tracks.map((track) => [track.learningObjectId, track.level])).toEqual([
-      ['korean-language-book/vocabulary/배/pear', 1],
-      ['korean-language-book/vocabulary/배/ship', 0],
+      ['ko/lexeme/배/pear', 1],
+      ['ko/lexeme/배/ship', 0],
     ]);
   });
 
-  it('ignores class games and other game kinds (v1)', () => {
-    expect(answersFromStatements([taggedAnswer({ id: 'a', ...base, gameKind: 'class' })], KOREAN_BOOK)).toEqual([]);
+  it('folds evidence from two books into one track (A1)', () => {
+    const tracks = foldTracks(
+      observationsFromStatements(
+        [
+          assessedStatement({ id: 'a', ...base }),
+          assessedStatement({ id: 'b', ...base, book: 'other-book', timestamp: '2026-10-02T18:00:00Z' }),
+        ],
+        KOREAN,
+      ),
+    );
+    expect(tracks).toHaveLength(1);
+    expect(tracks[0]).toMatchObject({
+      level: 2,
+      sources: ['korean-language-book/ch27/vocabulary/1', 'other-book/ch27/vocabulary/1'],
+    });
   });
 
-  it('ignores untagged, malformed, scored and other-book statements', () => {
-    const untagged = taggedAnswer({ id: 'u', ...base });
-    (untagged['context'] as { contextActivities: Record<string, unknown> }).contextActivities = {
-      parent: [{ id: 'g' }],
-    };
-    const scored = { ...taggedAnswer({ id: 's', ...base }), verb: { id: 'http://adlnet.gov/expapi/verbs/scored' } };
-    const noSuccess = taggedAnswer({ id: 'n', ...base });
-    noSuccess['result'] = { response: 'A' };
-    const otherBook = taggedAnswer({ id: 'o', ...base, book: 'other-book' });
+  it('ignores class games and other game kinds (v1)', () => {
+    expect(observationsFromStatements([assessedStatement({ id: 'a', ...base, gameKind: 'class' })], KOREAN)).toEqual([]);
+  });
 
-    expect(answersFromStatements([untagged, scored, noSuccess, otherBook, null, 'x'], KOREAN_BOOK)).toEqual([]);
+  it('ignores indirect observations until the strength policy exists', () => {
+    expect(observationsFromStatements([assessedStatement({ id: 'a', ...base, strength: 'indirect' })], KOREAN)).toEqual([]);
+  });
+
+  it('ignores answered, malformed, rated and other-language statements', () => {
+    const answered = { ...assessedStatement({ id: 'v', ...base }), verb: { id: ANSWERED_VERB_ID } };
+    const notALearningObject = { ...assessedStatement({ id: 'o', ...base }), object: { id: 'https://kogs.link/xapi/emoji-app/games/g1' } };
+    const noSuccess = assessedStatement({ id: 'n', ...base });
+    noSuccess['result'] = {};
+    const japanese = assessedStatement({ id: 'j', ...base, language: 'ja' });
+
+    expect(observationsFromStatements([answered, notALearningObject, noSuccess, japanese, null, 'x'], KOREAN)).toEqual([]);
   });
 });
 
@@ -236,8 +255,8 @@ describe('buildProgress', () => {
   const chapterObjectIds = [EXAM, SHOW];
   const tracks = foldTracks([
     answer(true, '2026-10-22T18:00:00Z'),
-    answer(false, '2026-10-20T18:00:00Z', { learningObjectId: 'korean-language-book/vocabulary/독감/flu' }),
-    answer(true, '2026-10-20T18:00:00Z', { learningObjectId: 'korean-language-book/vocabulary/간호사/nurse', aspect: 'listening' }),
+    answer(false, '2026-10-20T18:00:00Z', { learningObjectId: 'ko/lexeme/독감/flu' }),
+    answer(true, '2026-10-20T18:00:00Z', { learningObjectId: 'ko/lexeme/간호사/nurse', aspect: 'listening' }),
   ]);
 
   it('lists the chapter × aspects, new ones included, for chapter scope', () => {
@@ -261,7 +280,7 @@ describe('buildProgress', () => {
     const { tracks: result } = buildProgress({ chapterObjectIds, aspects: ['reading', 'writing'], tracks, scope: 'review', now });
     const review = result.filter((track) => !track.inChapter);
     expect(review.map((track) => [track.learningObjectId, track.level, track.due])).toEqual([
-      ['korean-language-book/vocabulary/독감/flu', 0, true],
+      ['ko/lexeme/독감/flu', 0, true],
     ]);
   });
 });

@@ -1,1326 +1,1472 @@
 {
-  "book": "korean-language-book",
+  "language": "ko",
   "words": {
     "독감": [
       {
         "sense": "flu",
+        "kind": "lexeme",
         "gloss": "flu",
         "sources": [
-          "ch26/vocabulary/0"
+          "korean-language-book/ch26/vocabulary/0"
         ]
       }
     ],
     "벌리다": [
       {
         "sense": "to-open",
+        "kind": "lexeme",
         "gloss": "to open",
         "sources": [
-          "ch26/vocabulary/1"
+          "korean-language-book/ch26/vocabulary/1"
         ]
       }
     ],
     "편도선": [
       {
         "sense": "tonsil",
+        "kind": "lexeme",
         "gloss": "tonsil",
         "sources": [
-          "ch26/vocabulary/2"
+          "korean-language-book/ch26/vocabulary/2"
         ]
       }
     ],
     "붓다": [
       {
         "sense": "to-swell-up",
+        "kind": "lexeme",
         "gloss": "to swell up, to become swollen",
         "sources": [
-          "ch26/vocabulary/3"
+          "korean-language-book/ch26/vocabulary/3"
         ]
       }
     ],
     "열": [
       {
         "sense": "fever",
+        "kind": "lexeme",
         "gloss": "fever",
         "sources": [
-          "ch26/vocabulary/4"
+          "korean-language-book/ch26/vocabulary/4"
         ]
       }
     ],
     "재다": [
       {
         "sense": "to-measure",
+        "kind": "lexeme",
         "gloss": "to measure",
         "sources": [
-          "ch26/vocabulary/5"
+          "korean-language-book/ch26/vocabulary/5"
         ]
       }
     ],
     "보여 주다": [
       {
         "sense": "to-show",
+        "kind": "expression",
         "gloss": "to show",
         "sources": [
-          "ch26/vocabulary/6",
-          "ch27/vocabulary/5"
+          "korean-language-book/ch26/vocabulary/6",
+          "korean-language-book/ch27/vocabulary/5"
         ]
       }
     ],
     "주사": [
       {
         "sense": "injection",
+        "kind": "lexeme",
         "gloss": "injection, shot",
         "sources": [
-          "ch26/vocabulary/7"
+          "korean-language-book/ch26/vocabulary/7"
         ]
       }
     ],
     "주사를 놓다": [
       {
         "sense": "to-have-a-shot",
+        "kind": "expression",
         "gloss": "to have a shot",
         "sources": [
-          "ch26/vocabulary/8"
+          "korean-language-book/ch26/vocabulary/8"
         ]
       }
     ],
     "괜찮다": [
       {
         "sense": "to-be-okay",
+        "kind": "lexeme",
         "gloss": "to be okay, to be alright",
         "sources": [
-          "ch26/vocabulary/9",
-          "ch27/vocabulary/8"
+          "korean-language-book/ch26/vocabulary/9",
+          "korean-language-book/ch27/vocabulary/8"
         ]
       }
     ],
     "눕다": [
       {
         "sense": "to-lie-down",
+        "kind": "lexeme",
         "gloss": "to lie down",
         "sources": [
-          "ch26/vocabulary/10"
+          "korean-language-book/ch26/vocabulary/10"
         ]
       }
     ],
     "살짝": [
       {
         "sense": "slightly",
+        "kind": "lexeme",
         "gloss": "slightly",
         "sources": [
-          "ch26/vocabulary/11"
+          "korean-language-book/ch26/vocabulary/11"
         ]
       }
     ],
     "내리다": [
       {
         "sense": "to-lower",
+        "kind": "lexeme",
         "gloss": "to lower, to take down",
         "sources": [
-          "ch26/vocabulary/12"
+          "korean-language-book/ch26/vocabulary/12"
         ]
       }
     ],
     "간호사": [
       {
         "sense": "nurse",
+        "kind": "lexeme",
         "gloss": "nurse",
         "sources": [
-          "ch26/vocabulary/13"
+          "korean-language-book/ch26/vocabulary/13"
         ]
       }
     ],
     "감기": [
       {
         "sense": "cold",
+        "kind": "lexeme",
         "gloss": "cold",
         "sources": [
-          "ch26/vocabulary/14"
+          "korean-language-book/ch26/vocabulary/14"
         ]
       }
     ],
     "몸살": [
       {
         "sense": "body-ache",
+        "kind": "lexeme",
         "gloss": "body ache",
         "sources": [
-          "ch26/vocabulary/15"
+          "korean-language-book/ch26/vocabulary/15"
         ]
       }
     ],
     "심하다": [
       {
         "sense": "to-be-serious",
+        "kind": "lexeme",
         "gloss": "to be serious",
         "sources": [
-          "ch26/vocabulary/16"
+          "korean-language-book/ch26/vocabulary/16"
         ]
       }
     ],
     "걸리다": [
       {
         "sense": "to-get-sick",
+        "kind": "lexeme",
         "gloss": "to get (sick), to catch a disease",
         "sources": [
-          "ch26/vocabulary/17"
+          "korean-language-book/ch26/vocabulary/17"
         ]
       }
     ],
     "작성하다": [
       {
         "sense": "to-fill-out",
+        "kind": "lexeme",
         "gloss": "to fill out",
         "sources": [
-          "ch26/vocabulary/18"
+          "korean-language-book/ch26/vocabulary/18"
         ]
       }
     ],
     "잠시만": [
       {
         "sense": "for-a-little-bit",
+        "kind": "lexeme",
         "gloss": "for a little bit, for just a little while",
         "sources": [
-          "ch26/vocabulary/19"
+          "korean-language-book/ch26/vocabulary/19"
         ]
       }
     ],
     "계속": [
       {
         "sense": "continuously",
+        "kind": "lexeme",
         "gloss": "continuously, consecutively",
         "sources": [
-          "ch26/vocabulary/20"
+          "korean-language-book/ch26/vocabulary/20"
         ]
       }
     ],
     "활동하다": [
       {
         "sense": "to-work",
+        "kind": "lexeme",
         "gloss": "to work, to act",
         "sources": [
-          "ch26/vocabulary/21"
+          "korean-language-book/ch26/vocabulary/21"
         ]
       }
     ],
     "제대로": [
       {
         "sense": "properly",
+        "kind": "lexeme",
         "gloss": "properly, right",
         "sources": [
-          "ch26/vocabulary/22"
+          "korean-language-book/ch26/vocabulary/22"
         ]
       }
     ],
     "증상": [
       {
         "sense": "symptom",
+        "kind": "lexeme",
         "gloss": "symptom",
         "sources": [
-          "ch26/vocabulary/23"
+          "korean-language-book/ch26/vocabulary/23"
         ]
       }
     ],
     "목": [
       {
         "sense": "throat",
+        "kind": "lexeme",
         "gloss": "throat",
         "sources": [
-          "ch26/vocabulary/24"
+          "korean-language-book/ch26/vocabulary/24"
         ]
       }
     ],
     "따갑다": [
       {
         "sense": "to-be-sore",
+        "kind": "lexeme",
         "gloss": "to be sore",
         "sources": [
-          "ch26/vocabulary/25"
+          "korean-language-book/ch26/vocabulary/25"
         ]
       }
     ],
     "기운이 없다": [
       {
         "sense": "to-have-no-energy",
+        "kind": "expression",
         "gloss": "to have no energy, to feel down",
         "sources": [
-          "ch26/vocabulary/26"
+          "korean-language-book/ch26/vocabulary/26"
         ]
       }
     ],
     "유행하다": [
       {
         "sense": "to-be-popular",
+        "kind": "lexeme",
         "gloss": "to be popular, to be in fashion",
         "sources": [
-          "ch26/vocabulary/27"
+          "korean-language-book/ch26/vocabulary/27"
         ]
       }
     ],
     "정도": [
       {
         "sense": "level",
+        "kind": "lexeme",
         "gloss": "level, degree, approximately",
         "sources": [
-          "ch27/vocabulary/0"
+          "korean-language-book/ch27/vocabulary/0"
         ]
       }
     ],
     "시험": [
       {
         "sense": "test",
+        "kind": "lexeme",
         "gloss": "test, exam",
         "sources": [
-          "ch27/vocabulary/1"
+          "korean-language-book/ch27/vocabulary/1"
         ]
       }
     ],
     "수업": [
       {
         "sense": "class",
+        "kind": "lexeme",
         "gloss": "class",
         "sources": [
-          "ch27/vocabulary/2"
+          "korean-language-book/ch27/vocabulary/2"
         ]
       }
     ],
     "빠지다": [
       {
         "sense": "to-be-omitted",
+        "kind": "lexeme",
         "gloss": "to be omitted, to not be included",
         "sources": [
-          "ch27/vocabulary/3"
+          "korean-language-book/ch27/vocabulary/3"
         ]
       }
     ],
     "필기하다": [
       {
         "sense": "to-take-notes",
+        "kind": "lexeme",
         "gloss": "to take notes",
         "sources": [
-          "ch27/vocabulary/4"
+          "korean-language-book/ch27/vocabulary/4"
         ]
       }
     ],
     "양호실": [
       {
         "sense": "nurse-s-office",
+        "kind": "lexeme",
         "gloss": "nurse's office",
         "sources": [
-          "ch27/vocabulary/6"
+          "korean-language-book/ch27/vocabulary/6"
         ]
       }
     ],
     "쉬다": [
       {
         "sense": "to-rest",
+        "kind": "lexeme",
         "gloss": "to rest",
         "sources": [
-          "ch27/vocabulary/7"
+          "korean-language-book/ch27/vocabulary/7"
         ]
       }
     ],
     "고맙다": [
       {
         "sense": "to-be-thankful",
+        "kind": "lexeme",
         "gloss": "to be thankful, to be grateful",
         "sources": [
-          "ch27/vocabulary/9"
+          "korean-language-book/ch27/vocabulary/9"
         ]
       }
     ],
     "머리": [
       {
         "sense": "head",
+        "kind": "lexeme",
         "gloss": "head",
         "sources": [
-          "ch27/vocabulary/10"
+          "korean-language-book/ch27/vocabulary/10"
         ]
       }
     ],
     "불덩이": [
       {
         "sense": "fireball",
+        "kind": "lexeme",
         "gloss": "fireball",
         "sources": [
-          "ch27/vocabulary/11"
+          "korean-language-book/ch27/vocabulary/11"
         ]
       }
     ],
     "쓰러지다": [
       {
         "sense": "to-faint",
+        "kind": "lexeme",
         "gloss": "to faint",
         "sources": [
-          "ch27/vocabulary/12"
+          "korean-language-book/ch27/vocabulary/12"
         ]
       }
     ],
     "조퇴하다": [
       {
         "sense": "to-leave-school-office-early",
+        "kind": "lexeme",
         "gloss": "to leave school/office early",
         "sources": [
-          "ch27/vocabulary/13"
+          "korean-language-book/ch27/vocabulary/13"
         ]
       }
     ],
     "생각": [
       {
         "sense": "thought",
+        "kind": "lexeme",
         "gloss": "thought",
         "sources": [
-          "ch28/vocabulary/0"
+          "korean-language-book/ch28/vocabulary/0"
         ]
       }
     ],
     "깔끔하다": [
       {
         "sense": "to-be-neat",
+        "kind": "lexeme",
         "gloss": "to be neat",
         "sources": [
-          "ch28/vocabulary/1"
+          "korean-language-book/ch28/vocabulary/1"
         ]
       }
     ],
     "장 보러 가다": [
       {
         "sense": "to-go-grocery-shopping",
+        "kind": "expression",
         "gloss": "to go grocery shopping",
         "sources": [
-          "ch28/vocabulary/2"
+          "korean-language-book/ch28/vocabulary/2"
         ]
       }
     ],
     "편하다": [
       {
         "sense": "to-be-comfortable",
+        "kind": "lexeme",
         "gloss": "to be comfortable",
         "sources": [
-          "ch28/vocabulary/3"
+          "korean-language-book/ch28/vocabulary/3"
         ]
       }
     ],
     "코앞": [
       {
         "sense": "right-around-the-corner",
+        "kind": "lexeme",
         "gloss": "right around the corner, happening very soon",
         "sources": [
-          "ch28/vocabulary/4"
+          "korean-language-book/ch28/vocabulary/4"
         ]
       }
     ],
     "요금": [
       {
         "sense": "charge",
+        "kind": "lexeme",
         "gloss": "charge, fee, fare",
         "sources": [
-          "ch28/vocabulary/5"
+          "korean-language-book/ch28/vocabulary/5"
         ]
       }
     ],
     "현금": [
       {
         "sense": "cash",
+        "kind": "lexeme",
         "gloss": "cash",
         "sources": [
-          "ch28/vocabulary/6"
+          "korean-language-book/ch28/vocabulary/6"
         ]
       }
     ],
     "드리다": [
       {
         "sense": "to-give-honorific",
+        "kind": "lexeme",
         "gloss": "to give (honorific)",
         "sources": [
-          "ch28/vocabulary/7"
+          "korean-language-book/ch28/vocabulary/7"
         ]
       }
     ],
     "낫다": [
       {
         "sense": "to-be-better",
+        "kind": "lexeme",
         "gloss": "to be better",
         "sources": [
-          "ch28/vocabulary/8"
+          "korean-language-book/ch28/vocabulary/8"
         ]
       }
     ],
     "상관없다": [
       {
         "sense": "to-not-matter",
+        "kind": "lexeme",
         "gloss": "to not matter",
         "sources": [
-          "ch28/vocabulary/9"
+          "korean-language-book/ch28/vocabulary/9"
         ]
       }
     ],
     "거스름돈": [
       {
         "sense": "small-change",
+        "kind": "lexeme",
         "gloss": "small change",
         "sources": [
-          "ch28/vocabulary/10"
+          "korean-language-book/ch28/vocabulary/10"
         ]
       }
     ],
     "번거롭다": [
       {
         "sense": "to-be-cumbersome",
+        "kind": "lexeme",
         "gloss": "to be cumbersome, inconvenient",
         "sources": [
-          "ch28/vocabulary/11"
+          "korean-language-book/ch28/vocabulary/11"
         ]
       }
     ],
     "선호하다": [
       {
         "sense": "to-prefer",
+        "kind": "lexeme",
         "gloss": "to prefer",
         "sources": [
-          "ch28/vocabulary/12"
+          "korean-language-book/ch28/vocabulary/12"
         ]
       }
     ],
     "다 오다": [
       {
         "sense": "to-arrive",
+        "kind": "expression",
         "gloss": "to arrive",
         "sources": [
-          "ch28/vocabulary/13"
+          "korean-language-book/ch28/vocabulary/13"
         ]
       }
     ],
     "세워 드리다": [
       {
         "sense": "to-drop-someone-off-stop-the-car",
+        "kind": "expression",
         "gloss": "to drop someone off/stop the car (honorific)",
         "sources": [
-          "ch28/vocabulary/14"
+          "korean-language-book/ch28/vocabulary/14"
         ]
       }
     ],
     "모시다": [
       {
         "sense": "to-take-to-honorific",
+        "kind": "lexeme",
         "gloss": "to take to (honorific)",
         "sources": [
-          "ch28/vocabulary/15"
+          "korean-language-book/ch28/vocabulary/15"
         ]
       }
     ],
     "얼마쯤": [
       {
         "sense": "about-how-much",
+        "kind": "lexeme",
         "gloss": "about how much",
         "sources": [
-          "ch28/vocabulary/16"
+          "korean-language-book/ch28/vocabulary/16"
         ]
       }
     ],
     "막히다": [
       {
         "sense": "traffic-is-bad",
+        "kind": "lexeme",
         "gloss": "traffic is bad, congested",
         "sources": [
-          "ch28/vocabulary/17"
+          "korean-language-book/ch28/vocabulary/17"
         ]
       }
     ],
     "타다": [
       {
         "sense": "to-ride",
+        "kind": "lexeme",
         "gloss": "to ride",
         "sources": [
-          "ch28/vocabulary/18",
-          "ch29/vocabulary/25"
+          "korean-language-book/ch28/vocabulary/18",
+          "korean-language-book/ch29/vocabulary/25"
         ]
       }
     ],
     "좌측": [
       {
         "sense": "left-side",
+        "kind": "lexeme",
         "gloss": "left side",
         "sources": [
-          "ch28/vocabulary/19"
+          "korean-language-book/ch28/vocabulary/19"
         ]
       }
     ],
     "돌아서 가다": [
       {
         "sense": "to-take-a-detour",
+        "kind": "expression",
         "gloss": "to take a detour, turn around and go",
         "sources": [
-          "ch28/vocabulary/20"
+          "korean-language-book/ch28/vocabulary/20"
         ]
       }
     ],
     "댁": [
       {
         "sense": "someone-s-house-place-honorific",
+        "kind": "lexeme",
         "gloss": "someone's house/place (honorific)",
         "sources": [
-          "ch28/vocabulary/21"
+          "korean-language-book/ch28/vocabulary/21"
         ]
       }
     ],
     "집값": [
       {
         "sense": "house-price",
+        "kind": "lexeme",
         "gloss": "house price",
         "sources": [
-          "ch28/vocabulary/22"
+          "korean-language-book/ch28/vocabulary/22"
         ]
       }
     ],
     "비싸다": [
       {
         "sense": "to-be-expensive",
+        "kind": "lexeme",
         "gloss": "to be expensive",
         "sources": [
-          "ch28/vocabulary/23"
+          "korean-language-book/ch28/vocabulary/23"
         ]
       }
     ],
     "주위": [
       {
         "sense": "surroundings",
+        "kind": "lexeme",
         "gloss": "surroundings",
         "sources": [
-          "ch28/vocabulary/24"
+          "korean-language-book/ch28/vocabulary/24"
         ]
       }
     ],
     "다른 곳": [
       {
         "sense": "somewhere-else",
+        "kind": "expression",
         "gloss": "somewhere else, another place",
         "sources": [
-          "ch28/vocabulary/25"
+          "korean-language-book/ch28/vocabulary/25"
         ]
       }
     ],
     "비하다": [
       {
         "sense": "to-compare",
+        "kind": "lexeme",
         "gloss": "to compare, to be compared",
         "sources": [
-          "ch28/vocabulary/26"
+          "korean-language-book/ch28/vocabulary/26"
         ]
       }
     ],
     "싸다": [
       {
         "sense": "to-be-cheap",
+        "kind": "lexeme",
         "gloss": "to be cheap",
         "sources": [
-          "ch28/vocabulary/27"
+          "korean-language-book/ch28/vocabulary/27"
         ]
       }
     ],
     "교통편": [
       {
         "sense": "transportation",
+        "kind": "lexeme",
         "gloss": "transportation",
         "sources": [
-          "ch28/vocabulary/28"
+          "korean-language-book/ch28/vocabulary/28"
         ]
       }
     ],
     "시끄럽다": [
       {
         "sense": "to-be-loud",
+        "kind": "lexeme",
         "gloss": "to be loud, to be noisy",
         "sources": [
-          "ch28/vocabulary/29"
+          "korean-language-book/ch28/vocabulary/29"
         ]
       }
     ],
     "환급기": [
       {
         "sense": "refund-machine",
+        "kind": "lexeme",
         "gloss": "refund machine",
         "sources": [
-          "ch29/vocabulary/0"
+          "korean-language-book/ch29/vocabulary/0"
         ]
       }
     ],
     "찾아가다": [
       {
         "sense": "to-pick-up",
+        "kind": "lexeme",
         "gloss": "to pick up, to get something back",
         "sources": [
-          "ch29/vocabulary/1"
+          "korean-language-book/ch29/vocabulary/1"
         ]
       }
     ],
     "죄송하다": [
       {
         "sense": "to-be-sorry",
+        "kind": "lexeme",
         "gloss": "to be sorry",
         "sources": [
-          "ch29/vocabulary/2",
-          "ch29/vocabulary/39"
+          "korean-language-book/ch29/vocabulary/2",
+          "korean-language-book/ch29/vocabulary/39"
         ]
       }
     ],
     "방향": [
       {
         "sense": "direction",
+        "kind": "lexeme",
         "gloss": "direction",
         "sources": [
-          "ch29/vocabulary/3"
+          "korean-language-book/ch29/vocabulary/3"
         ]
       }
     ],
     "반대": [
       {
         "sense": "opposite",
+        "kind": "lexeme",
         "gloss": "opposite",
         "sources": [
-          "ch29/vocabulary/4"
+          "korean-language-book/ch29/vocabulary/4"
         ]
       }
     ],
     "올라가다": [
       {
         "sense": "to-go-up",
+        "kind": "lexeme",
         "gloss": "to go up",
         "sources": [
-          "ch29/vocabulary/5",
-          "ch29/vocabulary/47"
+          "korean-language-book/ch29/vocabulary/5",
+          "korean-language-book/ch29/vocabulary/47"
         ]
       }
     ],
     "반대쪽": [
       {
         "sense": "opposite-side",
+        "kind": "lexeme",
         "gloss": "opposite side",
         "sources": [
-          "ch29/vocabulary/6"
+          "korean-language-book/ch29/vocabulary/6"
         ]
       }
     ],
     "내려가다": [
       {
         "sense": "to-go-down",
+        "kind": "lexeme",
         "gloss": "to go down",
         "sources": [
-          "ch29/vocabulary/7",
-          "ch29/vocabulary/49"
+          "korean-language-book/ch29/vocabulary/7",
+          "korean-language-book/ch29/vocabulary/49"
         ]
       }
     ],
     "늦다": [
       {
         "sense": "to-be-late",
+        "kind": "lexeme",
         "gloss": "to be late",
         "sources": [
-          "ch29/vocabulary/8"
+          "korean-language-book/ch29/vocabulary/8"
         ]
       }
     ],
     "헤매다": [
       {
         "sense": "to-get-lost-and-wander-around",
+        "kind": "lexeme",
         "gloss": "to get lost and wander around",
         "sources": [
-          "ch29/vocabulary/9"
+          "korean-language-book/ch29/vocabulary/9"
         ]
       }
     ],
     "단어": [
       {
         "sense": "word",
+        "kind": "lexeme",
         "gloss": "word",
         "sources": [
-          "ch29/vocabulary/10"
+          "korean-language-book/ch29/vocabulary/10"
         ]
       }
     ],
     "번역": [
       {
         "sense": "translation",
+        "kind": "lexeme",
         "gloss": "translation",
         "sources": [
-          "ch29/vocabulary/11"
+          "korean-language-book/ch29/vocabulary/11"
         ]
       }
     ],
     "공부하다": [
       {
         "sense": "to-study",
+        "kind": "lexeme",
         "gloss": "to study",
         "sources": [
-          "ch29/vocabulary/12"
+          "korean-language-book/ch29/vocabulary/12"
         ]
       }
     ],
     "이름": [
       {
         "sense": "name",
+        "kind": "lexeme",
         "gloss": "name",
         "sources": [
-          "ch29/vocabulary/13"
+          "korean-language-book/ch29/vocabulary/13"
         ]
       }
     ],
     "지하철": [
       {
         "sense": "subway",
+        "kind": "lexeme",
         "gloss": "subway",
         "sources": [
-          "ch29/vocabulary/14",
-          "ch29/vocabulary/23"
+          "korean-language-book/ch29/vocabulary/14",
+          "korean-language-book/ch29/vocabulary/23"
         ]
       }
     ],
     "표": [
       {
         "sense": "ticket",
+        "kind": "lexeme",
         "gloss": "ticket",
         "sources": [
-          "ch29/vocabulary/15"
+          "korean-language-book/ch29/vocabulary/15"
         ]
       }
     ],
     "사려면": [
       {
         "sense": "to-buy",
+        "kind": "lexeme",
         "gloss": "to buy",
         "sources": [
-          "ch29/vocabulary/16"
+          "korean-language-book/ch29/vocabulary/16"
         ]
       }
     ],
     "어떻게": [
       {
         "sense": "how",
+        "kind": "lexeme",
         "gloss": "how",
         "sources": [
-          "ch29/vocabulary/17"
+          "korean-language-book/ch29/vocabulary/17"
         ]
       }
     ],
     "해야": [
       {
         "sense": "should",
+        "kind": "lexeme",
         "gloss": "should",
         "sources": [
-          "ch29/vocabulary/18"
+          "korean-language-book/ch29/vocabulary/18"
         ]
       }
     ],
     "되다": [
       {
         "sense": "to-be",
+        "kind": "lexeme",
         "gloss": "to be",
         "sources": [
-          "ch29/vocabulary/19"
+          "korean-language-book/ch29/vocabulary/19"
         ]
       }
     ],
     "저기": [
       {
         "sense": "excuse-me",
+        "kind": "lexeme",
         "gloss": "Excuse me",
         "sources": [
-          "ch29/vocabulary/20"
+          "korean-language-book/ch29/vocabulary/20"
         ]
       }
     ],
     "요즘": [
       {
         "sense": "these-days",
+        "kind": "lexeme",
         "gloss": "these days",
         "sources": [
-          "ch29/vocabulary/21"
+          "korean-language-book/ch29/vocabulary/21"
         ]
       }
     ],
     "기계": [
       {
         "sense": "machine",
+        "kind": "lexeme",
         "gloss": "machine",
         "sources": [
-          "ch29/vocabulary/22"
+          "korean-language-book/ch29/vocabulary/22"
         ]
       }
     ],
     "처음": [
       {
         "sense": "first",
+        "kind": "lexeme",
         "gloss": "first",
         "sources": [
-          "ch29/vocabulary/24"
+          "korean-language-book/ch29/vocabulary/24"
         ]
       }
     ],
     "가다": [
       {
         "sense": "to-go",
+        "kind": "lexeme",
         "gloss": "to go",
         "sources": [
-          "ch29/vocabulary/26",
-          "ch29/vocabulary/52"
+          "korean-language-book/ch29/vocabulary/26",
+          "korean-language-book/ch29/vocabulary/52"
         ]
       }
     ],
     "비용": [
       {
         "sense": "cost",
+        "kind": "lexeme",
         "gloss": "cost",
         "sources": [
-          "ch29/vocabulary/27"
+          "korean-language-book/ch29/vocabulary/27"
         ]
       }
     ],
     "보증금": [
       {
         "sense": "deposit",
+        "kind": "lexeme",
         "gloss": "deposit",
         "sources": [
-          "ch29/vocabulary/28"
+          "korean-language-book/ch29/vocabulary/28"
         ]
       }
     ],
     "포함되다": [
       {
         "sense": "to-be-included",
+        "kind": "lexeme",
         "gloss": "to be included",
         "sources": [
-          "ch29/vocabulary/29"
+          "korean-language-book/ch29/vocabulary/29"
         ]
       }
     ],
     "도착": [
       {
         "sense": "arrival",
+        "kind": "lexeme",
         "gloss": "arrival",
         "sources": [
-          "ch29/vocabulary/30"
+          "korean-language-book/ch29/vocabulary/30"
         ]
       }
     ],
     "선택하다": [
       {
         "sense": "to-choose",
+        "kind": "lexeme",
         "gloss": "to choose",
         "sources": [
-          "ch29/vocabulary/31"
+          "korean-language-book/ch29/vocabulary/31"
         ]
       }
     ],
     "돈": [
       {
         "sense": "money",
+        "kind": "lexeme",
         "gloss": "money",
         "sources": [
-          "ch29/vocabulary/32"
+          "korean-language-book/ch29/vocabulary/32"
         ]
       }
     ],
     "넣다": [
       {
         "sense": "to-put-in",
+        "kind": "lexeme",
         "gloss": "to put in",
         "sources": [
-          "ch29/vocabulary/33"
+          "korean-language-book/ch29/vocabulary/33"
         ]
       }
     ],
     "일회용": [
       {
         "sense": "disposable",
+        "kind": "lexeme",
         "gloss": "disposable",
         "sources": [
-          "ch29/vocabulary/34"
+          "korean-language-book/ch29/vocabulary/34"
         ]
       }
     ],
     "카드": [
       {
         "sense": "card",
+        "kind": "lexeme",
         "gloss": "card",
         "sources": [
-          "ch29/vocabulary/35"
+          "korean-language-book/ch29/vocabulary/35"
         ]
       }
     ],
     "나오다": [
       {
         "sense": "to-come-out",
+        "kind": "lexeme",
         "gloss": "to come out",
         "sources": [
-          "ch29/vocabulary/36"
+          "korean-language-book/ch29/vocabulary/36"
         ]
       }
     ],
     "알다": [
       {
         "sense": "to-know",
+        "kind": "lexeme",
         "gloss": "to know",
         "sources": [
-          "ch29/vocabulary/37"
+          "korean-language-book/ch29/vocabulary/37"
         ]
       }
     ],
     "감사하다": [
       {
         "sense": "to-thank",
+        "kind": "lexeme",
         "gloss": "to thank",
         "sources": [
-          "ch29/vocabulary/38",
-          "ch29/vocabulary/51"
+          "korean-language-book/ch29/vocabulary/38",
+          "korean-language-book/ch29/vocabulary/51"
         ]
       }
     ],
     "이거": [
       {
         "sense": "this",
+        "kind": "lexeme",
         "gloss": "this",
         "sources": [
-          "ch29/vocabulary/40"
+          "korean-language-book/ch29/vocabulary/40"
         ]
       }
     ],
     "합정역": [
       {
         "sense": "hapjeong-station",
+        "kind": "lexeme",
         "gloss": "Hapjeong station",
         "sources": [
-          "ch29/vocabulary/41"
+          "korean-language-book/ch29/vocabulary/41"
         ]
       }
     ],
     "가는": [
       {
         "sense": "to-go",
+        "kind": "lexeme",
         "gloss": "to go",
         "sources": [
-          "ch29/vocabulary/42"
+          "korean-language-book/ch29/vocabulary/42"
         ]
       }
     ],
     "거": [
       {
         "sense": "thing",
+        "kind": "lexeme",
         "gloss": "thing",
         "sources": [
-          "ch29/vocabulary/43"
+          "korean-language-book/ch29/vocabulary/43"
         ]
       }
     ],
     "맞다": [
       {
         "sense": "to-be-right",
+        "kind": "lexeme",
         "gloss": "to be right",
         "sources": [
-          "ch29/vocabulary/44"
+          "korean-language-book/ch29/vocabulary/44"
         ]
       }
     ],
     "행인": [
       {
         "sense": "passerby",
+        "kind": "lexeme",
         "gloss": "passerby",
         "sources": [
-          "ch29/vocabulary/45"
+          "korean-language-book/ch29/vocabulary/45"
         ]
       }
     ],
     "이쪽": [
       {
         "sense": "this-way",
+        "kind": "lexeme",
         "gloss": "this way",
         "sources": [
-          "ch29/vocabulary/46"
+          "korean-language-book/ch29/vocabulary/46"
         ]
       }
     ],
     "이쪽으로": [
       {
         "sense": "in-this-direction",
+        "kind": "lexeme",
         "gloss": "in this direction",
         "sources": [
-          "ch29/vocabulary/48"
+          "korean-language-book/ch29/vocabulary/48"
         ]
       }
     ],
     "다시": [
       {
         "sense": "again",
+        "kind": "lexeme",
         "gloss": "again",
         "sources": [
-          "ch29/vocabulary/50"
+          "korean-language-book/ch29/vocabulary/50"
         ]
       }
     ],
     "제한": [
       {
         "sense": "limit",
+        "kind": "lexeme",
         "gloss": "limit",
         "sources": [
-          "ch30/vocabulary/0"
+          "korean-language-book/ch30/vocabulary/0"
         ]
       }
     ],
     "국제선": [
       {
         "sense": "international-flight",
+        "kind": "lexeme",
         "gloss": "international flight",
         "sources": [
-          "ch30/vocabulary/1"
+          "korean-language-book/ch30/vocabulary/1"
         ]
       }
     ],
     "용기": [
       {
         "sense": "container",
+        "kind": "lexeme",
         "gloss": "container",
         "sources": [
-          "ch30/vocabulary/2"
+          "korean-language-book/ch30/vocabulary/2"
         ]
       }
     ],
     "담기다": [
       {
         "sense": "to-be-contained",
+        "kind": "lexeme",
         "gloss": "to be contained",
         "sources": [
-          "ch30/vocabulary/3"
+          "korean-language-book/ch30/vocabulary/3"
         ]
       }
     ],
     "국내선": [
       {
         "sense": "domestic-flight",
+        "kind": "lexeme",
         "gloss": "domestic flight",
         "sources": [
-          "ch30/vocabulary/4"
+          "korean-language-book/ch30/vocabulary/4"
         ]
       }
     ],
     "대부분": [
       {
         "sense": "mostly",
+        "kind": "lexeme",
         "gloss": "mostly, majority, for the most part",
         "sources": [
-          "ch30/vocabulary/5"
+          "korean-language-book/ch30/vocabulary/5"
         ]
       }
     ],
     "화장품": [
       {
         "sense": "cosmetics",
+        "kind": "lexeme",
         "gloss": "cosmetics",
         "sources": [
-          "ch30/vocabulary/6"
+          "korean-language-book/ch30/vocabulary/6"
         ]
       }
     ],
     "치약": [
       {
         "sense": "toothpaste",
+        "kind": "lexeme",
         "gloss": "toothpaste",
         "sources": [
-          "ch30/vocabulary/7"
+          "korean-language-book/ch30/vocabulary/7"
         ]
       }
     ],
     "버리다": [
       {
         "sense": "to-throw-away",
+        "kind": "lexeme",
         "gloss": "to throw away",
         "sources": [
-          "ch30/vocabulary/8"
+          "korean-language-book/ch30/vocabulary/8"
         ]
       }
     ],
     "속하다": [
       {
         "sense": "to-be-included",
+        "kind": "lexeme",
         "gloss": "to be included, to belong",
         "sources": [
-          "ch30/vocabulary/9"
+          "korean-language-book/ch30/vocabulary/9"
         ]
       }
     ],
     "젤": [
       {
         "sense": "gel",
+        "kind": "lexeme",
         "gloss": "gel",
         "sources": [
-          "ch30/vocabulary/10"
+          "korean-language-book/ch30/vocabulary/10"
         ]
       }
     ],
     "제한하다": [
       {
         "sense": "to-limit",
+        "kind": "lexeme",
         "gloss": "to limit, to restrict",
         "sources": [
-          "ch30/vocabulary/11"
+          "korean-language-book/ch30/vocabulary/11"
         ]
       }
     ],
     "면세점": [
       {
         "sense": "duty-free-shop",
+        "kind": "lexeme",
         "gloss": "duty-free shop",
         "sources": [
-          "ch30/vocabulary/12"
+          "korean-language-book/ch30/vocabulary/12"
         ]
       }
     ],
     "실망하다": [
       {
         "sense": "to-be-disappointed",
+        "kind": "lexeme",
         "gloss": "to be disappointed",
         "sources": [
-          "ch30/vocabulary/13"
+          "korean-language-book/ch30/vocabulary/13"
         ]
       }
     ],
     "마음껏": [
       {
         "sense": "as-much-as-one-likes",
+        "kind": "lexeme",
         "gloss": "as much as one likes",
         "sources": [
-          "ch30/vocabulary/14"
+          "korean-language-book/ch30/vocabulary/14"
         ]
       }
     ],
     "수학여행": [
       {
         "sense": "school-trip",
+        "kind": "lexeme",
         "gloss": "school trip",
         "sources": [
-          "ch30/vocabulary/15"
+          "korean-language-book/ch30/vocabulary/15"
         ]
       }
     ],
     "해외여행": [
       {
         "sense": "overseas-trip",
+        "kind": "lexeme",
         "gloss": "overseas trip",
         "sources": [
-          "ch30/vocabulary/16"
+          "korean-language-book/ch30/vocabulary/16"
         ]
       }
     ],
     "(돈을) 모으다": [
       {
         "sense": "to-save-up-money",
+        "kind": "expression",
         "gloss": "to save up (money)",
         "sources": [
-          "ch30/vocabulary/17"
+          "korean-language-book/ch30/vocabulary/17"
         ]
       }
     ],
     "막상": [
       {
         "sense": "in-the-event",
+        "kind": "lexeme",
         "gloss": "in the event, when S + is actually about to + V",
         "sources": [
-          "ch30/vocabulary/18"
+          "korean-language-book/ch30/vocabulary/18"
         ]
       }
     ],
     "별 거 없다": [
       {
         "sense": "to-be-nothing-special",
+        "kind": "expression",
         "gloss": "to be nothing special",
         "sources": [
-          "ch30/vocabulary/19"
+          "korean-language-book/ch30/vocabulary/19"
         ]
       }
     ],
     "좁다": [
       {
         "sense": "to-be-narrow",
+        "kind": "lexeme",
         "gloss": "to be narrow, to be cramped",
         "sources": [
-          "ch30/vocabulary/20"
+          "korean-language-book/ch30/vocabulary/20"
         ]
       }
     ],
     "아쉽다": [
       {
         "sense": "to-be-such-a-pity",
+        "kind": "lexeme",
         "gloss": "to be such a pity",
         "sources": [
-          "ch30/vocabulary/21"
+          "korean-language-book/ch30/vocabulary/21"
         ]
       }
     ],
     "길다": [
       {
         "sense": "to-be-long",
+        "kind": "lexeme",
         "gloss": "to be long",
         "sources": [
-          "ch30/vocabulary/22"
+          "korean-language-book/ch30/vocabulary/22"
         ]
       }
     ],
     "멀다": [
       {
         "sense": "to-be-far",
+        "kind": "lexeme",
         "gloss": "to be far",
         "sources": [
-          "ch30/vocabulary/23"
+          "korean-language-book/ch30/vocabulary/23"
         ]
       }
     ],
     "나이 먹다": [
       {
         "sense": "to-get-old",
+        "kind": "expression",
         "gloss": "to get old",
         "sources": [
-          "ch30/vocabulary/24"
+          "korean-language-book/ch30/vocabulary/24"
         ]
       }
     ],
     "장시간": [
       {
         "sense": "long-time",
+        "kind": "lexeme",
         "gloss": "long time, long hours",
         "sources": [
-          "ch30/vocabulary/25"
+          "korean-language-book/ch30/vocabulary/25"
         ]
       }
     ],
     "힘들다": [
       {
         "sense": "to-be-difficult",
+        "kind": "lexeme",
         "gloss": "to be difficult, to be tough, to be hard",
         "sources": [
-          "ch30/vocabulary/26"
+          "korean-language-book/ch30/vocabulary/26"
         ]
       }
     ],
     "곤욕": [
       {
         "sense": "trouble",
+        "kind": "lexeme",
         "gloss": "trouble, difficulty",
         "sources": [
-          "ch30/vocabulary/27"
+          "korean-language-book/ch30/vocabulary/27"
         ]
       }
     ],
     "액체류": [
       {
         "sense": "liquid",
+        "kind": "lexeme",
         "gloss": "liquid",
         "sources": [
-          "ch30/vocabulary/28"
+          "korean-language-book/ch30/vocabulary/28"
         ]
       }
     ],
     "반입": [
       {
         "sense": "carrying-into",
+        "kind": "lexeme",
         "gloss": "carrying into",
         "sources": [
-          "ch30/vocabulary/29"
+          "korean-language-book/ch30/vocabulary/29"
         ]
       }
     ]

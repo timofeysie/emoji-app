@@ -1,23 +1,35 @@
 import { z } from 'zod';
+import {
+  chapterOfSourceRef,
+  defaultKind,
+  parseQualifiedSourceRef,
+  qualifiedSourceRef,
+  vocabularyKindValues,
+  type VocabularyKind,
+} from './learning-object';
 
 /**
- * Word-sense registry for one book (docs/xAPI/leitner-method.md → The sense
- * registry). A learning object is one word in one sense, and every chapter
- * vocabulary entry (`sourceRef`) maps to exactly one sense. Pure: callers
- * read and write the JSON file.
+ * Word-sense registry for one language, fed by every book
+ * (docs/xAPI/leitner-method.md → The sense registry; learning-objects.md →
+ * A1). A learning object is one word in one sense, and every chapter
+ * vocabulary entry maps to exactly one sense. Pure: callers read and write
+ * the JSON file.
  */
 
 export type Sense = {
   /** ASCII slug, unique per word, permanent once used in an IRI. */
   sense: string;
+  /** Set when first registered (`defaultKind`); a person may change it before pilot data exists. */
+  kind: VocabularyKind;
   /** English gloss when the sense was first registered. */
   gloss: string;
-  /** Chapter entries that teach this sense, e.g. `ch27/vocabulary/1`. */
+  /** Book-qualified entries that teach this sense, e.g. `korean-language-book/ch27/vocabulary/1`. */
   sources: string[];
 };
 
 export type SenseRegistry = {
-  book: string;
+  /** ISO 639 code, e.g. `ko`. */
+  language: string;
   /** Keyed by `normaliseWord(target)`. */
   words: Record<string, Sense[]>;
 };
@@ -113,6 +125,7 @@ export function chapterVocabulary(raw: unknown): ChapterVocabulary {
   return { chapter, entries, problems };
 }
 
+/** `sourceRef` is book-qualified. */
 export type SenseAssignment = { sourceRef: string; word: string; sense: string };
 
 /** A known word whose gloss matches no sense, or more than one: a person decides. */
@@ -135,10 +148,6 @@ export type SenseRegistryUpdate = {
   problems: string[];
 };
 
-function chapterOfSourceRef(sourceRef: string): string | undefined {
-  return /^ch([^/]+)\//.exec(sourceRef)?.[1];
-}
-
 function uniqueSlug(base: string, senses: readonly Sense[]): string {
   const taken = new Set(senses.map((sense) => sense.sense));
   let slug = base;
@@ -149,7 +158,8 @@ function uniqueSlug(base: string, senses: readonly Sense[]): string {
 }
 
 /**
- * Registers every entry not yet in the registry, in chapter order:
+ * Registers every entry of `book`'s chapters not yet in the registry, in
+ * chapter order:
  * - a new word gets a new sense;
  * - a known word attaches to the one sense sharing a gloss part with it;
  * - anything else is a conflict and stays unregistered.
@@ -157,6 +167,7 @@ function uniqueSlug(base: string, senses: readonly Sense[]): string {
  */
 export function updateSenseRegistry(
   registry: SenseRegistry,
+  book: string,
   chapters: readonly ChapterVocabulary[],
 ): SenseRegistryUpdate {
   const next: SenseRegistry = structuredClone(registry);
@@ -168,7 +179,13 @@ export function updateSenseRegistry(
   const registered = new Map<string, SenseAssignment>();
   for (const [word, senses] of Object.entries(next.words)) {
     for (const sense of senses) {
+      if (!(vocabularyKindValues as readonly string[]).includes(sense.kind)) {
+        problems.push(`${word}/${sense.sense}: unknown kind '${String(sense.kind)}'`);
+      }
       for (const sourceRef of sense.sources) {
+        if (!parseQualifiedSourceRef(sourceRef)) {
+          problems.push(`${word}/${sense.sense}: source '${sourceRef}' is not book/chNN/section/N`);
+        }
         const existing = registered.get(sourceRef);
         if (existing) {
           problems.push(`${sourceRef}: registered under both '${existing.word}/${existing.sense}' and '${word}/${sense.sense}'`);
@@ -181,38 +198,45 @@ export function updateSenseRegistry(
   const entryRefs = new Set<string>();
   for (const { entries } of chapters) {
     for (const entry of entries) {
-      entryRefs.add(entry.sourceRef);
-      const known = registered.get(entry.sourceRef);
+      const sourceRef = qualifiedSourceRef(book, entry.sourceRef);
+      entryRefs.add(sourceRef);
+      const known = registered.get(sourceRef);
       if (known) {
         if (known.word !== entry.word) {
-          problems.push(`${entry.sourceRef}: registered as '${known.word}' but the chapter now says '${entry.word}'`);
+          problems.push(`${sourceRef}: registered as '${known.word}' but the chapter now says '${entry.word}'`);
         }
         continue;
       }
 
       const senses = (next.words[entry.word] ??= []);
       if (senses.length === 0) {
-        const sense: Sense = { sense: uniqueSlug(senseSlug(entry.gloss), senses), gloss: entry.gloss, sources: [entry.sourceRef] };
+        const sense: Sense = {
+          sense: uniqueSlug(senseSlug(entry.gloss), senses),
+          kind: defaultKind(entry.word),
+          gloss: entry.gloss,
+          sources: [sourceRef],
+        };
         senses.push(sense);
-        added.push({ sourceRef: entry.sourceRef, word: entry.word, sense: sense.sense });
+        added.push({ sourceRef, word: entry.word, sense: sense.sense });
         continue;
       }
 
       const parts = new Set(glossParts(entry.gloss));
       const matches = senses.filter((sense) => glossParts(sense.gloss).some((part) => parts.has(part)));
       if (matches.length === 1) {
-        matches[0].sources.push(entry.sourceRef);
-        attached.push({ sourceRef: entry.sourceRef, word: entry.word, sense: matches[0].sense });
+        matches[0].sources.push(sourceRef);
+        attached.push({ sourceRef, word: entry.word, sense: matches[0].sense });
       } else {
-        conflicts.push({ sourceRef: entry.sourceRef, word: entry.word, gloss: entry.gloss, candidates: senses });
+        conflicts.push({ sourceRef, word: entry.word, gloss: entry.gloss, candidates: senses });
       }
     }
   }
 
   const checkedChapters = new Set(chapters.map((chapter) => chapter.chapter));
   for (const sourceRef of registered.keys()) {
-    const chapter = chapterOfSourceRef(sourceRef);
-    if (chapter !== undefined && checkedChapters.has(chapter) && !entryRefs.has(sourceRef)) {
+    const parsed = parseQualifiedSourceRef(sourceRef);
+    const chapter = parsed && chapterOfSourceRef(parsed.sourceRef);
+    if (parsed?.book === book && chapter && checkedChapters.has(chapter) && !entryRefs.has(sourceRef)) {
       problems.push(`${sourceRef}: registered but no longer in chapter ${chapter}`);
     }
   }
@@ -224,6 +248,6 @@ export function updateSenseRegistry(
   return { registry: next, added, attached, conflicts, problems };
 }
 
-export function emptySenseRegistry(book: string): SenseRegistry {
-  return { book, words: {} };
+export function emptySenseRegistry(language: string): SenseRegistry {
+  return { language, words: {} };
 }

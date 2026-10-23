@@ -1,5 +1,6 @@
-// Build or check the word-sense registry for the Korean book
-// (docs/xAPI/leitner-method.md → The sense registry).
+// Build or check the language-level word-sense registry from one book's
+// chapters (docs/xAPI/leitner-method.md → The sense registry;
+// learning-objects.md → A1). Every book in a language feeds one registry.
 //
 // Usage (builds the server first so the registry code is compiled):
 //   npm run content:senses -- [options]
@@ -8,13 +9,16 @@
 // that aren't in the registry yet, and writes the registry back. Conflicts
 // (a known word whose meaning matches no sense, or several) stop the run
 // and nothing is written: resolve them by editing the registry file, either
-// adding the sourceRef to an existing sense's `sources`, or adding a new
-// sense for the word. Then run again.
+// adding the book-qualified sourceRef to an existing sense's `sources`, or
+// adding a new sense for the word. New senses get a kind (`lexeme`, or
+// `expression` for multi-word entries); change it in the file if that's
+// wrong, before any pilot statement uses it. Then run again.
 //
 // Options:
 //   --content <dir>    chapter files (default server/src/games/content)
-//   --registry <file>  registry (default <content>/korean-language-book-senses.json)
-//   --book <key>       book id for a new registry (default korean-language-book)
+//   --book <key>       book the chapter files belong to (default korean-language-book)
+//   --language <code>  registry language (default ko)
+//   --registry <file>  registry (default <content>/<language>-senses.json)
 //   --check            change nothing; exit 1 if the registry is out of date
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -34,10 +38,11 @@ const { values: args } = parseArgs({
     content: { type: 'string', default: join(repoRoot, 'server/src/games/content') },
     registry: { type: 'string' },
     book: { type: 'string', default: 'korean-language-book' },
+    language: { type: 'string', default: 'ko' },
     check: { type: 'boolean', default: false },
   },
 });
-const registryPath = args.registry ?? join(args.content, `${args.book}-senses.json`);
+const registryPath = args.registry ?? join(args.content, `${args.language}-senses.json`);
 
 const chapterFiles = readdirSync(args.content)
   .map((name) => ({ name, number: Number(/^chapter(\d+)Data\.json$/.exec(name)?.[1]) }))
@@ -53,9 +58,13 @@ const chapters = chapterFiles.map((file) =>
 );
 const registry = existsSync(registryPath)
   ? JSON.parse(readFileSync(registryPath, 'utf8'))
-  : emptySenseRegistry(args.book);
+  : emptySenseRegistry(args.language);
+if (registry.language !== args.language) {
+  console.error(`${registryPath} is for '${registry.language}', not '${args.language}'.`);
+  process.exit(1);
+}
 
-const { registry: next, added, attached, conflicts, problems } = updateSenseRegistry(registry, chapters);
+const { registry: next, added, attached, conflicts, problems } = updateSenseRegistry(registry, args.book, chapters);
 
 for (const chapter of chapters) {
   const swapped = chapter.entries.filter((entry) => entry.swapped).length;

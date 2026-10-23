@@ -186,9 +186,11 @@ playerBindingSchema.index(
  */
 const questionLearningSchema = new Schema(
   {
-    /** `korean-language-book/vocabulary/시험/test`. */
+    /** Language-scoped: `ko/lexeme/시험/test`. */
     learningObjectId: { type: String, required: true },
-    /** Where it came from: `ch27/vocabulary/1`. */
+    /** The book it was taught from: `korean-language-book`. */
+    book: { type: String, required: true },
+    /** Where in that book: `ch27/vocabulary/1`. */
     sourceRef: { type: String, required: true },
     /** `reading`, `writing`, … */
     aspect: { type: String, required: true },

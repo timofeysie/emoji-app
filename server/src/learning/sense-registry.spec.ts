@@ -97,117 +97,152 @@ describe('chapterVocabulary', () => {
 });
 
 describe('updateSenseRegistry', () => {
-  const empty = emptySenseRegistry('test-book');
+  const empty = emptySenseRegistry('ko');
 
   it('creates a sense for a new word', () => {
-    const { registry, added } = updateSenseRegistry(empty, [chapter('1', [['시험', 'test, exam']])]);
-    expect(registry.words['시험']).toEqual([{ sense: 'test', gloss: 'test, exam', sources: ['ch1/vocabulary/0'] }]);
-    expect(added).toEqual([{ sourceRef: 'ch1/vocabulary/0', word: '시험', sense: 'test' }]);
+    const { registry, added } = updateSenseRegistry(empty, 'test-book', [chapter('1', [['시험', 'test, exam']])]);
+    expect(registry.words['시험']).toEqual([{ sense: 'test', kind: 'lexeme', gloss: 'test, exam', sources: ['test-book/ch1/vocabulary/0'] }]);
+    expect(added).toEqual([{ sourceRef: 'test-book/ch1/vocabulary/0', word: '시험', sense: 'test' }]);
   });
 
   it('attaches the same word with an overlapping gloss to one sense, across and within chapters', () => {
-    const { registry, attached, conflicts } = updateSenseRegistry(empty, [
+    const { registry, attached, conflicts } = updateSenseRegistry(empty, 'test-book', [
       chapter('1', [['타다', 'to ride']]),
       chapter('2', [['타다', 'to take, to ride'], ['타다', 'to ride']]),
     ]);
     expect(conflicts).toEqual([]);
     expect(registry.words['타다']).toEqual([
-      { sense: 'to-ride', gloss: 'to ride', sources: ['ch1/vocabulary/0', 'ch2/vocabulary/0', 'ch2/vocabulary/1'] },
+      { sense: 'to-ride', kind: 'lexeme', gloss: 'to ride', sources: ['test-book/ch1/vocabulary/0', 'test-book/ch2/vocabulary/0', 'test-book/ch2/vocabulary/1'] },
     ]);
     expect(attached).toHaveLength(2);
   });
 
   it('stops on a known word with a different meaning (homograph)', () => {
-    const { registry, conflicts } = updateSenseRegistry(empty, [
+    const { registry, conflicts } = updateSenseRegistry(empty, 'test-book', [
       chapter('1', [['배', 'pear']]),
       chapter('2', [['배', 'ship']]),
     ]);
     expect(registry.words['배']).toHaveLength(1);
     expect(conflicts).toEqual([
       {
-        sourceRef: 'ch2/vocabulary/0',
+        sourceRef: 'test-book/ch2/vocabulary/0',
         word: '배',
         gloss: 'ship',
-        candidates: [{ sense: 'pear', gloss: 'pear', sources: ['ch1/vocabulary/0'] }],
+        candidates: [{ sense: 'pear', kind: 'lexeme', gloss: 'pear', sources: ['test-book/ch1/vocabulary/0'] }],
       },
     ]);
   });
 
   it('keeps a hand-resolved homograph and gives repeats of it the right sense', () => {
     const resolved: SenseRegistry = {
-      book: 'test-book',
+      language: 'ko',
       words: {
         배: [
-          { sense: 'pear', gloss: 'pear', sources: ['ch1/vocabulary/0'] },
-          { sense: 'ship', gloss: 'ship', sources: ['ch2/vocabulary/0'] },
+          { sense: 'pear', kind: 'lexeme', gloss: 'pear', sources: ['test-book/ch1/vocabulary/0'] },
+          { sense: 'ship', kind: 'lexeme', gloss: 'ship', sources: ['test-book/ch2/vocabulary/0'] },
         ],
       },
     };
-    const result = updateSenseRegistry(resolved, [
+    const result = updateSenseRegistry(resolved, 'test-book', [
       chapter('1', [['배', 'pear']]),
       chapter('2', [['배', 'ship']]),
       chapter('3', [['배', 'ship, boat']]),
     ]);
     expect(result.conflicts).toEqual([]);
-    expect(result.attached).toEqual([{ sourceRef: 'ch3/vocabulary/0', word: '배', sense: 'ship' }]);
+    expect(result.attached).toEqual([{ sourceRef: 'test-book/ch3/vocabulary/0', word: '배', sense: 'ship' }]);
   });
 
   it('is a no-op when run again', () => {
     const chapters = [chapter('1', [['시험', 'test'], ['수업', 'class']])];
-    const first = updateSenseRegistry(empty, chapters);
-    const second = updateSenseRegistry(first.registry, chapters);
+    const first = updateSenseRegistry(empty, 'test-book', chapters);
+    const second = updateSenseRegistry(first.registry, 'test-book', chapters);
     expect(second.registry).toEqual(first.registry);
     expect([...second.added, ...second.attached, ...second.conflicts, ...second.problems]).toEqual([]);
   });
 
   it('does not change the registry it was given', () => {
-    const registry = emptySenseRegistry('test-book');
-    updateSenseRegistry(registry, [chapter('1', [['시험', 'test']])]);
+    const registry = emptySenseRegistry('ko');
+    updateSenseRegistry(registry, 'test-book', [chapter('1', [['시험', 'test']])]);
     expect(registry.words).toEqual({});
   });
 
   it('reports registry entries the chapter files no longer match', () => {
     const registry: SenseRegistry = {
-      book: 'test-book',
+      language: 'ko',
       words: {
-        시험: [{ sense: 'test', gloss: 'test', sources: ['ch1/vocabulary/0'] }],
-        수업: [{ sense: 'class', gloss: 'class', sources: ['ch1/vocabulary/1', 'ch9/vocabulary/0'] }],
+        시험: [{ sense: 'test', kind: 'lexeme', gloss: 'test', sources: ['test-book/ch1/vocabulary/0'] }],
+        수업: [{ sense: 'class', kind: 'lexeme', gloss: 'class', sources: ['test-book/ch1/vocabulary/1', 'test-book/ch9/vocabulary/0'] }],
       },
     };
-    const { problems } = updateSenseRegistry(registry, [chapter('1', [['숙제', 'homework']])]);
+    const { problems } = updateSenseRegistry(registry, 'test-book', [chapter('1', [['숙제', 'homework']])]);
     expect(problems).toEqual([
-      "ch1/vocabulary/0: registered as '시험' but the chapter now says '숙제'",
-      'ch1/vocabulary/1: registered but no longer in chapter 1',
+      "test-book/ch1/vocabulary/0: registered as '시험' but the chapter now says '숙제'",
+      'test-book/ch1/vocabulary/1: registered but no longer in chapter 1',
     ]);
   });
 
   it('reports a sourceRef registered under two senses', () => {
     const registry: SenseRegistry = {
-      book: 'test-book',
+      language: 'ko',
       words: {
         배: [
-          { sense: 'pear', gloss: 'pear', sources: ['ch1/vocabulary/0'] },
-          { sense: 'ship', gloss: 'ship', sources: ['ch1/vocabulary/0'] },
+          { sense: 'pear', kind: 'lexeme', gloss: 'pear', sources: ['test-book/ch1/vocabulary/0'] },
+          { sense: 'ship', kind: 'lexeme', gloss: 'ship', sources: ['test-book/ch1/vocabulary/0'] },
         ],
       },
     };
-    expect(updateSenseRegistry(registry, [chapter('1', [['배', 'pear']])]).problems).toEqual([
-      "ch1/vocabulary/0: registered under both '배/pear' and '배/ship'",
+    expect(updateSenseRegistry(registry, 'test-book', [chapter('1', [['배', 'pear']])]).problems).toEqual([
+      "test-book/ch1/vocabulary/0: registered under both '배/pear' and '배/ship'",
     ]);
   });
 });
 
-describe('committed korean-language-book registry', () => {
-  it('covers every chapter file in content/ (run `npm run content:senses` if this fails)', () => {
-    const registry = readJson('korean-language-book-senses.json') as SenseRegistry;
+describe('updateSenseRegistry across books (language-level registry)', () => {
+  it('makes a new multi-word entry an expression', () => {
+    const { registry } = updateSenseRegistry(emptySenseRegistry('ko'), 'test-book', [chapter('1', [['보여 주다', 'to show']])]);
+    expect(registry.words['보여 주다'][0].kind).toBe('expression');
+  });
+
+  it('attaches the same sense from a second book to the one learning object', () => {
+    const first = updateSenseRegistry(emptySenseRegistry('ko'), 'book-a', [chapter('1', [['주다', 'to give']])]);
+    const second = updateSenseRegistry(first.registry, 'book-b', [chapter('1', [['주다', 'to give']])]);
+    expect(second.problems).toEqual([]);
+    expect(second.registry.words['주다']).toEqual([
+      { sense: 'to-give', kind: 'lexeme', gloss: 'to give', sources: ['book-a/ch1/vocabulary/0', 'book-b/ch1/vocabulary/0'] },
+    ]);
+  });
+
+  it("does not report another book's entries as missing from this book's chapters", () => {
+    const registry: SenseRegistry = {
+      language: 'ko',
+      words: { 주다: [{ sense: 'to-give', kind: 'lexeme', gloss: 'to give', sources: ['book-a/ch1/vocabulary/5'] }] },
+    };
+    expect(updateSenseRegistry(registry, 'book-b', [chapter('1', [['시험', 'test']])]).problems).toEqual([]);
+  });
+
+  it('reports unknown kinds and unqualified sources', () => {
+    const registry = {
+      language: 'ko',
+      words: { 시험: [{ sense: 'test', kind: 'noun', gloss: 'test', sources: ['ch1/vocabulary/0'] }] },
+    } as unknown as SenseRegistry;
+    expect(updateSenseRegistry(registry, 'test-book', []).problems).toEqual([
+      "시험/test: unknown kind 'noun'",
+      "시험/test: source 'ch1/vocabulary/0' is not book/chNN/section/N",
+    ]);
+  });
+});
+
+describe('committed Korean registry', () => {
+  it('covers every korean-language-book chapter file in content/ (run `npm run content:senses` if this fails)', () => {
+    const registry = readJson('ko-senses.json') as SenseRegistry;
     const chapters = readdirSync(contentDir)
       .filter((name) => /^chapter\d+Data\.json$/.test(name))
       .map((name) => chapterVocabulary(readJson(name)));
 
-    const update = updateSenseRegistry(registry, chapters);
+    const update = updateSenseRegistry(registry, 'korean-language-book', chapters);
     expect(update.problems).toEqual([]);
     expect(update.conflicts).toEqual([]);
     expect([...update.added, ...update.attached]).toEqual([]);
-    expect(registry.book).toBe('korean-language-book');
+    expect(registry.language).toBe('ko');
   });
 });

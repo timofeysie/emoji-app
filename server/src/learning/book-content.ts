@@ -3,13 +3,20 @@ import chapter27 from '../games/content/chapter27Data.json';
 import chapter28 from '../games/content/chapter28Data.json';
 import chapter29 from '../games/content/chapter29Data.json';
 import chapter30 from '../games/content/chapter30Data.json';
-import koreanSenses from '../games/content/korean-language-book-senses.json';
-import { KOREAN_BOOK, learningObjectId, LearningObjectKey } from './learning-object';
+import koreanSenses from '../games/content/ko-senses.json';
+import {
+  KOREAN_BOOK,
+  learningObjectId,
+  LearningObjectKey,
+  parseQualifiedSourceRef,
+} from './learning-object';
 import { chapterVocabulary, ChapterVocabulary, SenseRegistry } from './sense-registry';
 
 /**
  * Runtime content registry (docs/xAPI/leitner-method.md → Content on the
- * server): `(book, chapter) → vocabulary` and `sourceRef → (word, sense)`.
+ * server): `(book, chapter) → vocabulary` and `sourceRef → learning object`.
+ * Learning objects are language-scoped (learning-objects.md → A1); the
+ * book only says where they were taught.
  * Chapter files are imported as modules so `tsc` ships them in dist/server
  * (the Docker image copies only that). Add a chapter here after running
  * `npm run content:senses`.
@@ -18,19 +25,24 @@ import { chapterVocabulary, ChapterVocabulary, SenseRegistry } from './sense-reg
 export type LearningObject = LearningObjectKey & {
   /** `learningObjectId(key)`. */
   id: string;
+  /** The book this chapter is in. */
+  book: string;
   /** English as this chapter gives it. */
   gloss: string;
-  /** Entries in this chapter that teach it (ch. 29 lists some words twice). */
+  /** Entries in this chapter that teach it (ch. 29 lists some words twice), unqualified. */
   sourceRefs: string[];
 };
 
-export type SenseEntry = LearningObjectKey & { gloss: string };
+export type SenseEntry = LearningObjectKey & { id: string; gloss: string };
 
 export type BookContent = {
   book: string;
+  language: string;
   chapters: ReadonlyMap<string, ChapterVocabulary>;
-  /** Every registered sourceRef, whichever chapter it is in. */
+  /** This book's registered sourceRefs (unqualified), whichever chapter they are in. */
   senseBySourceRef: ReadonlyMap<string, SenseEntry>;
+  /** Every sense in the language registry, from any book (review tracks). */
+  senseById: ReadonlyMap<string, SenseEntry>;
 };
 
 export class UnknownBookError extends Error {
@@ -55,8 +67,12 @@ export class UnregisteredSensesError extends Error {
   }
 }
 
-/** Pure: index a registry and parsed chapters. */
-export function buildBookContent(registry: SenseRegistry, rawChapters: readonly unknown[]): BookContent {
+/** Pure: index one book's chapters against the language registry. */
+export function buildBookContent(
+  book: string,
+  registry: SenseRegistry,
+  rawChapters: readonly unknown[],
+): BookContent {
   const chapters = new Map<string, ChapterVocabulary>();
   for (const raw of rawChapters) {
     const vocabulary = chapterVocabulary(raw);
@@ -64,14 +80,21 @@ export function buildBookContent(registry: SenseRegistry, rawChapters: readonly 
   }
 
   const senseBySourceRef = new Map<string, SenseEntry>();
+  const senseById = new Map<string, SenseEntry>();
   for (const [word, senses] of Object.entries(registry.words)) {
     for (const sense of senses) {
-      for (const sourceRef of sense.sources) {
-        senseBySourceRef.set(sourceRef, { book: registry.book, word, sense: sense.sense, gloss: sense.gloss });
+      const key = { language: registry.language, kind: sense.kind, word, sense: sense.sense };
+      const entry: SenseEntry = { ...key, id: learningObjectId(key), gloss: sense.gloss };
+      senseById.set(entry.id, entry);
+      for (const ref of sense.sources) {
+        const parsed = parseQualifiedSourceRef(ref);
+        if (parsed?.book === book) {
+          senseBySourceRef.set(parsed.sourceRef, entry);
+        }
       }
     }
   }
-  return { book: registry.book, chapters, senseBySourceRef };
+  return { book, language: registry.language, chapters, senseBySourceRef, senseById };
 }
 
 /**
@@ -92,13 +115,12 @@ export function chapterLearningObjects(content: BookContent, chapter: string): L
       unregistered.push(entry.sourceRef);
       continue;
     }
-    const key = { book: content.book, word: sense.word, sense: sense.sense };
-    const id = learningObjectId(key);
-    const existing = objects.get(id);
+    const existing = objects.get(sense.id);
     if (existing) {
       existing.sourceRefs.push(entry.sourceRef);
     } else {
-      objects.set(id, { ...key, id, gloss: entry.gloss, sourceRefs: [entry.sourceRef] });
+      const { language, kind, word, sense: slug, id } = sense;
+      objects.set(id, { language, kind, word, sense: slug, id, book: content.book, gloss: entry.gloss, sourceRefs: [entry.sourceRef] });
     }
   }
   if (unregistered.length > 0) {
@@ -110,7 +132,8 @@ export function chapterLearningObjects(content: BookContent, chapter: string): L
 const loaders = new Map<string, () => BookContent>([
   [
     KOREAN_BOOK,
-    () => buildBookContent(koreanSenses as SenseRegistry, [chapter26, chapter27, chapter28, chapter29, chapter30]),
+    () =>
+      buildBookContent(KOREAN_BOOK, koreanSenses as SenseRegistry, [chapter26, chapter27, chapter28, chapter29, chapter30]),
   ],
 ]);
 const cache = new Map<string, BookContent>();
