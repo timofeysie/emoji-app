@@ -122,6 +122,20 @@ describe('LearningProgressController', () => {
     ]);
   });
 
+  it("lists the book's chapters, and 404s an unknown book", () => {
+    const res = createResponseMock();
+    controller.getChapters('korean-language-book', res as unknown as Response);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const body = res.json.mock.calls[0][0] as { language: string; chapters: Array<{ chapter: string; entryCount: number }> };
+    expect(body.language).toBe('ko');
+    expect(body.chapters.map((chapter) => chapter.chapter)).toEqual(['26', '27', '28', '29', '30']);
+    expect(body.chapters.every((chapter) => chapter.entryCount > 0)).toBe(true);
+
+    const unknown = createResponseMock();
+    controller.getChapters('no-such-book', unknown as unknown as Response);
+    expect(unknown.status).toHaveBeenCalledWith(404);
+  });
+
   it('rejects a bad player id or query', async () => {
     const res = createResponseMock();
     await controller.getProgress('nope', { chapter: 'x', scope: 'all', extra: 1 }, res as unknown as Response);

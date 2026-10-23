@@ -53,6 +53,28 @@ export class LearningProgressController {
     private readonly gameDataRepository: GameDataRepository,
   ) {}
 
+  /** The chapters a Leitner game can be planned from (the referee's chapter picker). */
+  @Get('books/:book/chapters')
+  getChapters(@Param('book') book: string, @Res() res: Response): void {
+    if (!slugSchema.safeParse(book).success) {
+      res.status(400).json({ error: 'Invalid book' });
+      return;
+    }
+    try {
+      const content = getBookContent(book);
+      const chapters = [...content.chapters.values()]
+        .map((vocabulary) => ({ chapter: vocabulary.chapter, entryCount: vocabulary.entries.length }))
+        .sort((a, b) => Number(a.chapter) - Number(b.chapter));
+      res.status(200).json({ book: content.book, language: content.language, chapters });
+    } catch (error) {
+      if (error instanceof UnknownBookError) {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+  }
+
   @Get('players/:playerId/progress')
   async getProgress(
     @Param('playerId') playerId: string,

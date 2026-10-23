@@ -34,6 +34,7 @@ import {
   stationsFromSnapshot,
   type BadgesSnapshotResponse,
 } from '../badge-stations';
+import type { GameKind, LeitnerExportResult } from '../leitner';
 
 const chipSpring = { type: 'spring' as const, stiffness: 420, damping: 28 };
 
@@ -59,6 +60,8 @@ type GameDetail = {
   id: string;
   title: string;
   state: GameState;
+  /** Absent on older servers: a class game. */
+  kind?: GameKind;
   boundPairs: BoundPair[];
   questions: Array<{ state: string; closedAt?: string | null }>;
 };
@@ -111,12 +114,22 @@ const LIFECYCLE_BUTTONS: Record<GameState, LifecycleButton[]> = {
   cancelled: [{ label: 'Restart',    targetState: 'ready' }],
 };
 
+/** Leitner games are single-use (L8): no Play Again / Restart; the server rejects them too. */
+function lifecycleButtonsFor(game: GameDetail): LifecycleButton[] {
+  const buttons = LIFECYCLE_BUTTONS[game.state] ?? [];
+  if (game.kind !== 'leitner-solo') return buttons;
+  return buttons.filter((btn) => btn.targetState !== 'ready');
+}
+
 export function GameRefereePanel({
   game,
   onRefresh,
+  onLeitnerExport,
 }: {
   game: GameDetail;
   onRefresh: () => void;
+  /** A Leitner game's completion response: exported and deleted, or pending export. */
+  onLeitnerExport?: (result: LeitnerExportResult) => void;
 }) {
   const [pairName, setPairName] = useState('');
   const [selectedInvite, setSelectedInvite] = useState<string>('');
@@ -299,6 +312,10 @@ export function GameRefereePanel({
         setLifecycleError(body.error ?? `Failed to transition to ${targetState}.`);
         return;
       }
+      const body = (await res.json().catch(() => ({}))) as { leitnerExport?: LeitnerExportResult };
+      if (body.leitnerExport) {
+        onLeitnerExport?.(body.leitnerExport);
+      }
       const gameRef = gameLogRef({ id: game.id, title: game.title });
       if (targetState === 'lobby') {
         logGameState('lobby', `referee Open for Joining ${gameRef} icon=door-open`);
@@ -317,7 +334,7 @@ export function GameRefereePanel({
     }
   };
 
-  const lifecycleButtons = LIFECYCLE_BUTTONS[game.state] ?? [];
+  const lifecycleButtons = lifecycleButtonsFor(game);
   // Only after a round of this run has closed: before round 1 the chips show
   // join status, not the ready / wait answer. Replay clears `closedAt`.
   const isBetweenRounds =

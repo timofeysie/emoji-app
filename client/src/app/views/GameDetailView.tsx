@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { LayoutGroup, motion } from 'motion/react';
-import { CheckCircle2, ChevronLeft, Circle, Loader2, Plus } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, Circle, GraduationCap, Loader2, Plus } from 'lucide-react';
 import { Button } from '../shared/button';
 import { GameRefereePanel } from './components/GameRefereePanel';
 import { PlayerBindingsPanel } from './components/PlayerBindingsPanel';
+import {
+  LeitnerGamePanel,
+  LeitnerSummaryCard,
+  useLeitnerPlayer,
+  type LeitnerExported,
+} from './components/LeitnerGamePanel';
+import type { GameKind, LeitnerExportResult, LeitnerGameInfo } from './leitner';
 import {
   Dialog,
   DialogClose,
@@ -114,6 +121,11 @@ type GameDetail = {
   id: string;
   title: string;
   state: GameState;
+  /** Absent on older servers: a class game. */
+  kind?: GameKind;
+  leitner?: LeitnerGameInfo | null;
+  exportError?: string | null;
+  exportAttemptedAt?: string | null;
   createdAt: string;
   startedAt: string | null;
   endedAt: string | null;
@@ -544,6 +556,14 @@ export function GameDetailView() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [guessChart, setGuessChart] = useState<GuessChartData | null>(null);
   const [guessChartLoading, setGuessChartLoading] = useState(false);
+  // A Leitner game is deleted once exported (L10): `gone` keeps the view
+  // (and its summary) on screen instead of a "not found" error.
+  const [gone, setGone] = useState(false);
+  const [leitnerResult, setLeitnerResult] = useState<LeitnerExported | null>(null);
+  const lastGameRef = useRef<GameDetail | null>(null);
+  if (game) lastGameRef.current = game;
+  const shownGame = game ?? lastGameRef.current;
+  const leitnerPlayer = useLeitnerPlayer(shownGame?.leitner?.playerId);
 
   const loadGuessChart = useCallback(async () => {
     if (!gameId) return;
@@ -572,7 +592,11 @@ export function GameDetailView() {
     try {
       const res = await fetch(`/api/games/${gameId}`, { credentials: 'same-origin' });
       if (res.status === 404) {
-        setFetchError('Game not found.');
+        if (lastGameRef.current?.id === gameId) {
+          setGone(true);
+        } else {
+          setFetchError('Game not found.');
+        }
         return;
       }
       if (!res.ok) {
@@ -702,6 +726,10 @@ export function GameDetailView() {
           isCorrect?: boolean;
         };
         if (message.gameId !== gameId) return;
+        if (message.type === 'game.deleted') {
+          setGone(true);
+          return;
+        }
         if (
           message.type === 'question.result' ||
           message.type === 'game.state.changed' ||
@@ -766,6 +794,27 @@ export function GameDetailView() {
     }
   }, [game?.state]);
 
+  const handleLeitnerExport = (result: LeitnerExportResult) => {
+    if (result.exported) {
+      setLeitnerResult({ statementsSent: result.statementsSent, summary: result.summary });
+      if (result.deleted) setGone(true);
+    } else {
+      // Pending export: reload for its exportError and the Retry button.
+      void loadGame({ silent: true });
+    }
+  };
+
+  if (gone && shownGame) {
+    return (
+      <FinishedGameView
+        game={shownGame}
+        studentName={leitnerPlayer?.firstName ?? null}
+        result={leitnerResult}
+        onBack={() => navigate('/games')}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -788,6 +837,7 @@ export function GameDetailView() {
     );
   }
 
+  const isLeitner = game.kind === 'leitner-solo';
   const nextSequence = Math.max(0, ...game.questions.map((q) => q.sequence)) + 1;
   const hasOpenQuestion = game.questions.some((q) => q.state === 'open');
   const focusSection = focusSectionForState(game.state);
@@ -830,6 +880,7 @@ export function GameDetailView() {
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-bold">{game.title}</h1>
           <StateChip state={game.state} />
+          {isLeitner && <LeitnerChip />}
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
           Created {new Date(game.createdAt).toLocaleDateString()}
@@ -853,11 +904,14 @@ export function GameDetailView() {
                   {game.questions.length}{' '}
                   {game.questions.length === 1 ? 'Round' : 'Rounds'}
                 </p>
-                <AddQuestionDialog
-                  gameId={game.id}
-                  nextSequence={nextSequence}
-                  onCreated={() => void refreshQuestions()}
-                />
+                {/* A Leitner game's rounds are its plan. */}
+                {!isLeitner && (
+                  <AddQuestionDialog
+                    gameId={game.id}
+                    nextSequence={nextSequence}
+                    onCreated={() => void refreshQuestions()}
+                  />
+                )}
               </div>
 
               {game.questions.length === 0 ? (
@@ -900,23 +954,100 @@ export function GameDetailView() {
             transition={focusSpring}
           >
             <StageFocusRing active={focusSection === 'referee'} />
+            {isLeitner && game.leitner && (
+              <div className="mb-4">
+                <LeitnerGamePanel
+                  gameId={game.id}
+                  state={game.state}
+                  leitner={game.leitner}
+                  player={leitnerPlayer}
+                  exportError={game.exportError ?? null}
+                  exportAttemptedAt={game.exportAttemptedAt ?? null}
+                  onExported={(result) => {
+                    setLeitnerResult(result);
+                    setGone(true);
+                  }}
+                />
+              </div>
+            )}
             <GameRefereePanel
               game={game}
               onRefresh={() => {
                 void loadGame({ silent: true });
                 void loadGuessChart();
               }}
+              onLeitnerExport={handleLeitnerExport}
             />
             <div className="mt-4">
               <PlayerBindingsPanel
                 gameId={game.id}
                 completed={game.state === 'completed'}
                 reloadKey={playerBindingsReloadKey}
+                onlyPlayerId={isLeitner ? game.leitner?.playerId : undefined}
+                manualExport={!isLeitner}
               />
             </div>
           </motion.div>
         </div>
       </LayoutGroup>
+    </div>
+  );
+}
+
+function LeitnerChip() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-800">
+      <GraduationCap className="h-3 w-3" aria-hidden />
+      Leitner
+    </span>
+  );
+}
+
+/** Shown once the game is deleted: for a Leitner game, after a successful export. */
+function FinishedGameView({
+  game,
+  studentName,
+  result,
+  onBack,
+}: {
+  game: GameDetail;
+  studentName: string | null;
+  result: LeitnerExported | null;
+  onBack: () => void;
+}) {
+  const isLeitner = game.kind === 'leitner-solo';
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <Button variant="ghost" size="sm" className="-ml-2 mb-1" onClick={onBack}>
+          <ChevronLeft className="mr-1 h-4 w-4" aria-hidden /> Games
+        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-bold">{game.title}</h1>
+          {isLeitner && <LeitnerChip />}
+        </div>
+        {isLeitner && (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {studentName ? `${studentName} · ` : ''}Exported to the LRS and deleted (single-use).
+          </p>
+        )}
+      </div>
+
+      {result ? (
+        <div className="max-w-xl">
+          <LeitnerSummaryCard result={result} />
+        </div>
+      ) : (
+        <div className="max-w-xl rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+          {isLeitner
+            ? 'This Leitner game has ended. Its answers are in the LRS, and the student’s next plan uses them.'
+            : 'This game was deleted.'}
+        </div>
+      )}
+
+      <Button className="self-start" onClick={onBack}>
+        Back to games
+      </Button>
     </div>
   );
 }

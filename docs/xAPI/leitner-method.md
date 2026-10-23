@@ -1,8 +1,8 @@
 # Leitner spaced repetition from LRS data
 
-Status: Steps 1–3 **built** (content, identity, tagging, read path,
-progress, planner, game creation, lifecycle), Step 4 (referee UI)
-**planned**. Identity and statements follow
+Status: Steps 1–4 **built** (content, identity, tagging, read path,
+progress, planner, game creation, lifecycle, referee UI); acceptance on
+the hardware is next. Identity and statements follow
 [`learning-objects.md`](./learning-objects.md) decisions A1–A3 (L16–L18).
 Builds on the Milestone 1 export
 (`xapi-export-plan.md`, `LRS.md`), the player/badge binding model
@@ -573,7 +573,11 @@ POST /api/games/:id/xapi-export   // manual export; Retry for a pending Leitner 
 → 200 { ok, statementsSent [, deleted: true, summary] }
 
 PUT /api/games/:id/player-bindings/:badge  → 400 when a leitner-solo game's student isn't this player
-GET /api/games, /api/games/:id             // game detail now has kind and leitner { playerId, book, chapter, scope }
+GET /api/games, /api/games/:id             // both have kind; detail also has leitner { playerId, book, chapter, scope },
+                                           // exportError and exportAttemptedAt (pending export)
+
+GET /api/books/:book/chapters              // the referee's chapter picker
+→ 200 { book, language, chapters: [{ chapter, entryCount }] } · 404 unknown book
 ```
 
 Both are referee-only once Step 0 auth lands, like the other player
@@ -606,7 +610,7 @@ planned ──create──▶ lobby/ready/playing ──complete──▶ auto-e
 
 - **Single-use.** Play Again / Restart are rejected by the server
   (`setGameState` → 400 for a `leitner-solo` game going from `completed`
-  or `cancelled` back to `ready`), and will be hidden in the UI (Step 4).
+  or `cancelled` back to `ready`), and hidden in the UI.
 - **Auto-export on completion.** The completion handler calls the same
   code as `POST /games/:id/xapi-export` (`xapi/game-export.service.ts`),
   only for `leitner-solo` games. Class games keep manual export
@@ -902,14 +906,30 @@ aspects default to `scored`.
 
 ### Step 4: Referee UI
 
-- [ ] "New Leitner game": student picker (reuses the player list),
-      chapter, **scope**, plan preview, Create.
-- [ ] Game detail for `leitner-solo`: student shown, Play Again hidden,
-      export status / Retry export, end-of-game summary (promoted, demoted,
-      retired) from the `leitnerExport` in the completion response.
-- [ ] After completion the game is gone (`game.deleted` on the dashboard
-      socket; `GET /api/games/:id` → 404): leave the game view gracefully
-      instead of showing an error.
+- [x] Games → **New Leitner Game** (`NewLeitnerGameDialog.tsx`): student
+      (the player list), chapter (`GET /api/books/:book/chapters`), scope,
+      aspects; **Preview Plan** runs the dry run and the progress query
+      together and shows the summary counts, the picks with their reasons,
+      what it supersedes, and a word × aspect progress table; **Create**
+      re-sends the dry run's `seed` and `now` and opens the game. The 409s
+      (pending export, game in play) link to the blocking game.
+- [x] Game detail for `leitner-solo` (`LeitnerGamePanel.tsx`): Leitner
+      chip, student, chapter and scope; Play Again / Restart and Add Round
+      hidden; the bindings panel offers only the student and has no manual
+      export; a completed game still stored shows **Export pending** with
+      `exportError` and **Retry export**. The games list marks Leitner games
+      and pending exports.
+- [x] End-of-game summary (score; retired, promoted, demoted, unchanged,
+      each `from → to`) from `leitnerExport` or the Retry response. When
+      the game is gone (`game.deleted`, or a 404 for a game this view had
+      loaded) the view stays, showing the summary or an "exported and
+      deleted" note, and the games list drops it live.
+- [x] Manual, local server + local Mongo + `emojiapp-dev` (2026-10-23),
+      headless Chromium, throwaway player (removed afterwards): previewed a
+      ch. 27 plan (28 new tracks, 4 new picks), created it, opened its
+      detail, took it to `active`, clicked **End Game**; the summary showed
+      and the game was deleted (404). Retry export wasn't exercised in the
+      browser (it needs a failing LRS).
 
 ### Acceptance
 

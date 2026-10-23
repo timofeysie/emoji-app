@@ -54,11 +54,17 @@ export function PlayerBindingsPanel({
   gameId,
   completed,
   reloadKey,
+  onlyPlayerId,
+  manualExport = true,
 }: {
   gameId: string;
   /** The "Export to LRS" action only ever shows once the game is completed. */
   completed: boolean;
   reloadKey: string;
+  /** A Leitner game's student: the only player its badge may be bound to. */
+  onlyPlayerId?: string;
+  /** Leitner games export themselves (Retry lives in the Leitner panel). */
+  manualExport?: boolean;
 }) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [data, setData] = useState<GamePlayerBindings | null>(null);
@@ -192,6 +198,9 @@ export function PlayerBindingsPanel({
     }
   };
 
+  const choosablePlayers = onlyPlayerId
+    ? players.filter((player) => player.id === onlyPlayerId)
+    : players;
   const badgeNames = data?.badgeNames ?? [];
   const missing = data?.missingBadges ?? [];
 
@@ -224,13 +233,13 @@ export function PlayerBindingsPanel({
                   // undefined would leave Radix showing its last uncontrolled pick.
                   value={active?.player.id ?? ''}
                   onValueChange={(playerId) => void bind(badgeName, playerId)}
-                  disabled={busy || players.length === 0}
+                  disabled={busy || choosablePlayers.length === 0}
                 >
                   <SelectTrigger className="h-8 text-sm">
                     <SelectValue placeholder="Assign player…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {players.map((player) => (
+                    {choosablePlayers.map((player) => (
                       <SelectItem key={player.id} value={player.id}>
                         {player.firstName}
                         <span className="ml-1.5 text-[10px] tabular-nums text-muted-foreground">
@@ -267,12 +276,12 @@ export function PlayerBindingsPanel({
           <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
           <span>
             Guesses without a player: <strong>{missing.join(', ')}</strong>. Assign a player
-            before exporting.
+            before {manualExport ? 'exporting' : 'ending the game, or the export will fail'}.
           </span>
         </p>
       )}
 
-      {completed && (
+      {completed && manualExport && (
         <div className="flex flex-col gap-1.5 border-t pt-3">
           <Button
             type="button"

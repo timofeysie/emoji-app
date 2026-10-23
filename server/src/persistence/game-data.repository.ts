@@ -90,6 +90,7 @@ export type GameSummary = {
   id: string;
   title: string;
   state: GameState;
+  kind: GameKind;
   createdAt: string;
   startedAt: string | null;
   endedAt: string | null;
@@ -177,6 +178,9 @@ export type GameDetail = {
   kind: GameKind;
   /** Leitner games only: the student and what was planned. */
   leitner: { playerId: string; book: string; chapter: string; scope: LeitnerScope } | null;
+  /** Leitner games: why the last export failed (a completed one still stored is pending export). */
+  exportError: string | null;
+  exportAttemptedAt: string | null;
   createdAt: string;
   startedAt: string | null;
   endedAt: string | null;
@@ -1425,6 +1429,7 @@ export class GameDataRepository {
       id: (g._id as Types.ObjectId).toString(),
       title: g.title,
       state: g.state as GameState,
+      kind: (g.kind ?? 'class') as GameKind,
       createdAt: (g as unknown as { createdAt: Date }).createdAt.toISOString(),
       startedAt: g.startedAt ? g.startedAt.toISOString() : null,
       endedAt: g.endedAt ? g.endedAt.toISOString() : null,
@@ -1485,6 +1490,8 @@ export class GameDataRepository {
             scope: game.leitner.scope as LeitnerScope,
           }
         : null,
+      exportError: game.exportError ?? null,
+      exportAttemptedAt: game.exportAttemptedAt ? game.exportAttemptedAt.toISOString() : null,
       createdAt: (game as unknown as { createdAt: Date }).createdAt.toISOString(),
       startedAt: game.startedAt ? game.startedAt.toISOString() : null,
       endedAt: game.endedAt ? game.endedAt.toISOString() : null,

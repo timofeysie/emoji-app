@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Gamepad2, Loader2, Pencil, Play, Plus } from 'lucide-react';
+import { Gamepad2, GraduationCap, Loader2, Pencil, Play, Plus } from 'lucide-react';
 import { Button } from '../shared/button';
 import {
   Dialog,
@@ -15,6 +15,9 @@ import {
 import { Input } from '../shared/input';
 import { Label } from '../shared/label';
 import { cn } from '../shared/utils';
+import { getWsUrl } from '../shared/ws-url';
+import { NewLeitnerGameDialog } from './components/NewLeitnerGameDialog';
+import type { GameKind } from './leitner';
 
 /** Placeholder creator ID used when no auth is wired. Must be a 24-char hex ObjectId. */
 const DEMO_CREATOR_ID = '000000000000000000000001';
@@ -32,6 +35,8 @@ type GameSummary = {
   id: string;
   title: string;
   state: GameState;
+  /** Absent on older servers: a class game. */
+  kind?: GameKind;
   createdAt: string;
   startedAt: string | null;
   endedAt: string | null;
@@ -211,13 +216,34 @@ export function GamesView() {
     void loadGames();
   }, [loadGames]);
 
+  // Leitner games are deleted once exported; drop them from the list as it happens.
+  useEffect(() => {
+    const ws = new WebSocket(getWsUrl());
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data) as { type?: string; gameId?: string };
+        if (message.type === 'game.deleted' && message.gameId) {
+          setGames((prev) => prev.filter((game) => game.id !== message.gameId));
+        } else if (message.type === 'game.state.changed') {
+          void loadGames();
+        }
+      } catch {
+        // ignore malformed payloads
+      }
+    };
+    return () => ws.close();
+  }, [loadGames]);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between py-2">
         <p className="text-sm text-muted-foreground">
           {loading ? 'Loading…' : `${games.length} game${games.length === 1 ? '' : 's'}`}
         </p>
-        <NewGameDialog onCreated={() => void loadGames()} />
+        <div className="flex flex-wrap items-center gap-2">
+          <NewLeitnerGameDialog />
+          <NewGameDialog onCreated={() => void loadGames()} />
+        </div>
       </div>
 
       {loading && (
@@ -259,6 +285,23 @@ export function GamesView() {
                   <div className="flex items-center gap-2">
                     <span className="truncate font-semibold">{game.title}</span>
                     <StateChip state={game.state} />
+                    {game.kind === 'leitner-solo' && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-800"
+                        title="Single-use solo Leitner game"
+                      >
+                        <GraduationCap className="h-3 w-3" aria-hidden />
+                        Leitner
+                      </span>
+                    )}
+                    {game.kind === 'leitner-solo' && game.state === 'completed' && (
+                      <span
+                        className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800"
+                        title="Not in the LRS yet: open it to retry the export"
+                      >
+                        export pending
+                      </span>
+                    )}
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     {game.questionCount} question
