@@ -81,10 +81,14 @@ const gameSchema = new Schema(
     createdByUserId: { type: objectId, ref: 'User', required: true, immutable: true },
     startedAt: { type: Date },
     endedAt: { type: Date },
+    /** Last failed xAPI export (Leitner games: kept as pending export until it succeeds). */
+    exportError: { type: String },
+    exportAttemptedAt: { type: Date },
   },
   { timestamps: true, collection: 'games' },
 );
 gameSchema.index({ state: 1, createdAt: -1 });
+gameSchema.index({ 'leitner.playerId': 1 }, { partialFilterExpression: { kind: 'leitner-solo' } });
 
 const gameParticipantSchema = new Schema(
   {

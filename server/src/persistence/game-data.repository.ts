@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ClientSession, Types } from 'mongoose';
 import { MongoService } from './mongo.service';
-import { GameKind, GameState, PlayMode, QuestionMode, SlotLabel } from './domain-types';
+import { GameKind, GameState, LeitnerPickReason, LeitnerScope, PlayMode, QuestionMode, SlotLabel } from './domain-types';
 import type { LearningTag } from '../learning/learning-object';
 import { asObjectId } from './models';
 import { shortCardLabel } from '../nfc-card.service';
@@ -9,6 +9,27 @@ import { shortCardLabel } from '../nfc-card.service';
 export type CreateGameInput = {
   title: string;
   createdByUserId: string;
+};
+
+/** What a Leitner game was planned from (`Game.leitner`). */
+export type LeitnerPlanRecord = {
+  playerId: string;
+  book: string;
+  chapter: string;
+  scope: LeitnerScope;
+  aspects: string[];
+  seed: number;
+  plannedAt: Date;
+  picks: Array<{ learningObjectId: string; aspect: string; sourceRef: string; reason: LeitnerPickReason }>;
+};
+
+/** A student's Leitner game as planning sees it (supersede, pending export). */
+export type LeitnerGameStatus = {
+  id: string;
+  state: GameState;
+  endedAt: string | null;
+  guessCount: number;
+  exportError: string | null;
 };
 
 export type AddParticipantInput = {
@@ -153,6 +174,9 @@ export type GameDetail = {
   id: string;
   title: string;
   state: GameState;
+  kind: GameKind;
+  /** Leitner games only: the student and what was planned. */
+  leitner: { playerId: string; book: string; chapter: string; scope: LeitnerScope } | null;
   createdAt: string;
   startedAt: string | null;
   endedAt: string | null;
@@ -183,6 +207,7 @@ export type GameExportData = {
   id: string;
   title: string;
   kind: GameKind;
+  leitner: { playerId: string; book: string; chapter: string } | null;
   state: GameState;
   startedAt: string | null;
   endedAt: string | null;
@@ -270,6 +295,85 @@ export class GameDataRepository {
       state: 'draft',
     });
     return created._id.toString();
+  }
+
+  /**
+   * A `leitner-solo` game with its tagged questions, in `draft` like any new
+   * game (docs/xAPI/leitner-method.md → Referee flow).
+   */
+  async createLeitnerGame(input: {
+    title: string;
+    createdByUserId: string;
+    leitner: LeitnerPlanRecord;
+    questions: Array<Omit<CreateQuestionInput, 'gameId' | 'createdByUserId'>>;
+  }): Promise<string> {
+    const { Game } = this.mongoService.getModels();
+    const created = await Game.create({
+      title: input.title,
+      createdByUserId: asObjectId(input.createdByUserId),
+      state: 'draft',
+      kind: 'leitner-solo',
+      leitner: { ...input.leitner, playerId: asObjectId(input.leitner.playerId) },
+    });
+    const gameId = created._id.toString();
+    try {
+      for (const question of input.questions) {
+        await this.createQuestionWithOptions({ ...question, gameId, createdByUserId: input.createdByUserId });
+      }
+    } catch (error) {
+      await this.deleteGame(gameId);
+      throw error;
+    }
+    return gameId;
+  }
+
+  /** Every `leitner-solo` game still stored for this student, oldest first. */
+  async listLeitnerGamesForPlayer(playerId: string): Promise<LeitnerGameStatus[]> {
+    const { Game, Guess } = this.mongoService.getModels();
+    const games = await Game.find({ kind: 'leitner-solo', 'leitner.playerId': asObjectId(playerId) })
+      .sort({ createdAt: 1 })
+      .lean();
+    const counts = await Guess.aggregate<{ _id: Types.ObjectId; count: number }>([
+      { $match: { gameId: { $in: games.map((g) => g._id) } } },
+      { $group: { _id: '$gameId', count: { $sum: 1 } } },
+    ]);
+    const countMap = new Map(counts.map((c) => [c._id.toString(), c.count]));
+    return games.map((g) => ({
+      id: (g._id as Types.ObjectId).toString(),
+      state: g.state as GameState,
+      endedAt: g.endedAt ? g.endedAt.toISOString() : null,
+      guessCount: countMap.get((g._id as Types.ObjectId).toString()) ?? 0,
+      exportError: g.exportError ?? null,
+    }));
+  }
+
+  async recordExportFailure(gameId: string, message: string): Promise<void> {
+    const { Game } = this.mongoService.getModels();
+    await Game.updateOne(
+      { _id: asObjectId(gameId) },
+      { $set: { exportError: message.slice(0, 1000), exportAttemptedAt: new Date() } },
+    );
+  }
+
+  /**
+   * Deletes a game and everything stored for it: questions, answer options,
+   * guesses, participants, card-group assignments, station and player
+   * bindings (L10). The LRS is untouched.
+   */
+  async deleteGame(gameId: string): Promise<void> {
+    const models = this.mongoService.getModels();
+    const gid = asObjectId(gameId);
+    const questionIds = (await models.Question.find({ gameId: gid }, { _id: 1 }).lean()).map((q) => q._id);
+    await models.AnswerOption.deleteMany({ questionId: { $in: questionIds } });
+    await Promise.all([
+      models.Guess.deleteMany({ gameId: gid }),
+      models.Question.deleteMany({ gameId: gid }),
+      models.GameParticipant.deleteMany({ gameId: gid }),
+      models.GameNfcCardGroupAssignment.deleteMany({ gameId: gid }),
+      models.PairBinding.deleteMany({ gameId: gid }),
+      models.PlayerBinding.deleteMany({ gameId: gid }),
+    ]);
+    await models.Game.deleteOne({ _id: gid });
   }
 
   async addParticipant(input: AddParticipantInput): Promise<void> {
@@ -728,6 +832,10 @@ export class GameDataRepository {
     const allowed = allowedTransitions[currentState] ?? [];
     if (!allowed.includes(input.state)) {
       throw new Error(`Cannot transition game from '${currentState}' to '${input.state}'.`);
+    }
+    if (game.kind === 'leitner-solo' && input.state === 'ready' && (currentState === 'completed' || currentState === 'cancelled')) {
+      // L8: single-use. The next session gets a new plan.
+      throw new Error('A Leitner game is single-use: Play Again / Restart is not allowed. Plan a new game instead.');
     }
 
     if (input.state === 'ready' && (currentState === 'completed' || currentState === 'cancelled')) {
@@ -1252,6 +1360,13 @@ export class GameDataRepository {
       id: (game._id as Types.ObjectId).toString(),
       title: game.title,
       kind: (game.kind ?? 'class') as GameKind,
+      leitner: game.leitner
+        ? {
+            playerId: (game.leitner.playerId as Types.ObjectId).toString(),
+            book: game.leitner.book,
+            chapter: game.leitner.chapter,
+          }
+        : null,
       state: game.state as GameState,
       startedAt: game.startedAt ? game.startedAt.toISOString() : null,
       endedAt: game.endedAt ? game.endedAt.toISOString() : null,
@@ -1361,6 +1476,15 @@ export class GameDataRepository {
       id: (game._id as Types.ObjectId).toString(),
       title: game.title,
       state: game.state as GameState,
+      kind: (game.kind ?? 'class') as GameKind,
+      leitner: game.leitner
+        ? {
+            playerId: (game.leitner.playerId as Types.ObjectId).toString(),
+            book: game.leitner.book,
+            chapter: game.leitner.chapter,
+            scope: game.leitner.scope as LeitnerScope,
+          }
+        : null,
       createdAt: (game as unknown as { createdAt: Date }).createdAt.toISOString(),
       startedAt: game.startedAt ? game.startedAt.toISOString() : null,
       endedAt: game.endedAt ? game.endedAt.toISOString() : null,

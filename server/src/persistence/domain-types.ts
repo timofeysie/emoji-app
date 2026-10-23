@@ -43,6 +43,7 @@ export type AssignmentReason = (typeof assignmentReasonValues)[number];
 export type PlayerBindingReason = (typeof playerBindingReasonValues)[number];
 export type GameKind = (typeof gameKindValues)[number];
 export type LeitnerScope = (typeof leitnerScopeValues)[number];
+export type LeitnerPickReason = (typeof leitnerPickReasonValues)[number];
 export type QuestionMode = (typeof questionModeValues)[number];
 export type QuestionState = (typeof questionStateValues)[number];
 export type NfcCardStatus = (typeof nfcCardStatusValues)[number];

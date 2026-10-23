@@ -99,14 +99,20 @@ function choiceItem(
 /**
  * Reading: Korean prompt, pick the English meaning. Distractors are other
  * meanings from the same list: verbs for a verb, non-verbs otherwise, then
- * anything else if there aren't enough.
+ * anything else if there aren't enough. Never another meaning of the same
+ * word (a question on 배 "pear" doesn't offer "ship").
  */
 export function readingItem(term: VocabTerm, terms: readonly VocabTerm[], rng: Rng): VocabChoiceItem | null {
   const answer = firstSense(term.native);
   const otherSenses: string[] = [];
   for (const other of terms) {
     const sense = firstSense(other.native);
-    if (other.id !== term.id && !sameText(sense, answer) && !otherSenses.some((s) => sameText(s, sense))) {
+    if (
+      other.id !== term.id &&
+      other.target !== term.target &&
+      !sameText(sense, answer) &&
+      !otherSenses.some((s) => sameText(s, sense))
+    ) {
       otherSenses.push(sense);
     }
   }
@@ -167,6 +173,36 @@ export function generateVocabQuiz(options: VocabQuizOptions): VocabChoiceItem[] 
     }
   }
   return items;
+}
+
+/** True when `skill` can make a question for `term` from `pool` (doesn't depend on the seed). */
+export function canBuildItem(skill: VocabSkill, term: VocabTerm, pool: readonly VocabTerm[]): boolean {
+  return itemBuilders[skill](term, pool, createRng(0)) !== null;
+}
+
+export type VocabPick = {
+  skill: VocabSkill;
+  term: VocabTerm;
+  /** Distractor source: the pick's own chapter, so review questions use the words met with it. */
+  pool: readonly VocabTerm[];
+  learning: Omit<LearningTag, 'aspect'>;
+};
+
+/**
+ * One tagged question per pick (docs/xAPI/leitner-method.md → Choosing the
+ * next learning objects), in an order shuffled by `seed` so aspects
+ * interleave. Throws if a pick can't be built: plan with `canBuildItem`.
+ */
+export function generateVocabQuizForPicks(picks: readonly VocabPick[], seed: number): VocabChoiceItem[] {
+  const rng = createRng(seed);
+  const items = picks.map((pick) => {
+    const item = itemBuilders[pick.skill](pick.term, pick.pool, rng);
+    if (!item) {
+      throw new Error(`Cannot build a ${pick.skill} question for '${pick.term.id}'.`);
+    }
+    return { ...item, learning: pick.learning };
+  });
+  return shuffle(items, rng);
 }
 
 /** Body fields for `POST /api/questions` (gameId and createdByUserId added by the caller). */

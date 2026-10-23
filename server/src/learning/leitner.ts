@@ -282,3 +282,48 @@ export function buildProgress(input: {
   }
   return { tracks: result, summary };
 }
+
+export type TrackChange = {
+  learningObjectId: string;
+  aspect: string;
+  change: 'promoted' | 'demoted' | 'retired' | 'unchanged';
+  from: { level: Level; status: TrackStatus };
+  to: { level: Level; status: TrackStatus };
+};
+
+/** How each of `keys` moved from `before` to `after` (end-of-game summary). */
+export function compareTracks(
+  before: readonly TrackState[],
+  after: readonly TrackState[],
+  keys: ReadonlyArray<{ learningObjectId: string; aspect: string }>,
+): TrackChange[] {
+  const index = (tracks: readonly TrackState[]) =>
+    new Map(tracks.map((track) => [trackKey(track.learningObjectId, track.aspect), track]));
+  const beforeByKey = index(before);
+  const afterByKey = index(after);
+  const seen = new Set<string>();
+  const changes: TrackChange[] = [];
+  for (const { learningObjectId, aspect } of keys) {
+    const key = trackKey(learningObjectId, aspect);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const from = beforeByKey.get(key) ?? newTrack(learningObjectId, aspect);
+    const to = afterByKey.get(key) ?? from;
+    const change =
+      to.status === 'retired' && from.status !== 'retired'
+        ? 'retired'
+        : to.level > from.level
+          ? 'promoted'
+          : to.level < from.level
+            ? 'demoted'
+            : 'unchanged';
+    changes.push({
+      learningObjectId,
+      aspect,
+      change,
+      from: { level: from.level, status: from.status },
+      to: { level: to.level, status: to.status },
+    });
+  }
+  return changes;
+}

@@ -35,6 +35,9 @@ export type GamePlayerBindings = {
 /** Thrown for unknown players or badges; controllers map it to 404. */
 export class PlayerNotFoundError extends Error {}
 
+/** A `leitner-solo` game can only be bound to its own student (docs/xAPI/leitner-method.md → Referee flow). */
+export class LeitnerBindingError extends Error {}
+
 /** A binding's time range; `unassignedAt: null` means still active. */
 export type BindingRange = {
   assignedAt: Date;
@@ -128,6 +131,13 @@ export class PlayerRepository {
       throw new PlayerNotFoundError('Player not found.');
     }
     await this.assertBadgeInGame(input.gameId, input.badgeName);
+    const { Game } = this.mongoService.getModels();
+    const game = await Game.findById(gameId, { kind: 1, leitner: 1 }).lean();
+    if (game?.kind === 'leitner-solo' && !(game.leitner?.playerId as Types.ObjectId | undefined)?.equals(playerId)) {
+      // Binding the student to another badge (swap) still works: it ends the
+      // old binding below, so there is at most one active binding.
+      throw new LeitnerBindingError('This Leitner game is for another student; only that student can be bound.');
+    }
 
     const active = await PlayerBinding.findOne({
       gameId,

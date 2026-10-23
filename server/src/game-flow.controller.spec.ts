@@ -3,6 +3,7 @@ import { GameFlowController } from './game-flow.controller';
 import { GameDataRepository } from './persistence/game-data.repository';
 import { BadgeStateService } from './badge-state.service';
 import { NfcCardService } from './nfc-card.service';
+import { GameExportService } from './xapi/game-export.service';
 
 type ResponseMock = Pick<Response, 'status' | 'json'> & {
   status: jest.Mock;
@@ -44,6 +45,7 @@ describe('GameFlowController', () => {
     haveAllJoinedPlayersGuessed: jest.fn(),
     syncStationRoster: jest.fn(),
     getOpenQuestionId: jest.fn(),
+    recordExportFailure: jest.fn(),
   } as unknown as jest.Mocked<GameDataRepository>;
 
   const badgeStateService: jest.Mocked<
@@ -56,10 +58,13 @@ describe('GameFlowController', () => {
 
   const nfcCardService = new NfcCardService();
 
+  const gameExportService: jest.Mocked<Pick<GameExportService, 'exportGame'>> = { exportGame: jest.fn() };
+
   const controller = new GameFlowController(
     repository,
     badgeStateService as unknown as BadgeStateService,
     nfcCardService,
+    gameExportService as unknown as GameExportService,
   );
 
   beforeEach(() => {
@@ -67,6 +72,8 @@ describe('GameFlowController', () => {
     repository.getGameDetail.mockResolvedValue({
       id: '507f1f77bcf86cd799439011',
       title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
       state: 'lobby',
       createdAt: new Date().toISOString(),
       startedAt: null,
@@ -154,6 +161,8 @@ describe('GameFlowController', () => {
     await controller.createGame(
       {
         title: 'Test Game',
+        kind: 'class',
+        leitner: null,
         createdByUserId: '507f1f77bcf86cd799439012',
       },
       res as unknown as Response,
@@ -169,6 +178,8 @@ describe('GameFlowController', () => {
     repository.getGameDetail.mockResolvedValue({
       id: '507f1f77bcf86cd799439011',
       title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
       state: 'active',
       createdAt: new Date().toISOString(),
       startedAt: new Date().toISOString(),
@@ -239,6 +250,8 @@ describe('GameFlowController', () => {
     repository.getGameDetail.mockResolvedValue({
       id: '507f1f77bcf86cd799439011',
       title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
       state: 'active',
       createdAt: new Date().toISOString(),
       startedAt: new Date().toISOString(),
@@ -343,6 +356,8 @@ describe('GameFlowController', () => {
     repository.getGameDetail.mockResolvedValue({
       id: '507f1f77bcf86cd799439011',
       title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
       state: 'active',
       createdAt: new Date().toISOString(),
       startedAt: new Date().toISOString(),
@@ -437,6 +452,8 @@ describe('GameFlowController', () => {
     repository.getGameDetail.mockResolvedValue({
       id: '507f1f77bcf86cd799439016',
       title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
       state: 'active',
       createdAt: new Date().toISOString(),
       startedAt: new Date().toISOString(),
@@ -663,6 +680,8 @@ describe('GameFlowController', () => {
     repository.getGameDetail.mockResolvedValue({
       id: '507f1f77bcf86cd799439017',
       title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
       state: 'active',
       createdAt: new Date().toISOString(),
       startedAt: new Date().toISOString(),
@@ -907,6 +926,68 @@ describe('GameFlowController', () => {
           score: 0,
         }),
       );
+    });
+
+    describe('Leitner auto-export on completion', () => {
+      const leitnerDetail = {
+        id: '507f1f77bcf86cd799439011',
+        title: 'Leitner: Player 7F3A · ch. 27',
+        kind: 'leitner-solo' as const,
+        leitner: { playerId: '507f1f77bcf86cd7994390aa', book: 'korean-language-book', chapter: '27', scope: 'chapter' as const },
+        state: 'completed' as const,
+        createdAt: new Date().toISOString(),
+        startedAt: null,
+        endedAt: null,
+        questions: [],
+        boundPairs: [],
+      };
+
+      beforeEach(() => {
+        repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'completed' });
+        repository.getStationNamesByGameId.mockResolvedValue([]);
+        repository.recordExportFailure.mockResolvedValue(undefined);
+      });
+
+      it('exports, reports the summary and announces the deletion', async () => {
+        repository.getGameDetail.mockResolvedValue(leitnerDetail);
+        const summary = { score: { correct: 1, total: 1 }, changes: [] };
+        gameExportService.exportGame.mockResolvedValue({ ok: true, statementsSent: 3, deleted: true, summary });
+        const res = createResponseMock();
+
+        await controller.setGameState('507f1f77bcf86cd799439011', { state: 'completed' }, res as unknown as Response);
+
+        expect(gameExportService.exportGame).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+        expect(res.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            state: 'completed',
+            leitnerExport: { exported: true, statementsSent: 3, deleted: true, summary },
+          }),
+        );
+        expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'game.deleted', gameId: '507f1f77bcf86cd799439011' }),
+        );
+      });
+
+      it('still completes the game when the export fails (pending export)', async () => {
+        repository.getGameDetail.mockResolvedValue(leitnerDetail);
+        gameExportService.exportGame.mockRejectedValue(new Error('mongo down'));
+        const res = createResponseMock();
+
+        await controller.setGameState('507f1f77bcf86cd799439011', { state: 'completed' }, res as unknown as Response);
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith(
+          expect.objectContaining({ leitnerExport: expect.objectContaining({ exported: false, status: 500 }) }),
+        );
+        expect(repository.recordExportFailure).toHaveBeenCalled();
+      });
+
+      it('leaves class games to manual export', async () => {
+        const res = createResponseMock();
+        await controller.setGameState('507f1f77bcf86cd799439011', { state: 'completed' }, res as unknown as Response);
+        expect(gameExportService.exportGame).not.toHaveBeenCalled();
+        expect(res.json.mock.calls[0][0]).not.toHaveProperty('leitnerExport');
+      });
     });
 
     it('ranks badges of one station as separate players', async () => {

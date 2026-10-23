@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 import { MongoService } from './mongo.service';
-import { bindingAt, PlayerNotFoundError, PlayerRepository, playerLabel } from './player.repository';
+import { bindingAt, LeitnerBindingError, PlayerNotFoundError, PlayerRepository, playerLabel } from './player.repository';
 
 const GAME_ID = '507f1f77bcf86cd799439011';
 const PLAYER_A = new Types.ObjectId('507f1f77bcf86cd7994390aa');
@@ -107,6 +107,7 @@ describe('PlayerRepository', () => {
     beforeEach(() => {
       models.Player.findById.mockReturnValue(createLeanQuery(playerDoc));
       models.Game.exists.mockResolvedValue({ _id: GAME_ID });
+      models.Game.findById.mockReturnValue(createLeanQuery({ _id: GAME_ID, kind: 'class' }));
       models.PairBinding.exists.mockResolvedValue({ _id: 'x' });
       models.Guess.exists.mockResolvedValue(null);
       models.PlayerBinding.updateMany.mockResolvedValue({ modifiedCount: 0 });
@@ -184,6 +185,24 @@ describe('PlayerRepository', () => {
       await expect(
         repository.bindPlayer({ gameId: GAME_ID, badgeName: 'nope', playerId: PLAYER_A.toString() }),
       ).rejects.toBeInstanceOf(PlayerNotFoundError);
+    });
+
+    it("only binds a Leitner game's own student", async () => {
+      models.PlayerBinding.findOne.mockReturnValue(createLeanQuery(null));
+      models.Game.findById.mockReturnValue(
+        createLeanQuery({ _id: GAME_ID, kind: 'leitner-solo', leitner: { playerId: PLAYER_B } }),
+      );
+
+      await expect(
+        repository.bindPlayer({ gameId: GAME_ID, badgeName: 'red', playerId: PLAYER_A.toString() }),
+      ).rejects.toBeInstanceOf(LeitnerBindingError);
+      expect(models.PlayerBinding.create).not.toHaveBeenCalled();
+
+      models.Game.findById.mockReturnValue(
+        createLeanQuery({ _id: GAME_ID, kind: 'leitner-solo', leitner: { playerId: PLAYER_A } }),
+      );
+      const binding = await repository.bindPlayer({ gameId: GAME_ID, badgeName: 'red', playerId: PLAYER_A.toString() });
+      expect(binding.player.firstName).toBe('Mia');
     });
 
     it('rejects an unknown player', async () => {

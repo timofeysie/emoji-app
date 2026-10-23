@@ -2,8 +2,8 @@ import { Controller, Get, Param, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { PlayerRepository } from '../persistence/player.repository';
-import { ASSESSED_VERB_ID, XAPI_HOMEPAGE } from '../xapi/iris';
-import { fetchStatements, loadLrsConfigFromEnv, LrsRequestError, type LrsConfig } from '../xapi/lrs-client';
+import { GameDataRepository } from '../persistence/game-data.repository';
+import { loadLrsConfigFromEnv, LrsRequestError, type LrsConfig } from '../xapi/lrs-client';
 import {
   chapterLearningObjects,
   getBookContent,
@@ -11,7 +11,8 @@ import {
   UnknownChapterError,
   UnregisteredSensesError,
 } from './book-content';
-import { buildProgress, DEFAULT_LEITNER_CONFIG, foldTracks, observationsFromStatements } from './leitner';
+import { buildProgress, DEFAULT_LEITNER_CONFIG, foldTracks } from './leitner';
+import { fetchStudentEvidence } from './student-evidence';
 import { KOREAN_BOOK } from './learning-object';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
@@ -32,9 +33,6 @@ const progressQuerySchema = z
   })
   .strict();
 
-/** Statements per LRS page; Veracity and most LRSs cap lower anyway. */
-const PAGE_SIZE = 500;
-
 function getValidationErrors(error: ZodError): Array<{ path: string; message: string }> {
   return error.issues.map((issue) => ({
     path: issue.path.join('.') || 'root',
@@ -50,7 +48,10 @@ function getValidationErrors(error: ZodError): Array<{ path: string; message: st
  */
 @Controller('api')
 export class LearningProgressController {
-  constructor(private readonly playerRepository: PlayerRepository) {}
+  constructor(
+    private readonly playerRepository: PlayerRepository,
+    private readonly gameDataRepository: GameDataRepository,
+  ) {}
 
   @Get('players/:playerId/progress')
   async getProgress(
@@ -102,16 +103,10 @@ export class LearningProgressController {
         return;
       }
 
-      // `agent` keeps tracks per student (L4). No activity filter: learning
-      // objects are language-scoped (A1), so evidence from every book and
-      // chapter counts (shared words, review scope); the fold keeps this
-      // book's language.
-      const statements = await fetchStatements(config, {
-        agent: { objectType: 'Agent', account: { homePage: XAPI_HOMEPAGE, name: player.externalId } },
-        verb: ASSESSED_VERB_ID,
-        limit: PAGE_SIZE,
-      });
-      const observations = observationsFromStatements(statements, content.language, DEFAULT_LEITNER_CONFIG);
+      const { statements, observations } = await fetchStudentEvidence(config, player.externalId, content.language);
+      const pendingExport = (await this.gameDataRepository.listLeitnerGamesForPlayer(playerId))
+        .filter((game) => game.state === 'completed')
+        .map((game) => ({ gameId: game.id, endedAt: game.endedAt, error: game.exportError }));
       const now = nowParam ? new Date(nowParam) : new Date();
       const { tracks, summary } = buildProgress({
         chapterObjectIds: objects.map((object) => object.id),
@@ -131,6 +126,8 @@ export class LearningProgressController {
         asOf: now.toISOString(),
         statementCount: statements.length,
         observationCount: observations.length,
+        // Completed Leitner games whose evidence isn't in the LRS yet: levels may be stale.
+        pendingExport,
         summary,
         tracks: tracks.map((track) => {
           const sense = content.senseById.get(track.learningObjectId);

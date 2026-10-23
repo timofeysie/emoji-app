@@ -1,7 +1,8 @@
 # Leitner spaced repetition from LRS data
 
-Status: Steps 1–2 **built** (content, identity, tagging, read path,
-progress), Steps 3–4 **planned**. Identity and statements follow
+Status: Steps 1–3 **built** (content, identity, tagging, read path,
+progress, planner, game creation, lifecycle), Step 4 (referee UI)
+**planned**. Identity and statements follow
 [`learning-objects.md`](./learning-objects.md) decisions A1–A3 (L16–L18).
 Builds on the Milestone 1 export
 (`xapi-export-plan.md`, `LRS.md`), the player/badge binding model
@@ -53,6 +54,7 @@ Related:
 | L16 | 2026-10-23 | **Learning-object identity is language-scoped** (`learning-objects.md` A1): `ko/lexeme/시험/test`, IRI `{base}/lo/ko/lexeme/%EC%8B%9C%ED%97%98/test`. The book, chapter and entry are **provenance** only (grouping and `ext/source-ref`), so the same sense taught by two books is one track. The sense registry is per language (`ko-senses.json`). This narrows L1: the book ID names provenance, not learning objects. |
 | L17 | 2026-10-23 | **Evidence is `assessed` statements** (`learning-objects.md` A2). Each tagged guess gives one `answered` statement (what happened) plus one `assessed` statement per observation (what it shows), about the learning object itself. The fold reads **only** `assessed`. Today's scorer, `choice-whole@1`, gives one direct observation on the whole. |
 | L18 | 2026-10-23 | **The kind is part of the identity** (`learning-objects.md` A3): `lexeme` (one word in one sense, activity type `…/activity-types/lexeme-sense`) or `expression` (multi-word entry, `…/activity-types/expression`). The registry stores it per sense; new senses default to `expression` when the word contains a space. |
+| L19 | 2026-10-23 | Built-in choices made in Step 3 (revisit any of them freely): a student with a Leitner game **being played** (`active`/`paused`) can't get a new plan (409) — end it first; a **cancelled** Leitner game is discarded (its guesses are never exported) and is superseded like an unplayed one; creating a game with **nothing to ask** returns 422, not an empty game; review scope only brings back words with a source **in this book** (distractors need that book's chapter); new words **alternate aspects** within a game. |
 
 ---
 
@@ -511,9 +513,10 @@ both:
    retired counts) and the 10 picks, each with its reason (`overdue` /
    `new` / `practice` / `review`) and source chapter. This is
    `POST /api/leitner-games` with `dryRun: true`.
-3. **Create** sends the same request without `dryRun`. The server re-plans
-   with the seed from the dry run, so the result is the same, then creates
-   the game and opens it in edit mode as usual.
+3. **Create** sends the same request without `dryRun`, with the dry run's
+   `seed` and `now` (both returned in the plan). The server re-plans, so
+   the result is the same, then creates the game in `draft` and the app
+   opens it in edit mode as usual.
 4. **Join**: the student's badge joins, and the bindings panel offers only
    that student. The server rejects binding any other player
    (`PUT …/player-bindings/:badge` → 400 for a `leitner-solo` game whose
@@ -522,8 +525,10 @@ both:
 5. Play runs exactly as today.
 
 Creating a new Leitner game for a student **supersedes** any of their
-Leitner games that haven't been played yet (no guesses): those are
-deleted, because their plan is stale.
+Leitner games that haven't been played yet (`draft`, `ready`, `lobby`) or
+were **cancelled**: those are deleted, because their plan is stale (L19).
+A game being played (`active`, `paused`) blocks planning with 409 until
+the referee ends it.
 
 ### API
 
@@ -537,17 +542,38 @@ GET  /api/players/:playerId/progress?chapter=27
         // chapter × aspects with new ones included; review adds other played chapters' tracks
 → 400 bad id/query · 404 unknown player, book or chapter · 422 unregistered senses
 → 503 LRS not configured · 502 LRS request failed
-// Step 3 adds pendingExport: [{ gameId, endedAt, error? }] once Leitner games exist.
+        // also pendingExport: [{ gameId, endedAt, error }] — completed Leitner games not yet in the LRS
 
 POST /api/leitner-games
-  { playerId, book: 'korean-language-book', chapter: 27,
+  { playerId, createdByUserId,            // createdByUserId: required unless dryRun
+    book?: 'korean-language-book', chapter: 27,
     scope?: 'chapter' | 'review',       // default 'chapter'
-    aspects?: ['reading','writing'], count?: 10, maxNew?: 4, fill?: true,
-    seed?, now?, dryRun? }
-→ 200 (dryRun) { plan: { picks[], report, seed } }
+    aspects?: ['reading','writing'],    // the generator builds only these (400 otherwise)
+    count?: 10, maxNew?: 4, fill?: true,
+    seed?, now?, dryRun? }              // seed default: from playerId + date (FNV-1a)
+→ 200 (dryRun) { plan }
 → 201          { gameId, plan }
-→ 409          { error: 'Previous Leitner game not exported yet', pendingExport }
-→ 422          { error: 'Chapter has unregistered vocabulary senses', sourceRefs }
+   plan = { book, chapter, scope, aspects, seed, now,
+            picks: [{ learningObjectId, aspect, sourceRef, reason, level, status, dueAt, word, gloss, chapter }],
+            report: { available, picked, skipped, short },   // counts per overdue / review / new / practice
+            questions: [{ sequence, aspect, learningObjectId, prompt, options[] }],
+            supersedes: [gameId] }      // unplayed or cancelled games create will delete
+→ 400 validation · 404 unknown player, book or chapter · 503 LRS not configured · 502 LRS read failed
+→ 409 { error: 'Previous Leitner game not exported yet', pendingExport }
+→ 409 { error: 'A Leitner game for this student is being played; end it first', inPlay }
+→ 422 { error: 'Chapter has unregistered vocabulary senses', sourceRefs }
+→ 422 { error: 'Nothing to ask: …', plan }   // create only; a dry run returns the empty plan
+
+POST /api/games/:id/state  { state: 'completed' }   // leitner-solo: auto-export (see lifecycle)
+→ 200 { ok, gameId, state, leitnerExport:
+        { exported: true, statementsSent, deleted: true, summary: { score, changes } }
+      | { exported: false, status, error } }        // pending export; the state change still succeeds
+
+POST /api/games/:id/xapi-export   // manual export; Retry for a pending Leitner game
+→ 200 { ok, statementsSent [, deleted: true, summary] }
+
+PUT /api/games/:id/player-bindings/:badge  → 400 when a leitner-solo game's student isn't this player
+GET /api/games, /api/games/:id             // game detail now has kind and leitner { playerId, book, chapter, scope }
 ```
 
 Both are referee-only once Step 0 auth lands, like the other player
@@ -578,20 +604,26 @@ planned ──create──▶ lobby/ready/playing ──complete──▶ auto-e
    └─superseded by a new plan (no guesses)─▶ deleted      └─fails──▶ pending export (Retry; blocks next plan)
 ```
 
-- **Single-use.** Play Again / Restart are hidden in the UI and rejected
-  by the server (`setGameState` → 400 for a `leitner-solo` game going back
-  to `lobby`).
+- **Single-use.** Play Again / Restart are rejected by the server
+  (`setGameState` → 400 for a `leitner-solo` game going from `completed`
+  or `cancelled` back to `ready`), and will be hidden in the UI (Step 4).
 - **Auto-export on completion.** The completion handler calls the same
-  code as `POST /games/:id/xapi-export`, only for `leitner-solo` games.
-  Class games keep manual export (Milestone 1).
+  code as `POST /games/:id/xapi-export` (`xapi/game-export.service.ts`),
+  only for `leitner-solo` games. Class games keep manual export
+  (Milestone 1). The export never fails the state change.
 - **Delete right away on success (L10).** When the LRS accepts every
   batch (2xx), the server deletes the game, its questions, answer options,
-  guesses and bindings in one go. The referee sees a short summary first
-  (score, and words promoted, demoted and retired, computed from the
-  in-memory statements) so nothing is lost from the session.
-- **Export failure keeps the game.** It stays as **pending export**, the
-  app shows **Retry export**, and `POST /api/leitner-games` returns 409 for
-  that student until it succeeds. Planning on stale levels would re-ask
+  guesses, participants, card-group assignments and bindings, and
+  broadcasts `game.deleted` to the dashboard. The state-change response
+  carries a short summary (score, and each track promoted, demoted,
+  retired or unchanged) so nothing is lost from the session. The summary
+  folds the student's earlier `assessed` statements (one LRS read before
+  sending) with the in-memory ones; if that read fails, the export still
+  goes ahead and `changes` is null.
+- **Export failure keeps the game.** It stays as **pending export**
+  (`Game.exportError`, `exportAttemptedAt`), the app shows **Retry
+  export** (`POST /games/:id/xapi-export`), and `POST /api/leitner-games`
+  returns 409 for that student until it succeeds. Planning on stale levels would re-ask
   words the student just answered. Re-sending is safe because statement IDs
   are stable (`LRS.md` → Idempotency).
 - **A game abandoned mid-way**: the referee **ends** it, which completes
@@ -607,17 +639,19 @@ planned ──create──▶ lobby/ready/playing ──complete──▶ auto-e
 
 ## Choosing the next learning objects
 
-Pure functions in `server/src/learning/leitner.ts`: `foldTracks`
-(statements → `TrackState[]`) and `planNextGame`.
+Pure functions: `foldTracks` (`learning/leitner.ts`, observations →
+`TrackState[]`) and `planNextGame` (`learning/planner.ts`).
 
 ```ts
 planNextGame({
-  chapterObjects: LearningObject[],  // this chapter's senses, de-duplicated
-  reviewObjects: LearningObject[],   // scope 'review': senses met in other played chapters; else []
+  chapterObjects: PlanObject[],      // { learningObjectId, sourceRef }: this chapter, de-duplicated, chapter order
+  reviewObjects: PlanObject[],       // scope 'review': met in other chapters of this book; else []
   aspects: ['reading', 'writing'],
   tracks: TrackState[],              // this student's, whole language (L16)
-  now, count: 10, maxNew: 4, fill: true, seed, config: LeitnerConfig,
-}) → { picks: { learningObjectId, aspect, sourceRef, reason }[], report }
+  now, count: 10, maxNew: 4, fill: true,
+  canBuild: (object, aspect) => boolean,   // can the generator make this question?
+  config?: LeitnerConfig,
+}) → { picks: { learningObjectId, aspect, sourceRef, reason, level, status, dueAt }[], report }
 ```
 
 **Candidates** are learning objects × aspects, **excluding retired
@@ -641,7 +675,9 @@ Pick in this order:
    Review words **compete freely** with this chapter's words, with no cap
    (L14). Picks from other chapters are labelled `review`.
 2. **New**, up to `maxNew`, from this chapter in chapter order, so the
-   student meets words the way the book introduces them.
+   student meets words the way the book introduces them. The n-th new
+   pick prefers `aspects[n % aspects.length]`, so one game introduces
+   words for every aspect (L19).
 3. **Practice** fill, if still short of `count`: this chapter's
    not-yet-due tracks at **L0–L2**, lowest level first, then soonest
    `dueAt`. L3 tracks are never used for practice, so their next question
@@ -660,16 +696,20 @@ Constraints:
 - **Skip a pick that can't be built** (e.g. `writingItem` can't make three
   misspellings) and take the next candidate. Report it.
 - **Deterministic**: the same tracks, `now`, scope and seed give the same
-  game. The default seed comes from `playerId` + date, and it's returned
-  and stored on `game.leitner.seed`.
+  game. The planner itself uses no randomness; the seed drives the
+  distractors and the question order. The default seed comes from
+  `playerId` + date, and it's returned and stored on `game.leitner.seed`.
 - **Nothing left to ask**: when every track in scope is retired or not
   due and fill is off or exhausted, the plan comes back short or empty.
   The app then suggests the review scope or the next chapter.
 
-Question building uses a new `generateVocabQuizForPicks({ picks,
-termsByChapter, seed })` in `vocab-choice.ts`, which calls the existing
-`readingItem` / `writingItem`. The question order is shuffled with the
-seed so aspects interleave.
+Question building uses `generateVocabQuizForPicks(picks, seed)` in
+`vocab-choice.ts`, where each pick carries its term and its source
+chapter's terms as the distractor pool. It calls the existing
+`readingItem` / `writingItem`, and shuffles the question order with the
+seed so aspects interleave. `readingItem` now also skips other senses of
+the same word; class-game output is unchanged (checked byte-for-byte over
+ch. 26–30 × 40 seeds × 3 skill mixes).
 
 With ch. 27's 14 words × 2 aspects = 28 tracks, a new student gets 4 new
 words per game, plus practice. A track needs at least four games over
@@ -829,18 +869,36 @@ aspects default to `scored`.
 
 ### Step 3: Planner, game creation, lifecycle
 
-- [ ] `planNextGame` specs: priority order, `maxNew`, both scopes (review
-      brings only due tracks from other played chapters, including a
-      higher-numbered chapter played first, with no cap), retired never picked, L3
-      never practice, one aspect per learning object, no same-word
-      distractor, skip-and-replace, fill/no-fill, determinism, empty plan.
-- [ ] `generateVocabQuizForPicks` with per-source-chapter distractors.
-- [ ] `POST /api/leitner-games` (dry run, create, 409 when an export is
-      pending, 422 for unregistered senses, superseding unplayed games).
-- [ ] Binding guard for `leitner-solo` games; reject Play Again / Restart.
-- [ ] Auto-export on completion, an end-of-game summary, **delete on
-      success**, pending export with Retry on failure.
-- [ ] `scripts/create-leitner-game.mjs` + npm script.
+- [x] `planNextGame` (`learning/planner.ts`) with specs: priority order,
+      `maxNew`, alternating aspects, both scopes (review brings only due
+      tracks from other played chapters, competing freely), a shared word
+      stays this chapter's, retired never picked, L3 never practice but
+      picked when due, one aspect per learning object, skip-and-replace,
+      fill/no-fill, `count`, determinism, empty plan.
+- [x] `generateVocabQuizForPicks` and `canBuildItem` with
+      per-source-chapter distractors; `readingItem` never offers another
+      sense of the same word.
+- [x] `POST /api/leitner-games` (`learning/leitner-games.controller.ts`):
+      dry run, create, 409 when an export is pending or a game is being
+      played, 422 for unregistered senses or nothing to ask, superseding
+      unplayed and cancelled games.
+- [x] Binding guard for `leitner-solo` games (`PlayerRepository.bindPlayer`
+      → 400 for another student; a swap for the same student works);
+      Play Again / Restart rejected.
+- [x] Auto-export on completion with an end-of-game summary, **delete on
+      success**, pending export (`Game.exportError`) with Retry through
+      the manual export endpoint (`xapi/game-export.service.ts`, shared by
+      both).
+- [x] `GET …/progress` returns `pendingExport`.
+- [x] `scripts/create-leitner-game.mjs` + `npm run create:leitner-game`.
+- [x] Manual, local server + local Mongo + `emojiapp-dev` (2026-10-23),
+      with a throwaway player, removed afterwards: progress table and dry
+      run; create; a second create superseded the first; a game taken to
+      `completed` with no guesses auto-exported (nothing to send), was
+      deleted and returned its summary; planning while a game was
+      `active` gave 409; Restart of a cancelled game gave 400; the
+      cancelled game was superseded by the next create. A played game
+      with real guesses is acceptance item 2, on the hardware.
 
 ### Step 4: Referee UI
 
@@ -848,7 +906,10 @@ aspects default to `scored`.
       chapter, **scope**, plan preview, Create.
 - [ ] Game detail for `leitner-solo`: student shown, Play Again hidden,
       export status / Retry export, end-of-game summary (promoted, demoted,
-      retired).
+      retired) from the `leitnerExport` in the completion response.
+- [ ] After completion the game is gone (`game.deleted` on the dashboard
+      socket; `GET /api/games/:id` → 404): leave the game view gracefully
+      instead of showing an error.
 
 ### Acceptance
 

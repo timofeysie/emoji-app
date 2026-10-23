@@ -26,23 +26,31 @@ describe('GameDataRepository', () => {
       create: jest.fn(),
       findById: jest.fn(),
       updateOne: jest.fn(),
+      deleteOne: jest.fn(),
       db: {
         startSession: jest.fn().mockResolvedValue(session),
       },
     },
     GameParticipant: {
       updateOne: jest.fn(),
+      deleteMany: jest.fn(),
     },
     Question: {
       create: jest.fn(),
+      find: jest.fn(),
       findOne: jest.fn(),
       countDocuments: jest.fn(),
       updateMany: jest.fn(),
+      deleteMany: jest.fn(),
     },
     AnswerOption: {
       insertMany: jest.fn(),
       findOne: jest.fn(),
       find: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    PlayerBinding: {
+      deleteMany: jest.fn(),
     },
     Guess: {
       create: jest.fn(),
@@ -60,6 +68,7 @@ describe('GameDataRepository', () => {
       findOne: jest.fn(),
       updateMany: jest.fn(),
       create: jest.fn(),
+      deleteMany: jest.fn(),
     },
     NfcCard: {
       findOne: jest.fn(),
@@ -573,5 +582,26 @@ describe('GameDataRepository', () => {
     });
     expect(models.PairBinding.updateMany).not.toHaveBeenCalled();
     expect(models.Guess.deleteMany).toHaveBeenCalled();
+  });
+
+  it('refuses Play Again / Restart for a Leitner game (single-use, L8)', async () => {
+    models.Game.findById.mockReturnValue(createLeanQuery({ state: 'completed', kind: 'leitner-solo' }));
+
+    await expect(
+      repository.setGameState({ gameId: '507f1f77bcf86cd799439024', state: 'ready' }),
+    ).rejects.toThrow(/single-use/);
+    expect(models.Guess.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes a game and everything stored for it (L10)', async () => {
+    models.Question.find.mockReturnValue(createLeanQuery([{ _id: 'q1' }, { _id: 'q2' }]));
+
+    await repository.deleteGame('507f1f77bcf86cd799439024');
+
+    expect(models.AnswerOption.deleteMany).toHaveBeenCalledWith({ questionId: { $in: ['q1', 'q2'] } });
+    for (const model of [models.Guess, models.Question, models.GameParticipant, models.GameNfcCardGroupAssignment, models.PairBinding, models.PlayerBinding]) {
+      expect(model.deleteMany).toHaveBeenCalledWith({ gameId: expect.anything() });
+    }
+    expect(models.Game.deleteOne).toHaveBeenCalledWith({ _id: expect.anything() });
   });
 });

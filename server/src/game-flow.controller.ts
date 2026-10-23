@@ -8,6 +8,7 @@ import { NfcCardService, shortCardLabel } from './nfc-card.service';
 import type { SlotLabel } from './persistence/domain-types';
 import { QuestionCloser } from './question-closer';
 import { broadcastBindingsChanged, reportRosterChange } from './station-roster-sync';
+import { GameExportService, type GameExportOutcome } from './xapi/game-export.service';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 const slotLabelSchema = z.enum(['A', 'B', 'C', 'D', 'E']);
@@ -128,6 +129,7 @@ export class GameFlowController {
     private readonly gameDataRepository: GameDataRepository,
     private readonly badgeStateService: BadgeStateService,
     private readonly nfcCardService: NfcCardService,
+    private readonly gameExportService: GameExportService,
   ) {
     this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService);
   }
@@ -508,15 +510,40 @@ export class GameFlowController {
         }
       }
 
+      // Leitner games export themselves on completion and are deleted when
+      // the LRS has everything (docs/xAPI/leitner-method.md → lifecycle).
+      const leitnerExport =
+        state === 'completed' && gameDetail?.kind === 'leitner-solo' ? await this.autoExport(gameId) : undefined;
+
       res.status(200).json({
         ok: true,
         gameId,
         state,
         ...(openedQuestionId ? { openedQuestionId } : {}),
+        ...(leitnerExport ? { leitnerExport } : {}),
       });
     } catch (error) {
       res.status(400).json({ error: 'Failed to update game state', message: String(error) });
     }
+  }
+
+  /** Never fails the state change: a failed export leaves the game pending, with Retry. */
+  private async autoExport(gameId: string): Promise<Record<string, unknown>> {
+    let outcome: GameExportOutcome;
+    try {
+      outcome = await this.gameExportService.exportGame(gameId);
+    } catch (error) {
+      await this.gameDataRepository.recordExportFailure(gameId, String(error)).catch(() => undefined);
+      outcome = { ok: false, status: 500, body: { error: 'Export failed', message: String(error) } };
+    }
+    console.log(
+      `[GAME] server | leitner_export | ${outcome.ok ? `exported, deleted=${outcome.deleted}` : `pending (${outcome.status})`} gameId=${gameId}`,
+    );
+    if (outcome.ok) {
+      this.badgeStateService.broadcastDashboard({ type: 'game.deleted', gameId, serverTime: new Date().toISOString() });
+      return { exported: true, statementsSent: outcome.statementsSent, deleted: outcome.deleted, summary: outcome.summary };
+    }
+    return { exported: false, status: outcome.status, error: outcome.body };
   }
 
   @Post('games/:gameId/participants')

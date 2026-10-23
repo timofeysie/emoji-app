@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
-import { PlayerNotFoundError, PlayerRepository } from './persistence/player.repository';
+import { LeitnerBindingError, PlayerNotFoundError, PlayerRepository } from './persistence/player.repository';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 
@@ -132,6 +132,10 @@ export class PlayersController {
   private sendError(res: Response, error: unknown, fallback: string): void {
     if (error instanceof PlayerNotFoundError) {
       res.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof LeitnerBindingError) {
+      res.status(400).json({ error: error.message });
       return;
     }
     res.status(500).json({ error: fallback, message: String(error) });

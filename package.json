@@ -23,6 +23,7 @@
     "seed:local": "node scripts/seed-local.mjs",
     "create:vocab-game": "npm run build:server && node scripts/create-vocab-game.mjs",
     "content:senses": "npm run build:server && node scripts/content-senses.mjs",
+    "create:leitner-game": "node scripts/create-leitner-game.mjs",
     "test:server": "jest --config server/jest.config.ts",
     "test:server:watch": "jest --config server/jest.config.ts --watch",
     "test:e2e": "playwright test --config playwright/playwright.config.ts",

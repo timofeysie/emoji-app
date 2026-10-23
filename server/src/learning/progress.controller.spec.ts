@@ -1,4 +1,5 @@
 import type { Response } from 'express';
+import { GameDataRepository } from '../persistence/game-data.repository';
 import { PlayerRepository } from '../persistence/player.repository';
 import { assessedStatement } from '../test/leitner-statements';
 import { LearningProgressController } from './progress.controller';
@@ -25,13 +26,20 @@ describe('LearningProgressController', () => {
   const originalEnv = { ...process.env };
   const originalFetch = global.fetch;
   const repository: jest.Mocked<Pick<PlayerRepository, 'getPlayer'>> = { getPlayer: jest.fn() };
-  const controller = new LearningProgressController(repository as unknown as PlayerRepository);
+  const games: jest.Mocked<Pick<GameDataRepository, 'listLeitnerGamesForPlayer'>> = {
+    listLeitnerGamesForPlayer: jest.fn(),
+  };
+  const controller = new LearningProgressController(
+    repository as unknown as PlayerRepository,
+    games as unknown as GameDataRepository,
+  );
 
   beforeEach(() => {
     process.env['XAPI_LRS_ENDPOINT'] = 'https://emojiapp-dev.lrs.io/xapi/';
     process.env['XAPI_LRS_KEY'] = 'key';
     process.env['XAPI_LRS_SECRET'] = 'secret';
     repository.getPlayer.mockResolvedValue(player);
+    games.listLeitnerGamesForPlayer.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -63,6 +71,7 @@ describe('LearningProgressController', () => {
     const body = res.json.mock.calls[0][0];
     expect(body.player).toEqual({ id: PLAYER_ID, label: 'Player 7F3A' });
     expect(body).not.toHaveProperty('player.firstName');
+    expect(body.pendingExport).toEqual([]);
     expect(body.tracks).toHaveLength(28);
     expect(body.summary).toMatchObject({ new: 27, active: { L1: 1 } });
     expect(body.tracks.find((track: { word: string; aspect: string }) => track.word === '시험' && track.aspect === 'reading')).toMatchObject({
@@ -98,6 +107,19 @@ describe('LearningProgressController', () => {
     const review = res.json.mock.calls[0][0].tracks.filter((track: { inChapter: boolean }) => !track.inChapter);
     expect(review).toHaveLength(1);
     expect(review[0]).toMatchObject({ word: '독감', gloss: 'flu', level: 0, due: true });
+  });
+
+  it('lists completed Leitner games that are still waiting for export', async () => {
+    lrsReturns([]);
+    games.listLeitnerGamesForPlayer.mockResolvedValue([
+      { id: 'g1', state: 'completed', endedAt: '2026-10-22T18:00:00.000Z', guessCount: 10, exportError: 'LRS rejected the export' },
+      { id: 'g2', state: 'draft', endedAt: null, guessCount: 0, exportError: null },
+    ]);
+    const res = createResponseMock();
+    await controller.getProgress(PLAYER_ID, { chapter: '27' }, res as unknown as Response);
+    expect(res.json.mock.calls[0][0].pendingExport).toEqual([
+      { gameId: 'g1', endedAt: '2026-10-22T18:00:00.000Z', error: 'LRS rejected the export' },
+    ]);
   });
 
   it('rejects a bad player id or query', async () => {

@@ -13,6 +13,8 @@ import { PlayersController } from './players.controller';
 import { PlayerRepository } from './persistence/player.repository';
 import { StationRosterSync } from './station-roster-sync';
 import { XapiExportController } from './xapi/xapi-export.controller';
+import { GameExportService } from './xapi/game-export.service';
+import { LeitnerGamesController } from './learning/leitner-games.controller';
 import { LearningProgressController } from './learning/progress.controller';
 
 @Module({
@@ -26,6 +28,7 @@ import { LearningProgressController } from './learning/progress.controller';
     PlayersController,
     XapiExportController,
     LearningProgressController,
+    LeitnerGamesController,
   ],
   providers: [
     BadgeStateService,
@@ -34,6 +37,7 @@ import { LearningProgressController } from './learning/progress.controller';
     PlayerRepository,
     NfcCardService,
     StationRosterSync,
+    GameExportService,
   ],
   exports: [MongoService, GameDataRepository],
 })

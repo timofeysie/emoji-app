@@ -3,6 +3,7 @@ import { ANSWERED_VERB_ID } from '../xapi/iris';
 import {
   applyObservation,
   buildProgress,
+  compareTracks,
   DEFAULT_LEITNER_CONFIG,
   foldTracks,
   isDue,
@@ -281,6 +282,39 @@ describe('buildProgress', () => {
     const review = result.filter((track) => !track.inChapter);
     expect(review.map((track) => [track.learningObjectId, track.level, track.due])).toEqual([
       ['ko/lexeme/독감/flu', 0, true],
+    ]);
+  });
+});
+
+describe('compareTracks', () => {
+  it('reports promoted, demoted, retired and unchanged tracks, new ones from level 0', () => {
+    const before = foldTracks([
+      answer(true, '2026-10-01T18:00:00Z'), // EXAM reading L1
+      answer(true, '2026-10-01T18:00:00Z', { aspect: 'writing' }),
+      answer(true, '2026-10-02T18:00:00Z', { aspect: 'writing' }),
+      answer(true, '2026-10-05T18:00:00Z', { aspect: 'writing' }), // EXAM writing L3
+    ]);
+    const after = foldTracks([
+      answer(true, '2026-10-01T18:00:00Z'),
+      answer(false, '2026-10-02T18:00:00Z'), // reading → L0
+      answer(true, '2026-10-01T18:00:00Z', { aspect: 'writing' }),
+      answer(true, '2026-10-02T18:00:00Z', { aspect: 'writing' }),
+      answer(true, '2026-10-05T18:00:00Z', { aspect: 'writing' }),
+      answer(true, '2026-10-12T18:00:00Z', { aspect: 'writing' }), // retired
+      answer(true, '2026-10-12T18:00:00Z', { learningObjectId: SHOW }), // new → L1
+    ]);
+    const changes = compareTracks(before, after, [
+      { learningObjectId: EXAM, aspect: 'reading' },
+      { learningObjectId: EXAM, aspect: 'writing' },
+      { learningObjectId: SHOW, aspect: 'reading' },
+      { learningObjectId: SHOW, aspect: 'writing' },
+      { learningObjectId: EXAM, aspect: 'reading' },
+    ]);
+    expect(changes.map((c) => [c.learningObjectId, c.aspect, c.change, c.from.level, c.to.level])).toEqual([
+      [EXAM, 'reading', 'demoted', 1, 0],
+      [EXAM, 'writing', 'retired', 3, 3],
+      [SHOW, 'reading', 'promoted', 0, 1],
+      [SHOW, 'writing', 'unchanged', 0, 0],
     ]);
   });
 });
