@@ -1,0 +1,1328 @@
+{
+  "book": "korean-language-book",
+  "words": {
+    "독감": [
+      {
+        "sense": "flu",
+        "gloss": "flu",
+        "sources": [
+          "ch26/vocabulary/0"
+        ]
+      }
+    ],
+    "벌리다": [
+      {
+        "sense": "to-open",
+        "gloss": "to open",
+        "sources": [
+          "ch26/vocabulary/1"
+        ]
+      }
+    ],
+    "편도선": [
+      {
+        "sense": "tonsil",
+        "gloss": "tonsil",
+        "sources": [
+          "ch26/vocabulary/2"
+        ]
+      }
+    ],
+    "붓다": [
+      {
+        "sense": "to-swell-up",
+        "gloss": "to swell up, to become swollen",
+        "sources": [
+          "ch26/vocabulary/3"
+        ]
+      }
+    ],
+    "열": [
+      {
+        "sense": "fever",
+        "gloss": "fever",
+        "sources": [
+          "ch26/vocabulary/4"
+        ]
+      }
+    ],
+    "재다": [
+      {
+        "sense": "to-measure",
+        "gloss": "to measure",
+        "sources": [
+          "ch26/vocabulary/5"
+        ]
+      }
+    ],
+    "보여 주다": [
+      {
+        "sense": "to-show",
+        "gloss": "to show",
+        "sources": [
+          "ch26/vocabulary/6",
+          "ch27/vocabulary/5"
+        ]
+      }
+    ],
+    "주사": [
+      {
+        "sense": "injection",
+        "gloss": "injection, shot",
+        "sources": [
+          "ch26/vocabulary/7"
+        ]
+      }
+    ],
+    "주사를 놓다": [
+      {
+        "sense": "to-have-a-shot",
+        "gloss": "to have a shot",
+        "sources": [
+          "ch26/vocabulary/8"
+        ]
+      }
+    ],
+    "괜찮다": [
+      {
+        "sense": "to-be-okay",
+        "gloss": "to be okay, to be alright",
+        "sources": [
+          "ch26/vocabulary/9",
+          "ch27/vocabulary/8"
+        ]
+      }
+    ],
+    "눕다": [
+      {
+        "sense": "to-lie-down",
+        "gloss": "to lie down",
+        "sources": [
+          "ch26/vocabulary/10"
+        ]
+      }
+    ],
+    "살짝": [
+      {
+        "sense": "slightly",
+        "gloss": "slightly",
+        "sources": [
+          "ch26/vocabulary/11"
+        ]
+      }
+    ],
+    "내리다": [
+      {
+        "sense": "to-lower",
+        "gloss": "to lower, to take down",
+        "sources": [
+          "ch26/vocabulary/12"
+        ]
+      }
+    ],
+    "간호사": [
+      {
+        "sense": "nurse",
+        "gloss": "nurse",
+        "sources": [
+          "ch26/vocabulary/13"
+        ]
+      }
+    ],
+    "감기": [
+      {
+        "sense": "cold",
+        "gloss": "cold",
+        "sources": [
+          "ch26/vocabulary/14"
+        ]
+      }
+    ],
+    "몸살": [
+      {
+        "sense": "body-ache",
+        "gloss": "body ache",
+        "sources": [
+          "ch26/vocabulary/15"
+        ]
+      }
+    ],
+    "심하다": [
+      {
+        "sense": "to-be-serious",
+        "gloss": "to be serious",
+        "sources": [
+          "ch26/vocabulary/16"
+        ]
+      }
+    ],
+    "걸리다": [
+      {
+        "sense": "to-get-sick",
+        "gloss": "to get (sick), to catch a disease",
+        "sources": [
+          "ch26/vocabulary/17"
+        ]
+      }
+    ],
+    "작성하다": [
+      {
+        "sense": "to-fill-out",
+        "gloss": "to fill out",
+        "sources": [
+          "ch26/vocabulary/18"
+        ]
+      }
+    ],
+    "잠시만": [
+      {
+        "sense": "for-a-little-bit",
+        "gloss": "for a little bit, for just a little while",
+        "sources": [
+          "ch26/vocabulary/19"
+        ]
+      }
+    ],
+    "계속": [
+      {
+        "sense": "continuously",
+        "gloss": "continuously, consecutively",
+        "sources": [
+          "ch26/vocabulary/20"
+        ]
+      }
+    ],
+    "활동하다": [
+      {
+        "sense": "to-work",
+        "gloss": "to work, to act",
+        "sources": [
+          "ch26/vocabulary/21"
+        ]
+      }
+    ],
+    "제대로": [
+      {
+        "sense": "properly",
+        "gloss": "properly, right",
+        "sources": [
+          "ch26/vocabulary/22"
+        ]
+      }
+    ],
+    "증상": [
+      {
+        "sense": "symptom",
+        "gloss": "symptom",
+        "sources": [
+          "ch26/vocabulary/23"
+        ]
+      }
+    ],
+    "목": [
+      {
+        "sense": "throat",
+        "gloss": "throat",
+        "sources": [
+          "ch26/vocabulary/24"
+        ]
+      }
+    ],
+    "따갑다": [
+      {
+        "sense": "to-be-sore",
+        "gloss": "to be sore",
+        "sources": [
+          "ch26/vocabulary/25"
+        ]
+      }
+    ],
+    "기운이 없다": [
+      {
+        "sense": "to-have-no-energy",
+        "gloss": "to have no energy, to feel down",
+        "sources": [
+          "ch26/vocabulary/26"
+        ]
+      }
+    ],
+    "유행하다": [
+      {
+        "sense": "to-be-popular",
+        "gloss": "to be popular, to be in fashion",
+        "sources": [
+          "ch26/vocabulary/27"
+        ]
+      }
+    ],
+    "정도": [
+      {
+        "sense": "level",
+        "gloss": "level, degree, approximately",
+        "sources": [
+          "ch27/vocabulary/0"
+        ]
+      }
+    ],
+    "시험": [
+      {
+        "sense": "test",
+        "gloss": "test, exam",
+        "sources": [
+          "ch27/vocabulary/1"
+        ]
+      }
+    ],
+    "수업": [
+      {
+        "sense": "class",
+        "gloss": "class",
+        "sources": [
+          "ch27/vocabulary/2"
+        ]
+      }
+    ],
+    "빠지다": [
+      {
+        "sense": "to-be-omitted",
+        "gloss": "to be omitted, to not be included",
+        "sources": [
+          "ch27/vocabulary/3"
+        ]
+      }
+    ],
+    "필기하다": [
+      {
+        "sense": "to-take-notes",
+        "gloss": "to take notes",
+        "sources": [
+          "ch27/vocabulary/4"
+        ]
+      }
+    ],
+    "양호실": [
+      {
+        "sense": "nurse-s-office",
+        "gloss": "nurse's office",
+        "sources": [
+          "ch27/vocabulary/6"
+        ]
+      }
+    ],
+    "쉬다": [
+      {
+        "sense": "to-rest",
+        "gloss": "to rest",
+        "sources": [
+          "ch27/vocabulary/7"
+        ]
+      }
+    ],
+    "고맙다": [
+      {
+        "sense": "to-be-thankful",
+        "gloss": "to be thankful, to be grateful",
+        "sources": [
+          "ch27/vocabulary/9"
+        ]
+      }
+    ],
+    "머리": [
+      {
+        "sense": "head",
+        "gloss": "head",
+        "sources": [
+          "ch27/vocabulary/10"
+        ]
+      }
+    ],
+    "불덩이": [
+      {
+        "sense": "fireball",
+        "gloss": "fireball",
+        "sources": [
+          "ch27/vocabulary/11"
+        ]
+      }
+    ],
+    "쓰러지다": [
+      {
+        "sense": "to-faint",
+        "gloss": "to faint",
+        "sources": [
+          "ch27/vocabulary/12"
+        ]
+      }
+    ],
+    "조퇴하다": [
+      {
+        "sense": "to-leave-school-office-early",
+        "gloss": "to leave school/office early",
+        "sources": [
+          "ch27/vocabulary/13"
+        ]
+      }
+    ],
+    "생각": [
+      {
+        "sense": "thought",
+        "gloss": "thought",
+        "sources": [
+          "ch28/vocabulary/0"
+        ]
+      }
+    ],
+    "깔끔하다": [
+      {
+        "sense": "to-be-neat",
+        "gloss": "to be neat",
+        "sources": [
+          "ch28/vocabulary/1"
+        ]
+      }
+    ],
+    "장 보러 가다": [
+      {
+        "sense": "to-go-grocery-shopping",
+        "gloss": "to go grocery shopping",
+        "sources": [
+          "ch28/vocabulary/2"
+        ]
+      }
+    ],
+    "편하다": [
+      {
+        "sense": "to-be-comfortable",
+        "gloss": "to be comfortable",
+        "sources": [
+          "ch28/vocabulary/3"
+        ]
+      }
+    ],
+    "코앞": [
+      {
+        "sense": "right-around-the-corner",
+        "gloss": "right around the corner, happening very soon",
+        "sources": [
+          "ch28/vocabulary/4"
+        ]
+      }
+    ],
+    "요금": [
+      {
+        "sense": "charge",
+        "gloss": "charge, fee, fare",
+        "sources": [
+          "ch28/vocabulary/5"
+        ]
+      }
+    ],
+    "현금": [
+      {
+        "sense": "cash",
+        "gloss": "cash",
+        "sources": [
+          "ch28/vocabulary/6"
+        ]
+      }
+    ],
+    "드리다": [
+      {
+        "sense": "to-give-honorific",
+        "gloss": "to give (honorific)",
+        "sources": [
+          "ch28/vocabulary/7"
+        ]
+      }
+    ],
+    "낫다": [
+      {
+        "sense": "to-be-better",
+        "gloss": "to be better",
+        "sources": [
+          "ch28/vocabulary/8"
+        ]
+      }
+    ],
+    "상관없다": [
+      {
+        "sense": "to-not-matter",
+        "gloss": "to not matter",
+        "sources": [
+          "ch28/vocabulary/9"
+        ]
+      }
+    ],
+    "거스름돈": [
+      {
+        "sense": "small-change",
+        "gloss": "small change",
+        "sources": [
+          "ch28/vocabulary/10"
+        ]
+      }
+    ],
+    "번거롭다": [
+      {
+        "sense": "to-be-cumbersome",
+        "gloss": "to be cumbersome, inconvenient",
+        "sources": [
+          "ch28/vocabulary/11"
+        ]
+      }
+    ],
+    "선호하다": [
+      {
+        "sense": "to-prefer",
+        "gloss": "to prefer",
+        "sources": [
+          "ch28/vocabulary/12"
+        ]
+      }
+    ],
+    "다 오다": [
+      {
+        "sense": "to-arrive",
+        "gloss": "to arrive",
+        "sources": [
+          "ch28/vocabulary/13"
+        ]
+      }
+    ],
+    "세워 드리다": [
+      {
+        "sense": "to-drop-someone-off-stop-the-car",
+        "gloss": "to drop someone off/stop the car (honorific)",
+        "sources": [
+          "ch28/vocabulary/14"
+        ]
+      }
+    ],
+    "모시다": [
+      {
+        "sense": "to-take-to-honorific",
+        "gloss": "to take to (honorific)",
+        "sources": [
+          "ch28/vocabulary/15"
+        ]
+      }
+    ],
+    "얼마쯤": [
+      {
+        "sense": "about-how-much",
+        "gloss": "about how much",
+        "sources": [
+          "ch28/vocabulary/16"
+        ]
+      }
+    ],
+    "막히다": [
+      {
+        "sense": "traffic-is-bad",
+        "gloss": "traffic is bad, congested",
+        "sources": [
+          "ch28/vocabulary/17"
+        ]
+      }
+    ],
+    "타다": [
+      {
+        "sense": "to-ride",
+        "gloss": "to ride",
+        "sources": [
+          "ch28/vocabulary/18",
+          "ch29/vocabulary/25"
+        ]
+      }
+    ],
+    "좌측": [
+      {
+        "sense": "left-side",
+        "gloss": "left side",
+        "sources": [
+          "ch28/vocabulary/19"
+        ]
+      }
+    ],
+    "돌아서 가다": [
+      {
+        "sense": "to-take-a-detour",
+        "gloss": "to take a detour, turn around and go",
+        "sources": [
+          "ch28/vocabulary/20"
+        ]
+      }
+    ],
+    "댁": [
+      {
+        "sense": "someone-s-house-place-honorific",
+        "gloss": "someone's house/place (honorific)",
+        "sources": [
+          "ch28/vocabulary/21"
+        ]
+      }
+    ],
+    "집값": [
+      {
+        "sense": "house-price",
+        "gloss": "house price",
+        "sources": [
+          "ch28/vocabulary/22"
+        ]
+      }
+    ],
+    "비싸다": [
+      {
+        "sense": "to-be-expensive",
+        "gloss": "to be expensive",
+        "sources": [
+          "ch28/vocabulary/23"
+        ]
+      }
+    ],
+    "주위": [
+      {
+        "sense": "surroundings",
+        "gloss": "surroundings",
+        "sources": [
+          "ch28/vocabulary/24"
+        ]
+      }
+    ],
+    "다른 곳": [
+      {
+        "sense": "somewhere-else",
+        "gloss": "somewhere else, another place",
+        "sources": [
+          "ch28/vocabulary/25"
+        ]
+      }
+    ],
+    "비하다": [
+      {
+        "sense": "to-compare",
+        "gloss": "to compare, to be compared",
+        "sources": [
+          "ch28/vocabulary/26"
+        ]
+      }
+    ],
+    "싸다": [
+      {
+        "sense": "to-be-cheap",
+        "gloss": "to be cheap",
+        "sources": [
+          "ch28/vocabulary/27"
+        ]
+      }
+    ],
+    "교통편": [
+      {
+        "sense": "transportation",
+        "gloss": "transportation",
+        "sources": [
+          "ch28/vocabulary/28"
+        ]
+      }
+    ],
+    "시끄럽다": [
+      {
+        "sense": "to-be-loud",
+        "gloss": "to be loud, to be noisy",
+        "sources": [
+          "ch28/vocabulary/29"
+        ]
+      }
+    ],
+    "환급기": [
+      {
+        "sense": "refund-machine",
+        "gloss": "refund machine",
+        "sources": [
+          "ch29/vocabulary/0"
+        ]
+      }
+    ],
+    "찾아가다": [
+      {
+        "sense": "to-pick-up",
+        "gloss": "to pick up, to get something back",
+        "sources": [
+          "ch29/vocabulary/1"
+        ]
+      }
+    ],
+    "죄송하다": [
+      {
+        "sense": "to-be-sorry",
+        "gloss": "to be sorry",
+        "sources": [
+          "ch29/vocabulary/2",
+          "ch29/vocabulary/39"
+        ]
+      }
+    ],
+    "방향": [
+      {
+        "sense": "direction",
+        "gloss": "direction",
+        "sources": [
+          "ch29/vocabulary/3"
+        ]
+      }
+    ],
+    "반대": [
+      {
+        "sense": "opposite",
+        "gloss": "opposite",
+        "sources": [
+          "ch29/vocabulary/4"
+        ]
+      }
+    ],
+    "올라가다": [
+      {
+        "sense": "to-go-up",
+        "gloss": "to go up",
+        "sources": [
+          "ch29/vocabulary/5",
+          "ch29/vocabulary/47"
+        ]
+      }
+    ],
+    "반대쪽": [
+      {
+        "sense": "opposite-side",
+        "gloss": "opposite side",
+        "sources": [
+          "ch29/vocabulary/6"
+        ]
+      }
+    ],
+    "내려가다": [
+      {
+        "sense": "to-go-down",
+        "gloss": "to go down",
+        "sources": [
+          "ch29/vocabulary/7",
+          "ch29/vocabulary/49"
+        ]
+      }
+    ],
+    "늦다": [
+      {
+        "sense": "to-be-late",
+        "gloss": "to be late",
+        "sources": [
+          "ch29/vocabulary/8"
+        ]
+      }
+    ],
+    "헤매다": [
+      {
+        "sense": "to-get-lost-and-wander-around",
+        "gloss": "to get lost and wander around",
+        "sources": [
+          "ch29/vocabulary/9"
+        ]
+      }
+    ],
+    "단어": [
+      {
+        "sense": "word",
+        "gloss": "word",
+        "sources": [
+          "ch29/vocabulary/10"
+        ]
+      }
+    ],
+    "번역": [
+      {
+        "sense": "translation",
+        "gloss": "translation",
+        "sources": [
+          "ch29/vocabulary/11"
+        ]
+      }
+    ],
+    "공부하다": [
+      {
+        "sense": "to-study",
+        "gloss": "to study",
+        "sources": [
+          "ch29/vocabulary/12"
+        ]
+      }
+    ],
+    "이름": [
+      {
+        "sense": "name",
+        "gloss": "name",
+        "sources": [
+          "ch29/vocabulary/13"
+        ]
+      }
+    ],
+    "지하철": [
+      {
+        "sense": "subway",
+        "gloss": "subway",
+        "sources": [
+          "ch29/vocabulary/14",
+          "ch29/vocabulary/23"
+        ]
+      }
+    ],
+    "표": [
+      {
+        "sense": "ticket",
+        "gloss": "ticket",
+        "sources": [
+          "ch29/vocabulary/15"
+        ]
+      }
+    ],
+    "사려면": [
+      {
+        "sense": "to-buy",
+        "gloss": "to buy",
+        "sources": [
+          "ch29/vocabulary/16"
+        ]
+      }
+    ],
+    "어떻게": [
+      {
+        "sense": "how",
+        "gloss": "how",
+        "sources": [
+          "ch29/vocabulary/17"
+        ]
+      }
+    ],
+    "해야": [
+      {
+        "sense": "should",
+        "gloss": "should",
+        "sources": [
+          "ch29/vocabulary/18"
+        ]
+      }
+    ],
+    "되다": [
+      {
+        "sense": "to-be",
+        "gloss": "to be",
+        "sources": [
+          "ch29/vocabulary/19"
+        ]
+      }
+    ],
+    "저기": [
+      {
+        "sense": "excuse-me",
+        "gloss": "Excuse me",
+        "sources": [
+          "ch29/vocabulary/20"
+        ]
+      }
+    ],
+    "요즘": [
+      {
+        "sense": "these-days",
+        "gloss": "these days",
+        "sources": [
+          "ch29/vocabulary/21"
+        ]
+      }
+    ],
+    "기계": [
+      {
+        "sense": "machine",
+        "gloss": "machine",
+        "sources": [
+          "ch29/vocabulary/22"
+        ]
+      }
+    ],
+    "처음": [
+      {
+        "sense": "first",
+        "gloss": "first",
+        "sources": [
+          "ch29/vocabulary/24"
+        ]
+      }
+    ],
+    "가다": [
+      {
+        "sense": "to-go",
+        "gloss": "to go",
+        "sources": [
+          "ch29/vocabulary/26",
+          "ch29/vocabulary/52"
+        ]
+      }
+    ],
+    "비용": [
+      {
+        "sense": "cost",
+        "gloss": "cost",
+        "sources": [
+          "ch29/vocabulary/27"
+        ]
+      }
+    ],
+    "보증금": [
+      {
+        "sense": "deposit",
+        "gloss": "deposit",
+        "sources": [
+          "ch29/vocabulary/28"
+        ]
+      }
+    ],
+    "포함되다": [
+      {
+        "sense": "to-be-included",
+        "gloss": "to be included",
+        "sources": [
+          "ch29/vocabulary/29"
+        ]
+      }
+    ],
+    "도착": [
+      {
+        "sense": "arrival",
+        "gloss": "arrival",
+        "sources": [
+          "ch29/vocabulary/30"
+        ]
+      }
+    ],
+    "선택하다": [
+      {
+        "sense": "to-choose",
+        "gloss": "to choose",
+        "sources": [
+          "ch29/vocabulary/31"
+        ]
+      }
+    ],
+    "돈": [
+      {
+        "sense": "money",
+        "gloss": "money",
+        "sources": [
+          "ch29/vocabulary/32"
+        ]
+      }
+    ],
+    "넣다": [
+      {
+        "sense": "to-put-in",
+        "gloss": "to put in",
+        "sources": [
+          "ch29/vocabulary/33"
+        ]
+      }
+    ],
+    "일회용": [
+      {
+        "sense": "disposable",
+        "gloss": "disposable",
+        "sources": [
+          "ch29/vocabulary/34"
+        ]
+      }
+    ],
+    "카드": [
+      {
+        "sense": "card",
+        "gloss": "card",
+        "sources": [
+          "ch29/vocabulary/35"
+        ]
+      }
+    ],
+    "나오다": [
+      {
+        "sense": "to-come-out",
+        "gloss": "to come out",
+        "sources": [
+          "ch29/vocabulary/36"
+        ]
+      }
+    ],
+    "알다": [
+      {
+        "sense": "to-know",
+        "gloss": "to know",
+        "sources": [
+          "ch29/vocabulary/37"
+        ]
+      }
+    ],
+    "감사하다": [
+      {
+        "sense": "to-thank",
+        "gloss": "to thank",
+        "sources": [
+          "ch29/vocabulary/38",
+          "ch29/vocabulary/51"
+        ]
+      }
+    ],
+    "이거": [
+      {
+        "sense": "this",
+        "gloss": "this",
+        "sources": [
+          "ch29/vocabulary/40"
+        ]
+      }
+    ],
+    "합정역": [
+      {
+        "sense": "hapjeong-station",
+        "gloss": "Hapjeong station",
+        "sources": [
+          "ch29/vocabulary/41"
+        ]
+      }
+    ],
+    "가는": [
+      {
+        "sense": "to-go",
+        "gloss": "to go",
+        "sources": [
+          "ch29/vocabulary/42"
+        ]
+      }
+    ],
+    "거": [
+      {
+        "sense": "thing",
+        "gloss": "thing",
+        "sources": [
+          "ch29/vocabulary/43"
+        ]
+      }
+    ],
+    "맞다": [
+      {
+        "sense": "to-be-right",
+        "gloss": "to be right",
+        "sources": [
+          "ch29/vocabulary/44"
+        ]
+      }
+    ],
+    "행인": [
+      {
+        "sense": "passerby",
+        "gloss": "passerby",
+        "sources": [
+          "ch29/vocabulary/45"
+        ]
+      }
+    ],
+    "이쪽": [
+      {
+        "sense": "this-way",
+        "gloss": "this way",
+        "sources": [
+          "ch29/vocabulary/46"
+        ]
+      }
+    ],
+    "이쪽으로": [
+      {
+        "sense": "in-this-direction",
+        "gloss": "in this direction",
+        "sources": [
+          "ch29/vocabulary/48"
+        ]
+      }
+    ],
+    "다시": [
+      {
+        "sense": "again",
+        "gloss": "again",
+        "sources": [
+          "ch29/vocabulary/50"
+        ]
+      }
+    ],
+    "제한": [
+      {
+        "sense": "limit",
+        "gloss": "limit",
+        "sources": [
+          "ch30/vocabulary/0"
+        ]
+      }
+    ],
+    "국제선": [
+      {
+        "sense": "international-flight",
+        "gloss": "international flight",
+        "sources": [
+          "ch30/vocabulary/1"
+        ]
+      }
+    ],
+    "용기": [
+      {
+        "sense": "container",
+        "gloss": "container",
+        "sources": [
+          "ch30/vocabulary/2"
+        ]
+      }
+    ],
+    "담기다": [
+      {
+        "sense": "to-be-contained",
+        "gloss": "to be contained",
+        "sources": [
+          "ch30/vocabulary/3"
+        ]
+      }
+    ],
+    "국내선": [
+      {
+        "sense": "domestic-flight",
+        "gloss": "domestic flight",
+        "sources": [
+          "ch30/vocabulary/4"
+        ]
+      }
+    ],
+    "대부분": [
+      {
+        "sense": "mostly",
+        "gloss": "mostly, majority, for the most part",
+        "sources": [
+          "ch30/vocabulary/5"
+        ]
+      }
+    ],
+    "화장품": [
+      {
+        "sense": "cosmetics",
+        "gloss": "cosmetics",
+        "sources": [
+          "ch30/vocabulary/6"
+        ]
+      }
+    ],
+    "치약": [
+      {
+        "sense": "toothpaste",
+        "gloss": "toothpaste",
+        "sources": [
+          "ch30/vocabulary/7"
+        ]
+      }
+    ],
+    "버리다": [
+      {
+        "sense": "to-throw-away",
+        "gloss": "to throw away",
+        "sources": [
+          "ch30/vocabulary/8"
+        ]
+      }
+    ],
+    "속하다": [
+      {
+        "sense": "to-be-included",
+        "gloss": "to be included, to belong",
+        "sources": [
+          "ch30/vocabulary/9"
+        ]
+      }
+    ],
+    "젤": [
+      {
+        "sense": "gel",
+        "gloss": "gel",
+        "sources": [
+          "ch30/vocabulary/10"
+        ]
+      }
+    ],
+    "제한하다": [
+      {
+        "sense": "to-limit",
+        "gloss": "to limit, to restrict",
+        "sources": [
+          "ch30/vocabulary/11"
+        ]
+      }
+    ],
+    "면세점": [
+      {
+        "sense": "duty-free-shop",
+        "gloss": "duty-free shop",
+        "sources": [
+          "ch30/vocabulary/12"
+        ]
+      }
+    ],
+    "실망하다": [
+      {
+        "sense": "to-be-disappointed",
+        "gloss": "to be disappointed",
+        "sources": [
+          "ch30/vocabulary/13"
+        ]
+      }
+    ],
+    "마음껏": [
+      {
+        "sense": "as-much-as-one-likes",
+        "gloss": "as much as one likes",
+        "sources": [
+          "ch30/vocabulary/14"
+        ]
+      }
+    ],
+    "수학여행": [
+      {
+        "sense": "school-trip",
+        "gloss": "school trip",
+        "sources": [
+          "ch30/vocabulary/15"
+        ]
+      }
+    ],
+    "해외여행": [
+      {
+        "sense": "overseas-trip",
+        "gloss": "overseas trip",
+        "sources": [
+          "ch30/vocabulary/16"
+        ]
+      }
+    ],
+    "(돈을) 모으다": [
+      {
+        "sense": "to-save-up-money",
+        "gloss": "to save up (money)",
+        "sources": [
+          "ch30/vocabulary/17"
+        ]
+      }
+    ],
+    "막상": [
+      {
+        "sense": "in-the-event",
+        "gloss": "in the event, when S + is actually about to + V",
+        "sources": [
+          "ch30/vocabulary/18"
+        ]
+      }
+    ],
+    "별 거 없다": [
+      {
+        "sense": "to-be-nothing-special",
+        "gloss": "to be nothing special",
+        "sources": [
+          "ch30/vocabulary/19"
+        ]
+      }
+    ],
+    "좁다": [
+      {
+        "sense": "to-be-narrow",
+        "gloss": "to be narrow, to be cramped",
+        "sources": [
+          "ch30/vocabulary/20"
+        ]
+      }
+    ],
+    "아쉽다": [
+      {
+        "sense": "to-be-such-a-pity",
+        "gloss": "to be such a pity",
+        "sources": [
+          "ch30/vocabulary/21"
+        ]
+      }
+    ],
+    "길다": [
+      {
+        "sense": "to-be-long",
+        "gloss": "to be long",
+        "sources": [
+          "ch30/vocabulary/22"
+        ]
+      }
+    ],
+    "멀다": [
+      {
+        "sense": "to-be-far",
+        "gloss": "to be far",
+        "sources": [
+          "ch30/vocabulary/23"
+        ]
+      }
+    ],
+    "나이 먹다": [
+      {
+        "sense": "to-get-old",
+        "gloss": "to get old",
+        "sources": [
+          "ch30/vocabulary/24"
+        ]
+      }
+    ],
+    "장시간": [
+      {
+        "sense": "long-time",
+        "gloss": "long time, long hours",
+        "sources": [
+          "ch30/vocabulary/25"
+        ]
+      }
+    ],
+    "힘들다": [
+      {
+        "sense": "to-be-difficult",
+        "gloss": "to be difficult, to be tough, to be hard",
+        "sources": [
+          "ch30/vocabulary/26"
+        ]
+      }
+    ],
+    "곤욕": [
+      {
+        "sense": "trouble",
+        "gloss": "trouble, difficulty",
+        "sources": [
+          "ch30/vocabulary/27"
+        ]
+      }
+    ],
+    "액체류": [
+      {
+        "sense": "liquid",
+        "gloss": "liquid",
+        "sources": [
+          "ch30/vocabulary/28"
+        ]
+      }
+    ],
+    "반입": [
+      {
+        "sense": "carrying-into",
+        "gloss": "carrying into",
+        "sources": [
+          "ch30/vocabulary/29"
+        ]
+      }
+    ]
+  }
+}

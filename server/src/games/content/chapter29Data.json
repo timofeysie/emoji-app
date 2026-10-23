@@ -1,0 +1,562 @@
+{
+    "id": "29",
+    "categoryMappingId": 0,
+    "chapter": "29",
+    "titleTarget": "저기, 지하철 표 사려면 어떻게 해야 되죠?",
+    "titleNative": "Excuse me, what should I do to buy subway tickets?",
+    "dialog": [
+        {
+            "index": 0,
+            "speakerNameTarget": "영민",
+            "speakerNameNative": "Yeong-min",
+            "speechTarget": "저기, 지하철 표 사려면 어떻게 해야 되죠?",
+            "speechNative": "Excuse me, what should I do to buy subway tickets?"
+        },
+        {
+            "index": 1,
+            "speakerNameTarget": "역무원",
+            "speakerNameNative": "Station Employee",
+            "speechTarget": "아, 요즘은 저기 저 기계로 다 해요.",
+            "speechNative": "Oh, these days, you do everything on that machine over there."
+        },
+        {
+            "index": 2,
+            "speakerNameTarget": "영민",
+            "speakerNameNative": "Yeong-min",
+            "speechTarget": "아, 제가 지하철을 처음 타 봐서...",
+            "speechNative": "Oh, it’s my first time taking the subway, so..."
+        },
+        {
+            "index": 3,
+            "speakerNameTarget": "역무원",
+            "speakerNameNative": "Station Employee",
+            "speechTarget": "같이 가시죠. 제가 도와 드릴게요. 자, 여기 도착역을 선택하고 돈을 넣으면 이렇게 일회용 카드가 나와요.",
+            "speechNative": "Let’s go together. I will help you. Here, choose the arrival station and put in your money, and then a disposable card comes out like this."
+        },
+        {
+            "index": 4,
+            "speakerNameTarget": "영민",
+            "speakerNameNative": "Yeong-min",
+            "speechTarget": "보증금 500원 포함돼 있으니까 도착해서 꼭 보증금 환급기에 카드 넣고 보증금 찾아가세요.",
+            "speechNative": "A 500 won deposit is included in the price, so after you arrive at the station, make sure you put the card in the deposit refund machine to get your deposit back."
+        },
+        {
+            "index": 5,
+            "speakerNameTarget": "영민",
+            "speakerNameNative": "Yeong-min",
+            "speechTarget": "네, 알겠습니다. 감사합니다.",
+            "speechNative": "Yes, I got it. Thank you."
+        },
+        {
+            "index": 6,
+            "speakerNameTarget": "영민",
+            "speakerNameNative": "Yeong-min",
+            "speechTarget": "저기 죄송한데, 이거 합정역 가는 거 맞나요?",
+            "speechNative": "Excuse me. Is this the right subway to Hapjeong station?"
+        },
+        {
+            "index": 7,
+            "speakerNameTarget": "행인",
+            "speakerNameNative": "Passerby",
+            "speechTarget": "합정역이요? 어... 아닐 텐데... 잠시만요. 아, 이 방향이 아니네요! 반대 방향으로 가셔야 돼요.",
+            "speechNative": "Hapjeong station? Um... I don’t think so... Just a second. Oh, it’s not this direction. You have to go in the opposite direction."
+        },
+        {
+            "index": 8,
+            "speakerNameTarget": "영민",
+            "speakerNameNative": "Yeong-min",
+            "speechTarget": "아, 그래요?",
+            "speechNative": "Oh, do I?"
+        },
+        {
+            "index": 9,
+            "speakerNameTarget": "행인",
+            "speakerNameNative": "Passerby",
+            "speechTarget": "네, 이쪽으로 올라가셔서 반대쪽으로 다시 내려가서 타세요.",
+            "speechNative": "Yes. Go up this way, and go back down the stairs on the other side and take the train."
+        },
+        {
+            "index": 10,
+            "speakerNameTarget": "영민",
+            "speakerNameNative": "Yeong-min",
+            "speechTarget": "네, 감사합니다.",
+            "speechNative": "Okay. Thank you."
+        },
+
+
+        {
+            "index": 11,
+            "speakerNameTarget": "영민",
+            "speakerNameNative": "Yeong-min",
+            "speechNative": "Yes, I’m taking the subway now",
+            "speechTarget": "응. 나 이제 지하철 타!"
+        },
+
+        {
+            "index": 12,
+            "speakerNameTarget": "수민",
+            "speakerNameNative": "Su-min",
+            "speechNative": "What? You’re taking it now? What made you so late?",
+            "speechTarget": "뭐? 이제 탄다고? 왜 이렇게 늦었어?"
+        },
+        {
+            "index": 13,
+            "speakerNameTarget": "영민",
+            "speakerNameNative": "Yeong-min",
+            "speechNative": "I got a little lost. You know it’s my first time taking the subway.",
+            "speechTarget": "좀 헤맸어. 나 지하철 처음 타 보잖아."
+        },
+        {
+            "index": 14,
+            "speakerNameTarget": "수민",
+            "speakerNameNative": "Su-min",
+            "speechNative": "What? It’s your first time taking the subway?",
+            "speechTarget": "뭐? 지하철을 처음 타 본다고?"
+        },
+        {
+            "index": 15,
+            "speakerNameTarget": "영민",
+            "speakerNameNative": "Yeong-min",
+            "speechNative": "Yeah. Where I live, there is no subway.",
+            "speechTarget": "그래. 나 사는 동네는 지하철이 없어."
+        },
+        {
+            "index": 16,
+            "speakerNameTarget": "수민",
+            "speakerNameNative": "Su-min",
+            "speechNative": "Oh my god. Are you from a star?",
+            "speechTarget": "헐. 너 별에서 왔니?"
+        },
+        {
+            "index": 17,
+            "speakerNameTarget": "영민",
+            "speakerNameNative": "Yeong-min",
+            "speechNative": "Yes, I’m from a star. Just wait a little bit. I’ll be there soon.",
+            "speechTarget": "그래. 별에서 왔다! 쫌만 기다려. 금방 가!"
+        },
+        {
+            "index": 18,
+            "speakerNameTarget": "수민",
+            "speakerNameNative": "Su-min",
+            "speechNative": "Okay. Come here safely and don’t get lost in the subway.",
+            "speechTarget": "알겠어. 지하철에서 길 잃지 말고 조심히 와."
+        }
+    ],
+    "vocabulary": [
+        {
+            "id": 0,
+            "targetLanguageText": "환급기",
+            "nativeLanguageText": "refund machine"
+        },
+        {
+            "id": 1,
+            "targetLanguageText": "찾아가다",
+            "nativeLanguageText": "to pick up, to get something back"
+        },
+        {
+            "id": 2,
+            "targetLanguageText": "죄송하다",
+            "nativeLanguageText": "to be sorry"
+        },
+        {
+            "id": 3,
+            "targetLanguageText": "방향",
+            "nativeLanguageText": "direction"
+        },
+        {
+            "id": 4,
+            "targetLanguageText": "반대",
+            "nativeLanguageText": "opposite"
+        },
+        {
+            "id": 5,
+            "targetLanguageText": "올라가다",
+            "nativeLanguageText": "to go up"
+        },
+        {
+            "id": 6,
+            "targetLanguageText": "반대쪽",
+            "nativeLanguageText": "opposite side"
+        },
+        {
+            "id": 7,
+            "targetLanguageText": "내려가다",
+            "nativeLanguageText": "to go down"
+        },
+        {
+            "id": 8,
+            "targetLanguageText": "늦다",
+            "nativeLanguageText": "to be late"
+        },
+        {
+            "id": 9,
+            "targetLanguageText": "헤매다",
+            "nativeLanguageText": "to get lost and wander around"
+        },
+        {
+            "id": 10,
+            "targetLanguageText": "단어",
+            "nativeLanguageText": "word"
+        },
+        {
+            "id": 11,
+            "targetLanguageText": "번역",
+            "nativeLanguageText": "translation"
+        },
+        {
+            "id": 12,
+            "targetLanguageText": "공부하다",
+            "nativeLanguageText": "to study"
+        },
+        {
+            "id": 13,
+            "targetLanguageText": "이름",
+            "nativeLanguageText": "name"
+        },
+        {
+            "id": 14,
+            "targetLanguageText": "지하철",
+            "nativeLanguageText": "subway"
+        },
+        {
+            "id": 15,
+            "targetLanguageText": "표",
+            "nativeLanguageText": "ticket"
+        },
+        {
+            "id": 16,
+            "targetLanguageText": "사려면",
+            "nativeLanguageText": "to buy"
+        },
+        {
+            "id": 17,
+            "targetLanguageText": "어떻게",
+            "nativeLanguageText": "how"
+        },
+        {
+            "id": 18,
+            "targetLanguageText": "해야",
+            "nativeLanguageText": "should"
+        },
+        {
+            "id": 19,
+            "targetLanguageText": "되다",
+            "nativeLanguageText": "to be"
+        },
+        {
+            "id": 20,
+            "targetLanguageText": "저기",
+            "nativeLanguageText": "Excuse me"
+        },
+        {
+            "id": 21,
+            "targetLanguageText": "요즘",
+            "nativeLanguageText": "these days"
+        },
+        {
+            "id": 22,
+            "targetLanguageText": "기계",
+            "nativeLanguageText": "machine"
+        },
+        {
+            "id": 23,
+            "targetLanguageText": "지하철",
+            "nativeLanguageText": "subway"
+        },
+        {
+            "id": 24,
+            "targetLanguageText": "처음",
+            "nativeLanguageText": "first"
+        },
+        {
+            "id": 25,
+            "targetLanguageText": "타다",
+            "nativeLanguageText": "to take, to ride"
+        },
+        {
+            "id": 26,
+            "targetLanguageText": "가다",
+            "nativeLanguageText": "to go"
+        },
+        {
+            "id": 27,
+            "targetLanguageText": "비용",
+            "nativeLanguageText": "cost"
+        },
+        {
+            "id": 28,
+            "targetLanguageText": "보증금",
+            "nativeLanguageText": "deposit"
+        },
+        {
+            "id": 29,
+            "targetLanguageText": "포함되다",
+            "nativeLanguageText": "to be included"
+        },
+        {
+            "id": 30,
+            "targetLanguageText": "도착",
+            "nativeLanguageText": "arrival"
+        },
+        {
+            "id": 31,
+            "targetLanguageText": "선택하다",
+            "nativeLanguageText": "to choose"
+        },
+        {
+            "id": 32,
+            "targetLanguageText": "돈",
+            "nativeLanguageText": "money"
+        },
+        {
+            "id": 33,
+            "targetLanguageText": "넣다",
+            "nativeLanguageText": "to put in"
+        },
+        {
+            "id": 34,
+            "targetLanguageText": "일회용",
+            "nativeLanguageText": "disposable"
+        },
+        {
+            "id": 35,
+            "targetLanguageText": "카드",
+            "nativeLanguageText": "card"
+        },
+        {
+            "id": 36,
+            "targetLanguageText": "나오다",
+            "nativeLanguageText": "to come out"
+        },
+        {
+            "id": 37,
+            "targetLanguageText": "알다",
+            "nativeLanguageText": "to know"
+        },
+        {
+            "id": 38,
+            "targetLanguageText": "감사하다",
+            "nativeLanguageText": "to thank"
+        },
+        {
+            "id": 39,
+            "targetLanguageText": "죄송하다",
+            "nativeLanguageText": "to be sorry"
+        },
+        {
+            "id": 40,
+            "targetLanguageText": "이거",
+            "nativeLanguageText": "this"
+        },
+        {
+            "id": 41,
+            "targetLanguageText": "합정역",
+            "nativeLanguageText": "Hapjeong station"
+        },
+        {
+            "id": 42,
+            "targetLanguageText": "가는",
+            "nativeLanguageText": "to go"
+        },
+        {
+            "id": 43,
+            "targetLanguageText": "거",
+            "nativeLanguageText": "thing"
+        },
+        {
+            "id": 44,
+            "targetLanguageText": "맞다",
+            "nativeLanguageText": "to be right"
+        },
+        {
+            "id": 45,
+            "targetLanguageText": "행인",
+            "nativeLanguageText": "passerby"
+        },
+        {
+            "id": 46,
+            "targetLanguageText": "이쪽",
+            "nativeLanguageText": "this way"
+        },
+        {
+            "id": 47,
+            "targetLanguageText": "올라가다",
+            "nativeLanguageText": "to go up"
+        },
+        {
+            "id": 48,
+            "targetLanguageText": "이쪽으로",
+            "nativeLanguageText": "in this direction"
+        },
+        {
+            "id": 49,
+            "targetLanguageText": "내려가다",
+            "nativeLanguageText": "to go down"
+        },
+        {
+            "id": 50,
+            "targetLanguageText": "다시",
+            "nativeLanguageText": "again"
+        },
+        {
+            "id": 51,
+            "targetLanguageText": "감사하다",
+            "nativeLanguageText": "to thank"
+        },
+        {
+            "id": 52,
+            "targetLanguageText": "가다",
+            "nativeLanguageText": "to go"
+        }
+    ],
+    "topic": "Travel",
+    "level": "Intermediate",
+    "patterns": [
+        {
+            "id": 0,
+            "type": "formal",
+            "patternTarget": "VERB + -(으)려면 어떻게 해야 되죠?",
+            "patternNative": "What should I do to VERB?",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "지하철 표 사려면 어떻게 해야 되죠?",
+            "exampleSentenceNative": "What should I do to buy subway tickets?",
+            "sampleSentences": [
+              {
+                "id": 0,
+                "targetText": "여기 통과하려면 어떻게 해야 되죠?",
+                "nativeText": "What should I do to pass through here?"
+              },
+              {
+                "id": 1,
+                "targetText": "시험에 합격하려면 어떻게 해야 되죠?",
+                "nativeText": "What should I do to pass the exam?"
+              }
+            ],
+            "exercises": [
+              {
+                "id": 1,
+                "exercise": "What should I do to go there? (to go = 가다, there = 저기로)",
+                "answerKey": "저기로 가려면 어떻게 해야 되죠?"
+              },
+              {
+                "id": 2,
+                "exercise": "What should I do to turn off the computer? (to turn off = 끄다, computer = 컴퓨터)",
+                "answerKey": "컴퓨터 끄려면 어떻게 해야 되죠?"
+              }
+            ],
+            "appliedPatterns": [
+              {
+                "id": 1,
+                "pattern": "VERB + -(으)려면 어떻게 해야 하죠?",
+                "patternTargetText": "What should I do to buy subway tickets?",
+                "patternNativeText": "지하철 표 사려면 어떻게 해야 하죠?"
+              },
+              {
+                "id": 2,
+                "type": "casual",
+                "pattern": "VERB + -(으)려면 어떻게 해야 돼?",
+                "patternTargetText": "What should I do to buy subway tickets?",
+                "patternNativeText": "지하철 표 사려면 어떻게 해야 돼?"
+              }
+            ]
+          },
+          {
+            "id": 1,
+            "type": "formal",
+            "patternTarget": "이거 VERB + -는 거 맞나요?",
+            "patternNative": "Is this the right NOUN to VERB? / Is this supposed to VERB?",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "이거 합정역 가는 거 맞나요?",
+            "exampleSentenceNative": "Is this the right subway to Hapjeong station?",
+            "sampleSentences": [
+              {
+                "id": 0,
+                "targetText": "이거 명동 가는 거 맞나요?",
+                "nativeText": "Is this the right bus/subway to Myeong-dong?"
+              },
+              {
+                "id": 1,
+                "targetText": "이거 이렇게 작동하는 거 맞나요?",
+                "nativeText": "Is this supposed to work like this?"
+              }
+            ],
+            "exercises": [
+              {
+                "id": 1,
+                "exercise": "Is this supposed to make this kind of sound? (to make this kind of sound = 이런 소리 나다)",
+                "answerKey": "이거 이런 소리 나는 거 맞나요?"
+              },
+              {
+                "id": 2,
+                "exercise": "Is this the right train to Busan? (Busan = 부산)",
+                "answerKey": "이거 부산 가는 거 맞나요?"
+              }
+            ],
+            "appliedPatterns": [
+              {
+                "id": 1,
+                "pattern": "이거 VERB + -나요?",
+                "patternTargetText": "Does this go to Hapjeong station?",
+                "patternNativeText": "이거 합정역 가나요?"
+              },
+              {
+                "id": 2,
+                "pattern": "이거 VERB + -는 건가요?",
+                "patternTargetText": "Does this go to Hapjeong station?",
+                "patternNativeText": "이거 합정역 가는 건가요?"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "type": "casual",
+            "patternTarget": "VERB + -지 말고 VERB + -아/어/여",
+            "patternNative": "Don’t VERB and VERB.",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "지하철에서 길 잃지 말고 조심히 와.",
+            "exampleSentenceNative": "Come here safely and don’t get lost in the subway.",
+            "sampleSentences": [
+              {
+                "id": 0,
+                "targetText": "끊지 말고 계속 통화 해.",
+                "nativeText": "Don’t hang up and keep talking on the phone."
+              },
+              {
+                "id": 1,
+                "targetText": "사진 그걸로 찍지 말고 이거로 찍어.",
+                "nativeText": "Don’t take pictures with that. Do it with this one."
+              }
+            ],
+            "exercises": [
+              {
+                "id": 1,
+                "exercise": "Don’t open the window and just turn on the air conditioner. (to open = 열다, the window = 창문, to turn on the air conditioner = 에어컨 켜다)",
+                "answerKey": "창문 열지 말고 에어컨 켜."
+              },
+              {
+                "id": 2,
+                "exercise": "Don’t go there and just come here. (to go there = 거기로 가다, to come here = 여기로 오다)",
+                "answerKey": "거기로 가지 말고 여기로 와."
+              }
+            ],
+            "appliedPatterns": [
+              {
+                "id": 1,
+                "pattern": "VERB + -지 말고 VERB + -아/어/여야 돼.",
+                "patternTargetText": "You should should come here safely without getting lost in the subway.",
+                "patternNativeText": "지하철에서 길 잃지 말고 조심히 와야 돼요."
+              },
+              {
+                "id": 2,
+                "type": "formal",
+                "pattern": "VERB + -지 말고 VERB + -(으)세요",
+                "patternTargetText": "Don’t get lost in the subway and just come here safely.",
+                "patternNativeText": "지하철에서 길 잃지 말고 조심히 오세요."
+              }
+            ]
+          }
+          
+          
+          
+    ]
+}
