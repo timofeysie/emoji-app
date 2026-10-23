@@ -54,6 +54,7 @@ Related:
 | L16 | 2026-10-23 | **Learning-object identity is language-scoped** (`learning-objects.md` A1): `ko/lexeme/시험/test`, IRI `{base}/lo/ko/lexeme/%EC%8B%9C%ED%97%98/test`. The book, chapter and entry are **provenance** only (grouping and `ext/source-ref`), so the same sense taught by two books is one track. The sense registry is per language (`ko-senses.json`). This narrows L1: the book ID names provenance, not learning objects. |
 | L17 | 2026-10-23 | **Evidence is `assessed` statements** (`learning-objects.md` A2). Each tagged guess gives one `answered` statement (what happened) plus one `assessed` statement per observation (what it shows), about the learning object itself. The fold reads **only** `assessed`. Today's scorer, `choice-whole@1`, gives one direct observation on the whole. |
 | L18 | 2026-10-23 | **The kind is part of the identity** (`learning-objects.md` A3): `lexeme` (one word in one sense, activity type `…/activity-types/lexeme-sense`) or `expression` (multi-word entry, `…/activity-types/expression`). The registry stores it per sense; new senses default to `expression` when the word contains a space. |
+| L20 | 2026-10-23 | **A game fills up with extra new words** when overdue, review, `maxNew` new and practice still leave it short of `count` (and `fill` is on). A new student's first ch. 27 game is 10 new words, not 4. `maxNew` caps new words only while there's other work to ask. |
 | L19 | 2026-10-23 | Built-in choices made in Step 3 (revisit any of them freely): a student with a Leitner game **being played** (`active`/`paused`) can't get a new plan (409) — end it first; a **cancelled** Leitner game is discarded (its guesses are never exported) and is superseded like an unplayed one; creating a game with **nothing to ask** returns 422, not an empty game; review scope only brings back words with a source **in this book** (distractors need that book's chapter); new words **alternate aspects** within a game. |
 
 ---
@@ -685,8 +686,14 @@ Pick in this order:
 3. **Practice** fill, if still short of `count`: this chapter's
    not-yet-due tracks at **L0–L2**, lowest level first, then soonest
    `dueAt`. L3 tracks are never used for practice, so their next question
-   is the due review that can retire them. With `fill: false` the game is
-   shorter instead.
+   is the due review that can retire them.
+4. **More new** words, if still short (L20): the rest of this chapter's
+   new tracks, in the same order and alternation as step 2, past
+   `maxNew`. A new student has nothing to practise, so their first game
+   is all new words.
+
+With `fill: false`, steps 3 and 4 are skipped and the game is shorter
+instead.
 
 Constraints:
 
@@ -715,8 +722,9 @@ seed so aspects interleave. `readingItem` now also skips other senses of
 the same word; class-game output is unchanged (checked byte-for-byte over
 ch. 26–30 × 40 seeds × 3 skill mixes).
 
-With ch. 27's 14 words × 2 aspects = 28 tracks, a new student gets 4 new
-words per game, plus practice. A track needs at least four games over
+With ch. 27's 14 words × 2 aspects = 28 tracks, a new student's first
+game is 10 new words (L20); after that, games take up to 4 new words,
+plus practice, topped up with new words when practice runs out. A track needs at least four games over
 about 11 days (0 → 1 → 2 → 3 → retired, due after 1, 3 and 7 days) to
 retire, so a chapter is worked through in a few weeks of daily play, and
 review scope keeps other chapters' due words coming back until they
@@ -926,7 +934,7 @@ aspects default to `scored`.
       deleted" note, and the games list drops it live.
 - [x] Manual, local server + local Mongo + `emojiapp-dev` (2026-10-23),
       headless Chromium, throwaway player (removed afterwards): previewed a
-      ch. 27 plan (28 new tracks, 4 new picks), created it, opened its
+      ch. 27 plan (28 new tracks, 4 new picks, before L20), created it, opened its
       detail, took it to `active`, clicked **End Game**; the summary showed
       and the game was deleted (404). Retry export wasn't exercised in the
       browser (it needs a failing LRS).
@@ -936,7 +944,7 @@ aspects default to `scored`.
 On `emojiapp-dev` with one test student:
 
 1. The plan for a new student (ch. 27, chapter scope) shows 28 new tracks
-   and picks 4 new words plus 6 practice.
+   and picks 10 new words, alternating reading and writing (L20).
 2. Play the game with a few wrong answers. It **auto-exports and is
    deleted**, and the summary shows what moved.
 3. The next plan shows correct tracks at L1 (due tomorrow) and wrong ones

@@ -62,7 +62,7 @@ describe('LeitnerGamesController', () => {
     global.fetch = originalFetch;
   });
 
-  it('plans a dry run for a new student: 4 new ch. 27 words, tagged, nothing created', async () => {
+  it('plans a dry run for a new student: 10 new ch. 27 words, tagged, nothing created', async () => {
     const { status, body } = await post({ playerId: PLAYER_ID, chapter: 27, dryRun: true, now: NOW });
 
     expect(status).toBe(200);
@@ -72,10 +72,16 @@ describe('LeitnerGamesController', () => {
       ['시험', 'writing', 'new'],
       ['수업', 'reading', 'new'],
       ['빠지다', 'writing', 'new'],
+      ['필기하다', 'reading', 'new'],
+      ['보여 주다', 'writing', 'new'],
+      ['양호실', 'reading', 'new'],
+      ['쉬다', 'writing', 'new'],
+      ['괜찮다', 'reading', 'new'],
+      ['고맙다', 'writing', 'new'],
     ]);
-    expect(plan.questions).toHaveLength(4);
+    expect(plan.questions).toHaveLength(10);
     expect(plan.questions[0].options).toHaveLength(4);
-    expect(plan.report).toMatchObject({ available: { new: 28 }, short: true });
+    expect(plan.report).toMatchObject({ available: { new: 28 }, picked: { new: 10 }, short: false });
     expect(plan.supersedes).toEqual([]);
     expect(games.createLeitnerGame).not.toHaveBeenCalled();
   });
@@ -93,8 +99,8 @@ describe('LeitnerGamesController', () => {
     expect(created.title).toBe('Leitner: Player 7F3A · ch. 27');
     expect(created.title).not.toContain('Mia');
     expect(created.leitner).toMatchObject({ playerId: PLAYER_ID, book: 'korean-language-book', chapter: '27', scope: 'chapter', seed: 5 });
-    expect(created.leitner.picks).toHaveLength(4);
-    expect(created.questions.map((q: { sequence: number }) => q.sequence)).toEqual([1, 2, 3, 4]);
+    expect(created.leitner.picks).toHaveLength(10);
+    expect(created.questions.map((q: { sequence: number }) => q.sequence)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     const exam = created.questions.find((q) => q.learning?.learningObjectId === 'ko/lexeme/시험/test');
     expect(exam?.learning).toEqual({
       learningObjectId: 'ko/lexeme/시험/test',
@@ -160,11 +166,12 @@ describe('LeitnerGamesController', () => {
   });
 
   it('returns 422 instead of creating an empty game', async () => {
-    const dry = await post({ playerId: PLAYER_ID, chapter: 27, maxNew: 0, dryRun: true });
+    // No new words and no fill: a new student has nothing to ask.
+    const dry = await post({ playerId: PLAYER_ID, chapter: 27, maxNew: 0, fill: false, dryRun: true });
     expect(dry.status).toBe(200);
     expect(dry.body.plan.picks).toEqual([]);
 
-    const created = await post({ playerId: PLAYER_ID, chapter: 27, maxNew: 0, createdByUserId: CREATOR_ID });
+    const created = await post({ playerId: PLAYER_ID, chapter: 27, maxNew: 0, fill: false, createdByUserId: CREATOR_ID });
     expect(created.status).toBe(422);
     expect(games.createLeitnerGame).not.toHaveBeenCalled();
   });

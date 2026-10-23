@@ -76,7 +76,9 @@ function byLevelThenDue(a: Candidate, b: Candidate): number {
  *    competing freely: lowest level first, then oldest `dueAt`;
  * 2. new, up to `maxNew`, from this chapter in chapter order, alternating
  *    aspects;
- * 3. practice fill (when `fill`): this chapter's not-due tracks at L0–L2.
+ * 3. practice fill (when `fill`): this chapter's not-due tracks at L0–L2;
+ * 4. new top-up (when `fill`): if still short, more new words past
+ *    `maxNew`, so a new student's first game isn't four questions long.
  * Never retired tracks, never L3 for practice, one aspect per learning
  * object per game, and unbuildable picks are skipped and reported.
  */
@@ -150,23 +152,28 @@ export function planNextGame(input: PlanInput): { picks: PlanPick[]; report: Pla
   for (const candidate of fresh) {
     freshByObject.set(candidate.learningObjectId, [...(freshByObject.get(candidate.learningObjectId) ?? []), candidate]);
   }
-  for (const candidates of freshByObject.values()) {
-    if (newCount >= input.maxNew) break;
-    const preferred = input.aspects[newCount % input.aspects.length];
-    const ordered = [...candidates].sort((a, b) => Number(b.aspect === preferred) - Number(a.aspect === preferred));
-    for (const candidate of ordered) {
-      if (tryPick(candidate, 'new')) {
-        newCount++;
-        break;
+  const pickNew = (limit: number) => {
+    for (const candidates of freshByObject.values()) {
+      if (newCount >= limit || picks.length >= input.count) break;
+      const preferred = input.aspects[newCount % input.aspects.length];
+      const ordered = [...candidates].sort((a, b) => Number(b.aspect === preferred) - Number(a.aspect === preferred));
+      for (const candidate of ordered) {
+        if (tryPick(candidate, 'new')) {
+          newCount++;
+          break;
+        }
       }
     }
-  }
+  };
+  pickNew(input.maxNew);
 
-  // 3. Practice fill: L0–L2 only, so an L3 word's next question is its due review.
   if (input.fill) {
+    // 3. Practice fill: L0–L2 only, so an L3 word's next question is its due review.
     for (const candidate of [...practice].sort(byLevelThenDue)) {
       tryPick(candidate, 'practice');
     }
+    // 4. Still short (e.g. a new student has nothing to practise): more new words.
+    pickNew(Infinity);
   }
 
   return {

@@ -14,8 +14,8 @@
 //   --scope <s>        chapter (default) | review
 //   --aspects <list>   reading,writing (default)
 //   --count <n>        default 10
-//   --max-new <n>      default 4
-//   --no-fill          shorter game instead of practice fill
+//   --max-new <n>      default 4 (fill can add more when there's nothing to practise)
+//   --no-fill          shorter game instead of practice and new-word fill
 //   --seed <n>         default: server-derived (printed)
 //   --now <iso>        pretend it's this time (testing the schedule)
 //   --server <url>     default http://localhost:3000

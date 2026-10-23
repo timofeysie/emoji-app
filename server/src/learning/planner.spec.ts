@@ -48,13 +48,32 @@ const summary = (picks: ReturnType<typeof plan>['picks']) =>
   picks.map((pick) => `${pick.learningObjectId.split('/')[2]}:${pick.aspect}:${pick.reason}`);
 
 describe('planNextGame', () => {
-  it('gives a new student maxNew new words in chapter order, alternating aspects, and no fill', () => {
+  it('fills a new student\'s first game with new words in chapter order, alternating aspects', () => {
     const { picks, report } = plan();
-    expect(summary(picks)).toEqual(['w0:reading:new', 'w1:writing:new', 'w2:reading:new', 'w3:writing:new']);
-    expect(report).toMatchObject({ available: { new: 28, overdue: 0, practice: 0, review: 0 }, short: true });
+    expect(summary(picks)).toEqual([
+      'w0:reading:new', 'w1:writing:new', 'w2:reading:new', 'w3:writing:new', 'w4:reading:new',
+      'w5:writing:new', 'w6:reading:new', 'w7:writing:new', 'w8:reading:new', 'w9:writing:new',
+    ]);
+    expect(report).toMatchObject({
+      available: { new: 28, overdue: 0, practice: 0, review: 0 },
+      picked: { new: 10 },
+      short: false,
+    });
   });
 
-  it('puts overdue first (lowest level, then oldest due), then new, then practice fill', () => {
+  it('keeps a new student to maxNew new words with fill off', () => {
+    const { picks, report } = plan({ fill: false });
+    expect(summary(picks)).toEqual(['w0:reading:new', 'w1:writing:new', 'w2:reading:new', 'w3:writing:new']);
+    expect(report.short).toBe(true);
+  });
+
+  it('runs out of new words gracefully when the chapter is small', () => {
+    const { picks, report } = plan({ chapterObjects: objects(6) });
+    expect(picks).toHaveLength(6);
+    expect(report.short).toBe(true);
+  });
+
+  it('puts overdue first (lowest level, then oldest due), then new, then practice fill, then more new', () => {
     const observations = [
       // w0 reading L2, due 2026-10-23 (answered 10-20) → overdue
       ...trackAt('ko/lexeme/w0/s', 'reading', 2, '2026-10-20T08:00:00Z'),
@@ -69,7 +88,9 @@ describe('planNextGame', () => {
     const { picks } = plan({ observations });
     expect(summary(picks).slice(0, 3)).toEqual(['w2:writing:overdue', 'w1:reading:overdue', 'w0:reading:overdue']);
     expect(summary(picks).slice(3, 7)).toEqual(['w4:reading:new', 'w5:writing:new', 'w6:reading:new', 'w7:writing:new']);
-    expect(summary(picks).slice(7)).toEqual(['w3:reading:practice']);
+    expect(summary(picks).slice(7, 8)).toEqual(['w3:reading:practice']);
+    // Practice ran out: new words top the game up to count.
+    expect(summary(picks).slice(8)).toEqual(['w8:reading:new', 'w9:writing:new']);
   });
 
   it('asks only one aspect per learning object per game', () => {
@@ -147,7 +168,7 @@ describe('planNextGame', () => {
 
   it('skips a pick that cannot be built, reports it, and takes the next candidate', () => {
     const { picks, report } = plan({ canBuild: (object, aspect) => !(object.learningObjectId === 'ko/lexeme/w1/s' && aspect === 'writing') });
-    expect(summary(picks)).toEqual(['w0:reading:new', 'w1:reading:new', 'w2:reading:new', 'w3:writing:new']);
+    expect(summary(picks).slice(0, 4)).toEqual(['w0:reading:new', 'w1:reading:new', 'w2:reading:new', 'w3:writing:new']);
     expect(report.skipped).toEqual([{ learningObjectId: 'ko/lexeme/w1/s', sourceRef: 'ch27/vocabulary/1', aspect: 'writing', why: 'unbuildable' }]);
   });
 
