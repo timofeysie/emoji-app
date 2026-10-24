@@ -7,6 +7,7 @@ import { BadgeStateService } from './badge-state.service';
 import { NfcCardService, shortCardLabel } from './nfc-card.service';
 import type { SlotLabel } from './persistence/domain-types';
 import { QuestionCloser } from './question-closer';
+import { LeitnerFlowService } from './learning/leitner-flow.service';
 import { broadcastBindingsChanged, reportRosterChange } from './station-roster-sync';
 import { GameExportService, type GameExportOutcome } from './xapi/game-export.service';
 
@@ -130,8 +131,9 @@ export class GameFlowController {
     private readonly badgeStateService: BadgeStateService,
     private readonly nfcCardService: NfcCardService,
     private readonly gameExportService: GameExportService,
+    private readonly leitnerFlow?: LeitnerFlowService,
   ) {
-    this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService);
+    this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService, leitnerFlow);
   }
 
   @Get('games')
@@ -232,6 +234,8 @@ export class GameFlowController {
           (question) => question.state !== 'archived',
         ).length,
         nextRoundSequence: openQuestion ? null : (nextQuestion?.sequence ?? null),
+        // Leitner games: the next round opens by itself (start countdown or after the reveal).
+        countdown: openQuestion ? null : (this.leitnerFlow?.countdown(gameId) ?? null),
         currentQuestion: openQuestion
           ? {
               id: openQuestion.id,
@@ -487,8 +491,9 @@ export class GameFlowController {
 
       // Start Game → arm NFC: open the next closed question and notify controllers.
       // Without this, devices stay on green "active" and never poll for cards.
+      // Leitner games count down into their first round instead (continuous flow).
       let openedQuestionId: string | null = null;
-      if (state === 'active') {
+      if (state === 'active' && !(gameDetail?.kind === 'leitner-solo' && this.leitnerFlow)) {
         openedQuestionId = await this.gameDataRepository.openNextQuestionForGame(gameId);
         if (openedQuestionId) {
           const questionEvent = {
@@ -509,6 +514,8 @@ export class GameFlowController {
           }
         }
       }
+
+      this.leitnerFlow?.onGameState(gameDetail, state);
 
       // Leitner games export themselves on completion and are deleted when
       // the LRS has everything (docs/xAPI/leitner-method.md → lifecycle).
@@ -709,6 +716,16 @@ export class GameFlowController {
         res.status(200).json({ ok: true });
         return;
       }
+
+      // One round at a time: two open rounds leave guesses ambiguous and stall
+      // the Leitner auto-advance, which only opens a round when none is open.
+      const openQuestionId = await this.gameDataRepository.getOpenQuestionId(gameId);
+      if (openQuestionId && openQuestionId !== questionId) {
+        res.status(409).json({ error: 'Another round is already open; close it first.', openQuestionId });
+        return;
+      }
+      // The referee opened a round by hand: drop any pending Leitner countdown.
+      this.leitnerFlow?.cancel(gameId);
 
       await this.gameDataRepository.setQuestionState({
         gameId,

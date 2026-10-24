@@ -4,6 +4,7 @@ import { GameDataRepository } from './persistence/game-data.repository';
 import { BadgeStateService } from './badge-state.service';
 import { NfcCardService } from './nfc-card.service';
 import { GameExportService } from './xapi/game-export.service';
+import type { LeitnerFlowService } from './learning/leitner-flow.service';
 
 type ResponseMock = Pick<Response, 'status' | 'json'> & {
   status: jest.Mock;
@@ -232,6 +233,7 @@ describe('GameFlowController', () => {
       boundPairs: [],
       totalRounds: 2,
       nextRoundSequence: null,
+      countdown: null,
       currentQuestion: {
         id: '507f1f77bcf86cd799439015',
         text: 'Visible question',
@@ -419,6 +421,21 @@ describe('GameFlowController', () => {
 
     expect(repository.addParticipant).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('refuses to open a round while another one is open', async () => {
+    const res = createResponseMock();
+    repository.getOpenQuestionId.mockResolvedValueOnce('507f1f77bcf86cd799439099');
+
+    await controller.setQuestionState(
+      '507f1f77bcf86cd799439015',
+      { gameId: '507f1f77bcf86cd799439016', state: 'open' },
+      res as unknown as Response,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(repository.setQuestionState).not.toHaveBeenCalled();
+    expect(badgeStateService.broadcastDashboard).not.toHaveBeenCalled();
   });
 
   it('returns 200 for valid question state update and emits question.opened', async () => {
@@ -855,6 +872,41 @@ describe('GameFlowController', () => {
           questionId: '507f1f77bcf86cd799439015',
         }),
       );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('counts a Leitner game down into its first round instead of opening it at once', async () => {
+      const leitnerFlow = { onGameState: jest.fn(), countdown: jest.fn() };
+      const flowController = new GameFlowController(
+        repository,
+        badgeStateService as unknown as BadgeStateService,
+        nfcCardService,
+        gameExportService as unknown as GameExportService,
+        leitnerFlow as unknown as LeitnerFlowService,
+      );
+      const leitnerGame = {
+        id: '507f1f77bcf86cd799439011',
+        title: 'Leitner: Player 7F3A · ch. 27',
+        kind: 'leitner-solo' as const,
+        leitner: { playerId: '507f1f77bcf86cd7994390aa', book: 'korean-language-book', chapter: '27', scope: 'chapter' as const },
+        exportError: null,
+        exportAttemptedAt: null,
+        state: 'active' as const,
+        createdAt: new Date().toISOString(),
+        startedAt: null,
+        endedAt: null,
+        questions: [],
+        boundPairs: [],
+      };
+      repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'active' });
+      repository.getStationNamesByGameId.mockResolvedValue(['white']);
+      repository.getGameDetail.mockResolvedValue(leitnerGame);
+      const res = createResponseMock();
+
+      await flowController.setGameState('507f1f77bcf86cd799439011', { state: 'active' }, res as unknown as Response);
+
+      expect(repository.openNextQuestionForGame).not.toHaveBeenCalled();
+      expect(leitnerFlow.onGameState).toHaveBeenCalledWith(leitnerGame, 'active');
       expect(res.status).toHaveBeenCalledWith(200);
     });
 

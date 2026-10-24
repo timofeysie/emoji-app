@@ -16,6 +16,7 @@ import { XapiExportController } from './xapi/xapi-export.controller';
 import { GameExportService } from './xapi/game-export.service';
 import { LeitnerGamesController } from './learning/leitner-games.controller';
 import { LearningProgressController } from './learning/progress.controller';
+import { LeitnerFlowService } from './learning/leitner-flow.service';
 
 @Module({
   controllers: [
@@ -38,6 +39,7 @@ import { LearningProgressController } from './learning/progress.controller';
     NfcCardService,
     StationRosterSync,
     GameExportService,
+    LeitnerFlowService,
   ],
   exports: [MongoService, GameDataRepository],
 })

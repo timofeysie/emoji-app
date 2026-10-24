@@ -4,6 +4,7 @@ import { z, ZodError } from 'zod';
 import { GameDataRepository } from './persistence/game-data.repository';
 import { BadgeStateService } from './badge-state.service';
 import { QuestionCloser } from './question-closer';
+import { LeitnerFlowService } from './learning/leitner-flow.service';
 import { broadcastBindingsChanged } from './station-roster-sync';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
@@ -47,8 +48,9 @@ export class PairBindingsController {
   constructor(
     private readonly gameDataRepository: GameDataRepository,
     private readonly badgeStateService: BadgeStateService,
+    leitnerFlow?: LeitnerFlowService,
   ) {
-    this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService);
+    this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService, leitnerFlow);
   }
 
   @Post('games/:gameId/pairs')

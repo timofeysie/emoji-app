@@ -471,7 +471,12 @@ function QuestionCard({
             </p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        {/* A disabled button swallows its click and the card's button would
+            get it: Open / Close must never fold the card. */}
+        <div
+          className="flex shrink-0 items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
           {isActive && (
             <Button
               size="sm"
@@ -496,7 +501,14 @@ function QuestionCard({
               )}
             </Button>
           )}
-          <span className="text-xs text-muted-foreground">{expanded ? '▲' : '▼'}</span>
+          <button
+            type="button"
+            className="text-xs text-muted-foreground"
+            aria-label={expanded ? 'Hide answer options' : 'Show answer options'}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? '▲' : '▼'}
+          </button>
         </div>
       </button>
 
@@ -732,6 +744,7 @@ export function GameDetailView() {
         }
         if (
           message.type === 'question.result' ||
+          message.type === 'question.closed' ||
           message.type === 'game.state.changed' ||
           message.type === 'game.bindings.changed' ||
           message.type === 'nfc.tagged'
@@ -741,6 +754,9 @@ export function GameDetailView() {
         if (
           message.type === 'game.state.changed' ||
           message.type === 'game.bindings.changed' ||
+          // Leitner games open and close rounds without the referee.
+          message.type === 'question.opened' ||
+          message.type === 'question.closed' ||
           message.type === 'controller.joined' ||
           message.type === 'controller.readiness.changed' ||
           message.type === 'nfc.tagged'

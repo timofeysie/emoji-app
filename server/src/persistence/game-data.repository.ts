@@ -464,6 +464,30 @@ export class GameDataRepository {
     return questionId;
   }
 
+  /**
+   * Open the lowest-sequence round not yet played in this run (`draft`, or
+   * `closed` with no `closedAt` after a replay reset), if none is open. The
+   * Leitner flow's auto-advance (learning/leitner-flow.service.ts).
+   */
+  async openNextUnplayedQuestion(gameId: string): Promise<string | null> {
+    const { Question } = this.mongoService.getModels();
+    const gid = asObjectId(gameId);
+
+    if (await Question.exists({ gameId: gid, state: 'open' })) {
+      return null;
+    }
+    const next = await Question.findOne({ gameId: gid, state: { $in: ['draft', 'closed'] }, closedAt: null })
+      .sort({ sequence: 1 })
+      .lean();
+    if (!next) {
+      return null;
+    }
+
+    const questionId = (next._id as Types.ObjectId).toString();
+    await this.setQuestionState({ gameId, questionId, state: 'open' });
+    return questionId;
+  }
+
   async createNfcCardGroup(input: CreateNfcCardGroupInput): Promise<string> {
     const { NfcCardGroup, NfcCard } = this.mongoService.getModels();
     return this.withOptionalTransaction(async (session) => {

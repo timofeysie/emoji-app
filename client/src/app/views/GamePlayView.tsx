@@ -68,6 +68,8 @@ type GamePlayDetail = {
   }>;
   totalRounds: number;
   nextRoundSequence: number | null;
+  /** Leitner games: the next round opens by itself (absent on older servers). */
+  countdown?: { reason: 'start' | 'next'; opensInMs: number } | null;
   currentQuestion: PlayQuestion | null;
   previousResult: PreviousResult | null;
 };
@@ -182,6 +184,50 @@ function RoundReveal({ result }: { result: PreviousResult }) {
   );
 }
 
+/** Whole seconds left until `deadline` (a local Date.now() value), ticking. */
+function useSecondsLeft(deadline: number | null): number | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (deadline === null) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 200);
+    return () => window.clearInterval(id);
+  }, [deadline]);
+  return deadline === null ? null : Math.max(0, Math.ceil((deadline - now) / 1000));
+}
+
+/** Leitner games: "get ready" before the first round (and after Resume). */
+function StartCountdown({ secondsLeft, round }: { secondsLeft: number; round: number | null }) {
+  return (
+    <motion.section
+      key="start-countdown"
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9, y: -16 }}
+      transition={stageSpring}
+      className="rounded-xl border bg-card p-10 text-center shadow-sm"
+      aria-live="polite"
+    >
+      <p className="text-sm font-semibold uppercase tracking-wide text-primary">
+        {round !== null && round > 1 ? `Round ${round} is coming` : 'The game is starting'}
+      </p>
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.p
+          key={secondsLeft}
+          initial={{ opacity: 0, scale: 1.6 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.6 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+          className="my-4 text-7xl font-bold tabular-nums"
+        >
+          {secondsLeft > 0 ? secondsLeft : 'Go!'}
+        </motion.p>
+      </AnimatePresence>
+      <p className="text-sm text-muted-foreground">Get your cards ready.</p>
+    </motion.section>
+  );
+}
+
 function readinessLabel(ready: boolean | null): string {
   if (ready === true) return 'ready';
   if (ready === false) return 'wait';
@@ -197,6 +243,10 @@ export function GamePlayView() {
   // Question id whose answer is on screen; set when we see that round close.
   const [revealQuestionId, setRevealQuestionId] = useState<string | null>(null);
   const lastOpenQuestionIdRef = useRef<string | null>(null);
+  // Local deadline for a Leitner countdown: Date.now() + opensInMs, so clock skew doesn't matter.
+  const [countdownDeadline, setCountdownDeadline] = useState<number | null>(null);
+  const [countdownReason, setCountdownReason] = useState<'start' | 'next' | null>(null);
+  const secondsLeft = useSecondsLeft(countdownDeadline);
 
   const loadGame = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {
@@ -212,8 +262,16 @@ export function GamePlayView() {
           );
           return;
         }
-        setGame((await res.json()) as GamePlayDetail);
+        const detail = (await res.json()) as GamePlayDetail;
+        setGame(detail);
         setFetchError(null);
+        if (detail.countdown) {
+          setCountdownDeadline(Date.now() + detail.countdown.opensInMs);
+          setCountdownReason(detail.countdown.reason);
+        } else {
+          setCountdownDeadline(null);
+          setCountdownReason(null);
+        }
       } catch {
         setFetchError('Could not reach server.');
       } finally {
@@ -240,6 +298,7 @@ export function GamePlayView() {
           message.gameId === gameId &&
           (message.type === 'game.state.changed' ||
             message.type === 'question.opened' ||
+            message.type === 'question.countdown' ||
             message.type === 'question.closed' ||
             message.type === 'question.result' ||
             message.type === 'game.bindings.changed' ||
@@ -311,6 +370,7 @@ export function GamePlayView() {
   const boundPairs = game.boundPairs ?? [];
   const totalRounds = game.totalRounds ?? game.previousResult?.sequence ?? 0;
   const nextRoundSequence = game.nextRoundSequence ?? null;
+  const autoNext = countdownReason === 'next' && secondsLeft !== null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -371,6 +431,8 @@ export function GamePlayView() {
                 The game is open for joining.
               </p>
             </motion.div>
+          ) : !question && countdownReason === 'start' && secondsLeft !== null ? (
+            <StartCountdown secondsLeft={secondsLeft} round={nextRoundSequence} />
           ) : question ? (
             <motion.section
               key={`question-${question.id}`}
@@ -459,9 +521,11 @@ export function GamePlayView() {
                     id="previous-result-heading"
                     className="mt-1 text-lg font-semibold"
                   >
-                    {nextRoundSequence !== null
-                      ? 'Waiting for the referee to open the next round.'
-                      : 'Game complete'}
+                    {nextRoundSequence === null
+                      ? 'Game complete'
+                      : autoNext
+                        ? `Next round in ${secondsLeft}…`
+                        : 'Waiting for the referee to open the next round.'}
                   </h2>
                 </div>
                 <ScanLine
@@ -470,7 +534,7 @@ export function GamePlayView() {
                 />
               </div>
 
-              {nextRoundSequence !== null && (
+              {nextRoundSequence !== null && !autoNext && (
                 <div className="mt-4 rounded-lg border border-dashed bg-muted/20 p-3">
                   <p className="mb-2 text-sm font-semibold">
                     Ready for round {nextRoundSequence}?

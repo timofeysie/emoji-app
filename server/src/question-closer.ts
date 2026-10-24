@@ -1,5 +1,6 @@
 import type { GameDataRepository } from './persistence/game-data.repository';
 import type { BadgeStateService } from './badge-state.service';
+import type { LeitnerFlowService } from './learning/leitner-flow.service';
 
 export type CloseReason = 'referee' | 'all_pairs_answered' | 'player_removed';
 
@@ -8,6 +9,8 @@ export class QuestionCloser {
   constructor(
     private readonly gameDataRepository: GameDataRepository,
     private readonly badgeStateService: BadgeStateService,
+    /** Leitner games open their next round by themselves after the reveal. */
+    private readonly leitnerFlow?: LeitnerFlowService,
   ) {}
 
   async closeAndNotify(gameId: string, questionId: string, reason: CloseReason): Promise<void> {
@@ -65,6 +68,8 @@ export class QuestionCloser {
     if (stationNames.length > 0) {
       this.badgeStateService.sendToPairNames(stationNames, resultEvent);
     }
+
+    this.leitnerFlow?.onQuestionClosed(gameDetail, isFinalRound);
   }
 
   /**

@@ -55,6 +55,7 @@ Related:
 | L17 | 2026-10-23 | **Evidence is `assessed` statements** (`learning-objects.md` A2). Each tagged guess gives one `answered` statement (what happened) plus one `assessed` statement per observation (what it shows), about the learning object itself. The fold reads **only** `assessed`. Today's scorer, `choice-whole@1`, gives one direct observation on the whole. |
 | L18 | 2026-10-23 | **The kind is part of the identity** (`learning-objects.md` A3): `lexeme` (one word in one sense, activity type `…/activity-types/lexeme-sense`) or `expression` (multi-word entry, `…/activity-types/expression`). The registry stores it per sense; new senses default to `expression` when the word contains a space. |
 | L20 | 2026-10-23 | **A game fills up with extra new words** when overdue, review, `maxNew` new and practice still leave it short of `count` (and `fill` is on). A new student's first ch. 27 game is 10 new words, not 4. `maxNew` caps new words only while there's other work to ask. |
+| L21 | 2026-10-24 | **Continuous flow**: a Leitner game's rounds open by themselves. Start Game (and Resume) shows a **5-second countdown** in the student view, then opens round 1; when a round closes, the next one opens as the **5-second answer reveal** ends. Class games keep the referee opening each round. See [Continuous flow](#continuous-flow-l21). |
 | L19 | 2026-10-23 | Built-in choices made in Step 3 (revisit any of them freely): a student with a Leitner game **being played** (`active`/`paused`) can't get a new plan (409) — end it first; a **cancelled** Leitner game is discarded (its guesses are never exported) and is superseded like an unplayed one; creating a game with **nothing to ask** returns 422, not an empty game; review scope only brings back words with a source **in this book** (distractors need that book's chapter); new words **alternate aspects** within a game. |
 
 ---
@@ -631,6 +632,8 @@ planned ──create──▶ lobby/ready/playing ──complete──▶ auto-e
   returns 409 for that student until it succeeds. Planning on stale levels would re-ask
   words the student just answered. Re-sending is safe because statement IDs
   are stable (`LRS.md` → Idempotency).
+- **Rounds advance by themselves** while the game is `active`
+  ([Continuous flow](#continuous-flow-l21)).
 - **A game abandoned mid-way**: the referee **ends** it, which completes
   it, exports the guesses made so far, and deletes it. Unanswered words
   come back in the next plan.
@@ -639,6 +642,35 @@ planned ──create──▶ lobby/ready/playing ──complete──▶ auto-e
   success then deletes the game.
 - Deleting local rows doesn't touch the LRS. That's still covered by the
   per-actor deletion questions in `LRS.md` and `security.md`.
+
+### Continuous flow (L21)
+
+`learning/leitner-flow.service.ts` keeps one in-memory timer per Leitner
+game:
+
+| Event | What happens |
+| --- | --- |
+| Start Game, or Resume, with no round open | Countdown `start`, 5 s (`LEITNER_START_COUNTDOWN_MS`), then the next unplayed round opens |
+| A round closes (last answer, referee Close, player removed), not the final round | Countdown `next`, 5 s (`LEITNER_REVEAL_MS`, the student view's reveal), then the next round opens |
+| Pause, End Game, Cancel | Timer cancelled |
+| Timer fires but the game isn't `active`, or a round is already open | Nothing |
+
+- Each countdown is broadcast to the dashboard as `question.countdown`
+  `{ gameId, reason, opensAt, opensInMs }`. `GET /api/games/:id/play`
+  returns the pending one as `countdown: { reason, opensAt, opensInMs } | null`,
+  so a reloaded student view picks it up. The view counts from
+  `opensInMs`, so clock differences don't matter.
+- The student view shows "The game is starting · 5 4 3 2 1" for `start`
+  ("Round n is coming" after a Resume), and "Next round in n…" in place
+  of "Waiting for the referee" for `next`.
+- The opened round is announced to the dashboard and the badges' stations
+  as `question.opened`, as Start Game does.
+- "Next unplayed round" is the lowest-sequence `draft` round, or a
+  `closed` one with no `closedAt` (`openNextUnplayedQuestion`).
+- After the final round nothing opens; the referee ends the game, which
+  exports it.
+- A server restart drops pending timers. The referee can still open the
+  next round by hand.
 
 ---
 
@@ -938,6 +970,28 @@ aspects default to `scored`.
       detail, took it to `active`, clicked **End Game**; the summary showed
       and the game was deleted (404). Retry export wasn't exercised in the
       browser (it needs a failing LRS).
+
+### Step 5: Continuous flow (L21)
+
+- [x] `LeitnerFlowService` with specs (start countdown, next after the
+      reveal, none after the final round, class games untouched,
+      pause/end/cancel stop it, no countdown over an open round, no open
+      if the game left `active`). `QuestionCloser` calls it on every close;
+      Start Game / Resume use it instead of opening a round at once.
+- [x] Student view: start countdown, "Next round in n…".
+- [x] Referee view follows the flow (2026-10-24 fix): it reloads on
+      `question.opened` / `question.closed`, so it shows rounds the server
+      opened. Opening a round while another is open is refused (409),
+      because two open rounds stalled the auto-advance, and a manual Open
+      cancels the pending countdown. A click on a disabled Open no longer
+      folds the round card. Checked in headless Chromium: Start → round 1
+      shows Close by itself; Close → round 2 opens and shows by itself;
+      the API refuses a second open round.
+- [x] Manual, local server + Mongo (2026-10-24), headless Chromium,
+      throwaway player (removed afterwards; nothing sent to the LRS): the
+      countdown showed, round 1 opened about 6 s after Start Game (5 s
+      plus the reload), round 2 about 5.9 s after closing round 1, nothing
+      opened while paused, and Resume counted down into round 3.
 
 ### Acceptance
 

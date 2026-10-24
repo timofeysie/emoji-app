@@ -5,6 +5,7 @@ import {
   type StationRosterChange,
 } from './persistence/game-data.repository';
 import { QuestionCloser } from './question-closer';
+import { LeitnerFlowService } from './learning/leitner-flow.service';
 
 /** Tell dashboards a game's bindings changed so they refetch it. */
 export function broadcastBindingsChanged(
@@ -51,8 +52,9 @@ export class StationRosterSync implements OnModuleInit {
   constructor(
     private readonly badgeStateService: BadgeStateService,
     private readonly gameDataRepository: GameDataRepository,
+    leitnerFlow?: LeitnerFlowService,
   ) {
-    this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService);
+    this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService, leitnerFlow);
   }
 
   onModuleInit(): void {
