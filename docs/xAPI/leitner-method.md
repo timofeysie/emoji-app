@@ -511,14 +511,27 @@ both:
        student met in **any other chapter they've already played**
        (L15);
    - optionally the aspects (default reading + writing).
-2. The app shows the **plan**: the student's progress table (including
-   retired counts) and the 10 picks, each with its reason (`overdue` /
-   `new` / `practice` / `review`) and source chapter. This is
-   `POST /api/leitner-games` with `dryRun: true`.
-3. **Create** sends the same request without `dryRun`, with the dry run's
-   `seed` and `now` (both returned in the plan). The server re-plans, so
-   the result is the same, then creates the game in `draft` and the app
-   opens it in edit mode as usual.
+2. **Preview Plan** (optional) shows the **plan**: the student's progress
+   table (including retired counts) and the 10 picks, each with its reason
+   (`overdue` / `new` / `practice` / `review`) and source chapter, plus what
+   Create will preset (step 3). This is `POST /api/leitner-games` with
+   `dryRun: true`.
+3. **Create** sends the same request without `dryRun`. After a preview it
+   sends the dry run's `seed` and `now` (both returned in the plan), so the
+   server re-plans to the same game; without one, it plans fresh. The server
+   creates the game in `draft` and the app opens it in edit mode as usual.
+   Creating also **presets** the game (`setup` in the response), so the
+   referee can open it for joining straight away:
+   - **Station.** The student's badge is the one they were last bound to
+     (`Player.lastBadgeName`, set on every player binding, because a
+     Leitner game's bindings are deleted with it), else a badge named like
+     the student. If a **live** station (status in the last 90 s) has that
+     badge in its roster, and no unfinished game other than the ones being
+     superseded holds it, the station is bound and the student is bound to
+     the badge. Otherwise nothing is bound and `setup.notes` says why.
+   - **NFC card group.** The active group most recently assigned to any
+     game, else the demo group (Quiz Cards A-D).
+   A preset that fails doesn't fail Create; it's left to Referee Controls.
 4. **Join**: the student's badge joins, and the bindings panel offers only
    that student. The server rejects binding any other player
    (`PUT …/player-bindings/:badge` → 400 for a `leitner-solo` game whose
@@ -553,8 +566,9 @@ POST /api/leitner-games
     aspects?: ['reading','writing'],    // the generator builds only these (400 otherwise)
     count?: 10, maxNew?: 4, fill?: true,
     seed?, now?, dryRun? }              // seed default: from playerId + date (FNV-1a)
-→ 200 (dryRun) { plan }
-→ 201          { gameId, plan }
+→ 200 (dryRun) { plan, setup }         // setup: what Create would preset
+→ 201          { gameId, plan, setup }  // setup: { station: { stationName, badgeName } | null,
+                                        //         cardGroup: { name } | null, notes: string[] }
    plan = { book, chapter, scope, aspects, seed, now,
             picks: [{ learningObjectId, aspect, sourceRef, reason, level, status, dueAt, word, gloss, chapter }],
             report: { available, picked, skipped, short },   // counts per overdue / review / new / practice

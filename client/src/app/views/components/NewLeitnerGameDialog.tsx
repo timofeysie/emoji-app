@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, GraduationCap, Loader2, Sparkles } from 'lucide-react';
+import { AlertTriangle, CreditCard, GraduationCap, Loader2, Radio, Sparkles } from 'lucide-react';
 import { Button } from '../../shared/button';
 import { Checkbox } from '../../shared/checkbox';
 import {
@@ -32,6 +32,7 @@ import {
   PICK_REASONS,
   REASON_STYLES,
   type LeitnerScope,
+  type LeitnerSetup,
   type PendingExport,
   type Plan,
   type Player,
@@ -48,12 +49,13 @@ type Chapter = { chapter: string; entryCount: number };
 /** A refusal the referee can act on: open the blocking game. */
 type Blocked = { message: string; gameIds: string[]; action: string };
 
-type Preview = { plan: Plan; progress: Progress | null };
+type Preview = { plan: Plan; progress: Progress | null; setup: LeitnerSetup | null };
 
 /**
  * Games → New Leitner game (docs/xAPI/leitner-method.md → Referee flow):
- * pick the student, chapter, scope and aspects, preview the plan (a dry
- * run plus the progress table), then create the game and open it.
+ * pick the student, chapter, scope and aspects, optionally preview the plan
+ * (a dry run plus the progress table), then create the game and open it.
+ * Creating presets the student's live station and a card group.
  */
 export function NewLeitnerGameDialog() {
   const navigate = useNavigate();
@@ -177,9 +179,9 @@ export function NewLeitnerGameDialog() {
         handleRefusal(planRes.status, await errorBody(planRes));
         return;
       }
-      const { plan } = (await planRes.json()) as { plan: Plan };
+      const { plan, setup } = (await planRes.json()) as { plan: Plan; setup?: LeitnerSetup };
       const progress = progressRes.ok ? ((await progressRes.json()) as Progress) : null;
-      setPreview({ plan, progress });
+      setPreview({ plan, progress, setup: setup ?? null });
     } catch {
       setError('Network error — could not plan the game.');
     } finally {
@@ -188,21 +190,30 @@ export function NewLeitnerGameDialog() {
   };
 
   const createGame = async () => {
-    if (!preview) return;
+    if (!playerId) {
+      setError('Pick a student.');
+      return;
+    }
     setCreating(true);
     setError(null);
+    setBlocked(null);
     try {
-      // The dry run's seed and now: the server re-plans to the same game.
+      // After a preview, its seed and now: the server re-plans to the same game.
+      const replay = preview ? { seed: preview.plan.seed, now: preview.plan.now } : {};
       const res = await fetch('/api/leitner-games', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          request({ createdByUserId: DEMO_CREATOR_ID, seed: preview.plan.seed, now: preview.plan.now }),
-        ),
+        body: JSON.stringify(request({ createdByUserId: DEMO_CREATOR_ID, ...replay })),
         credentials: 'same-origin',
       });
       if (!res.ok) {
-        handleRefusal(res.status, await errorBody(res));
+        const body = await errorBody(res);
+        // Nothing to ask: show the plan, so the referee sees why.
+        if (res.status === 422 && body['plan']) {
+          setPreview({ plan: body['plan'] as Plan, progress: null, setup: null });
+          return;
+        }
+        handleRefusal(res.status, body);
         return;
       }
       const { gameId } = (await res.json()) as { gameId: string };
@@ -357,7 +368,7 @@ export function NewLeitnerGameDialog() {
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button
-            variant={preview ? 'outline' : 'default'}
+            variant="outline"
             onClick={() => void previewPlan()}
             disabled={planning || creating || !playerId}
           >
@@ -366,8 +377,8 @@ export function NewLeitnerGameDialog() {
           </Button>
           <Button
             onClick={() => void createGame()}
-            disabled={!preview || picks.length === 0 || creating || planning}
-            title={!preview ? 'Preview the plan first' : picks.length === 0 ? 'Nothing to ask' : undefined}
+            disabled={!playerId || (preview !== null && picks.length === 0) || creating || planning}
+            title={preview && picks.length === 0 ? 'Nothing to ask' : undefined}
           >
             {creating ? (
               <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden />
@@ -396,7 +407,7 @@ function ReasonChip({ reason }: { reason: keyof typeof REASON_STYLES }) {
 }
 
 function PlanPreview({ preview }: { preview: Preview }) {
-  const { plan, progress } = preview;
+  const { plan, progress, setup } = preview;
   const pickedText = PICK_REASONS.filter((reason) => plan.report.picked[reason] > 0)
     .map((reason) => `${plan.report.picked[reason]} ${reason}`)
     .join(', ');
@@ -459,7 +470,45 @@ function PlanPreview({ preview }: { preview: Preview }) {
         </p>
       </div>
 
+      {setup && plan.picks.length > 0 && <SetupSummary setup={setup} />}
+
       {progress && progress.tracks.length > 0 && <ProgressTable progress={progress} />}
+    </div>
+  );
+}
+
+/** What Create presets, so the game can be opened for joining straight away. */
+function SetupSummary({ setup }: { setup: LeitnerSetup }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-md border px-3 py-2 text-xs">
+      <p className="font-semibold">Create also sets up</p>
+      <p className="flex items-center gap-1.5">
+        <Radio className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        {setup.station ? (
+          <span>
+            Binds <span className="font-medium">{setup.station.stationName}</span>
+            {setup.station.badgeName !== setup.station.stationName && (
+              <> (badge {setup.station.badgeName})</>
+            )}{' '}
+            to the student
+          </span>
+        ) : (
+          <span className="text-muted-foreground">No station: bind one in Referee Controls</span>
+        )}
+      </p>
+      {setup.cardGroup && (
+        <p className="flex items-center gap-1.5">
+          <CreditCard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <span>
+            Cards: <span className="font-medium">{setup.cardGroup.name}</span>
+          </span>
+        </p>
+      )}
+      {setup.notes.map((note) => (
+        <p key={note} className="text-[11px] text-muted-foreground">
+          {note}
+        </p>
+      ))}
     </div>
   );
 }

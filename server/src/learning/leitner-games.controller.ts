@@ -21,6 +21,7 @@ import {
   type BookContent,
 } from './book-content';
 import { foldTracks, type TrackState } from './leitner';
+import { LeitnerSetupService, previewSetup } from './leitner-setup.service';
 import { chapterOfSourceRef, KOREAN_BOOK, parseQualifiedSourceRef } from './learning-object';
 import { planNextGame, seedFrom, type PlanObject } from './planner';
 import { fetchStudentEvidence } from './student-evidence';
@@ -120,13 +121,15 @@ function pendingExport(games: LeitnerGameStatus[]) {
 /**
  * Plans and creates a student's next solo Leitner game
  * (docs/xAPI/leitner-method.md → Referee flow, API). Referee-only once
- * Step 0 auth lands.
+ * Step 0 auth lands. Creating also presets the student's live station and
+ * a card group (`setup`); the dry run says what it would preset.
  */
 @Controller('api')
 export class LeitnerGamesController {
   constructor(
     private readonly playerRepository: PlayerRepository,
     private readonly gameDataRepository: GameDataRepository,
+    private readonly leitnerSetup?: LeitnerSetupService,
   ) {}
 
   @Post('leitner-games')
@@ -264,8 +267,9 @@ export class LeitnerGamesController {
         supersedes,
       };
 
+      const resolvedSetup = await this.leitnerSetup?.resolve(player, supersedes).catch(() => undefined);
       if (input.dryRun) {
-        res.status(200).json({ plan });
+        res.status(200).json({ plan, ...(resolvedSetup ? { setup: previewSetup(resolvedSetup) } : {}) });
         return;
       }
       if (picks.length === 0) {
@@ -297,7 +301,8 @@ export class LeitnerGamesController {
         },
         questions,
       });
-      res.status(201).json({ gameId, plan });
+      const setup = resolvedSetup ? await this.leitnerSetup!.apply(gameId, player, resolvedSetup) : undefined;
+      res.status(201).json({ gameId, plan, ...(setup ? { setup } : {}) });
     } catch (error) {
       if (error instanceof LrsRequestError) {
         res.status(502).json({ error: 'The LRS request failed', status: error.status });

@@ -60,7 +60,7 @@ describe('PlayerRepository', () => {
     Game: { findById: jest.fn(), exists: jest.fn() },
     Guess: { find: jest.fn(), exists: jest.fn() },
     PairBinding: { find: jest.fn(), exists: jest.fn() },
-    Player: { create: jest.fn(), find: jest.fn(), findById: jest.fn() },
+    Player: { create: jest.fn(), find: jest.fn(), findById: jest.fn(), updateOne: jest.fn() },
     PlayerBinding: {
       find: jest.fn(),
       findOne: jest.fn(),
@@ -137,6 +137,8 @@ describe('PlayerRepository', () => {
         }),
         { $set: { unassignedAt: expect.any(Date) } },
       );
+      // Remembered on the player: it presets their next Leitner game.
+      expect(models.Player.updateOne).toHaveBeenCalledWith({ _id: PLAYER_A }, { $set: { lastBadgeName: 'red' } });
     });
 
     it('ends the previous holder and records a swap', async () => {

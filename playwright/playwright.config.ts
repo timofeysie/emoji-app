@@ -41,7 +41,8 @@ export default defineConfig({
       timeout: 30_000,
       stdout: 'ignore',
       stderr: 'pipe',
-      env: { STUB_LRS_PORT: String(STUB_LRS_PORT) },
+      // A small page cap, so every Leitner read follows `more` links (lrs-client.ts paging).
+      env: { STUB_LRS_PORT: String(STUB_LRS_PORT), STUB_LRS_MAX_PAGE: '5' },
     },
     {
       command: `node playwright/reset-e2e-db.mjs && npm run build:server && node dist/server/main.js`,

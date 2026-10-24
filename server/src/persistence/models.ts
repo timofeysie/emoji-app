@@ -144,6 +144,11 @@ const playerSchema = new Schema(
     firstName: { type: String, required: true, trim: true },
     /** Random UUID v4; never the Mongo `_id`. */
     externalId: { type: String, required: true, immutable: true },
+    /**
+     * Badge the player was last bound to, in any game. Kept here because a
+     * Leitner game's bindings are deleted with it; it presets the next one.
+     */
+    lastBadgeName: { type: String, default: null },
   },
   { timestamps: true, collection: 'players' },
 );

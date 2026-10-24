@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { WebSocket, WebSocketServer } from 'ws';
 
 const MAX_EMOJI_HISTORY = 100;
+/** Same as the client's STALE_CONNECTED_MS: older status means the controller is offline. */
+const STATION_LIVE_MS = 90_000;
 
 export const clientTimestampHintSchema = z.string().datetime({ offset: true }).nullish();
 
@@ -411,6 +413,23 @@ export class BadgeStateService {
   getStationRoster(stationName: string): string[] | null {
     const station = this.stationsByName.get(stationName);
     return station ? this.stationRoster(station) : null;
+  }
+
+  /**
+   * The live station whose roster has this badge, or null. Live: the
+   * controller posted a status in the last 90 s (the dashboard's rule).
+   */
+  findLiveStationForBadge(badgeName: string, now = Date.now()): { stationName: string; badgeNames: string[] } | null {
+    for (const station of this.stationsByName.values()) {
+      const badgeNames = this.stationRoster(station);
+      if (!badgeNames.includes(badgeName)) continue;
+      const live = [...station.slots.values()].some((slot) => {
+        const at = slot.status?.timestamp ? new Date(slot.status.timestamp).getTime() : Number.NaN;
+        return !Number.isNaN(at) && now - at <= STATION_LIVE_MS;
+      });
+      if (live) return { stationName: station.pairName, badgeNames };
+    }
+    return null;
   }
 
   /** Badge names in `badgeNames` that another live station also has in its roster. */

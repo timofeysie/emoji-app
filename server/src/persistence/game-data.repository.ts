@@ -596,6 +596,41 @@ export class GameDataRepository {
     });
   }
 
+  /** The active card group most recently assigned to any game, or null. */
+  async getLatestNfcCardGroup(): Promise<{ groupId: string; name: string } | null> {
+    const { GameNfcCardGroupAssignment, NfcCardGroup } = this.mongoService.getModels();
+    const assignments = await GameNfcCardGroupAssignment.find({ status: 'active' }, { groupId: 1 })
+      .sort({ assignedAt: -1 })
+      .limit(20)
+      .lean();
+    for (const assignment of assignments) {
+      const group = await NfcCardGroup.findOne({ _id: assignment.groupId, status: 'active' }, { name: 1 }).lean();
+      if (group) return { groupId: (assignment.groupId as Types.ObjectId).toString(), name: group.name };
+    }
+    return null;
+  }
+
+  /**
+   * Badges bound to a game that hasn't finished (not completed or cancelled),
+   * other than `ignoreGameIds`. Binding them elsewhere would take them away.
+   */
+  async findBadgesInUnfinishedGames(badgeNames: string[], ignoreGameIds: string[] = []): Promise<string[]> {
+    const { PairBinding, Game } = this.mongoService.getModels();
+    const bound = await PairBinding.find(
+      { pairName: { $in: badgeNames }, gameId: { $ne: null } },
+      { pairName: 1, gameId: 1 },
+    ).lean();
+    const ignored = new Set(ignoreGameIds);
+    const busy: string[] = [];
+    for (const binding of bound) {
+      const gameId = String(binding.gameId);
+      if (ignored.has(gameId)) continue;
+      const game = await Game.findById(binding.gameId, { state: 1 }).lean();
+      if (game && game.state !== 'completed' && game.state !== 'cancelled') busy.push(binding.pairName);
+    }
+    return busy;
+  }
+
   async getActiveNfcCardGroupForGame(
     gameId: string,
   ): Promise<{ groupId: string; name: string; cardCount: number } | null> {

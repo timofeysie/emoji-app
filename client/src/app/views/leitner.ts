@@ -90,6 +90,14 @@ export type Plan = {
   supersedes: string[];
 };
 
+/** What creating presets on the game (`setup` in the create and dry-run responses). */
+export type LeitnerSetup = {
+  station: { stationName: string; badgeName: string } | null;
+  cardGroup: { name: string } | null;
+  /** Why a part isn't preset; the referee does it in Referee Controls. */
+  notes: string[];
+};
+
 export type TrackChange = {
   learningObjectId: string;
   aspect: string;

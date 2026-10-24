@@ -17,6 +17,7 @@ import { GameExportService } from './xapi/game-export.service';
 import { LeitnerGamesController } from './learning/leitner-games.controller';
 import { LearningProgressController } from './learning/progress.controller';
 import { LeitnerFlowService } from './learning/leitner-flow.service';
+import { LeitnerSetupService } from './learning/leitner-setup.service';
 
 @Module({
   controllers: [
@@ -40,6 +41,7 @@ import { LeitnerFlowService } from './learning/leitner-flow.service';
     StationRosterSync,
     GameExportService,
     LeitnerFlowService,
+    LeitnerSetupService,
   ],
   exports: [MongoService, GameDataRepository],
 })

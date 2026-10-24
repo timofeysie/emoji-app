@@ -91,7 +91,8 @@ playwright/
   fixtures/
     api.ts                  # typed API helpers (createGame, bindStation, guess, …)
     game.ts                 # test.extend fixtures: a game in a given state
-    stub-lrs.ts             # read back statements the server sent to the stub LRS
+    stub-lrs.ts             # read back statements; seed Leitner evidence; inject LRS failures
+    leitner.ts              # solo Leitner games: plan, create, play one badge, end, progress
   tests/
     smoke.spec.ts
     players.api.spec.ts
@@ -100,7 +101,29 @@ playwright/
     game-flow.ui.spec.ts
     xapi-export.api.spec.ts
     xapi-export.ui.spec.ts
+    leitner-planning.api.spec.ts   # plans, the Leitner rules, scopes, per-student evidence
+    leitner-lifecycle.api.spec.ts  # play → auto-export → delete, supersede, 409s, Retry, bindings
+    leitner-flow.api.spec.ts       # continuous flow (L21): countdowns, pause/resume
+    leitner.ui.spec.ts             # New Leitner Game, student view, summary, Retry export
 ```
+
+### Leitner games (docs/xAPI/leitner-method.md)
+
+The Leitner tests cover the doc's Acceptance list against the stub LRS:
+
+- **Stub LRS reads.** `GET /statements` honours `agent`, `verb`,
+  `activity` + `related_activities` and `since`, and pages with `more`
+  (`STUB_LRS_MAX_PAGE=5` in the config, so every Leitner read follows
+  `more` links). Per-student separation (L4) is real, not faked.
+- **History without waiting days.** `stubLrs.seedAssessed()` posts
+  `assessed` statements with past timestamps, as earlier games would have
+  exported them, to reach L2, L3 and retirement, and for review scope.
+- **Failures.** `stubLrs.fail('POST' | 'GET')` makes the stub return an
+  error until `clearFailures()` (the `leitner` fixture clears it after each
+  test). This drives pending export and Retry, and the 502s.
+- **Flow timing.** `leitner.openRound()` opens rounds by hand, which cancels
+  the 5 s countdown, so most tests run fast. `leitner-flow.api.spec.ts` and
+  the UI play test wait the real countdowns (about 40 s together).
 
 Root `package.json` scripts:
 

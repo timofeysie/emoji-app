@@ -5,7 +5,6 @@ import { GameDataRepository } from './persistence/game-data.repository';
 import { learningTagSchema } from './learning/learning-object';
 import { BadgeStateService } from './badge-state.service';
 import { NfcCardService, shortCardLabel } from './nfc-card.service';
-import type { SlotLabel } from './persistence/domain-types';
 import { QuestionCloser } from './question-closer';
 import { LeitnerFlowService } from './learning/leitner-flow.service';
 import { broadcastBindingsChanged, reportRosterChange } from './station-roster-sync';
@@ -611,28 +610,14 @@ export class GameFlowController {
       return;
     }
 
-    const seedCards = this.nfcCardService.getCards();
-    const cards = seedCards
-      .filter((card): card is typeof card & { slotLabel: SlotLabel } => Boolean(card.slotLabel))
-      .map((card) => ({
-        cardUid: card.id,
-        slotLabel: card.slotLabel,
-        displayName: card.name,
-      }));
-    if (cards.length === 0) {
+    const demoGroup = this.nfcCardService.demoGroupInput();
+    if (demoGroup.cards.length === 0) {
       res.status(500).json({ error: 'Demo NFC seed has no cards with slotLabel' });
       return;
     }
 
     try {
-      const groupId = await this.gameDataRepository.ensureNfcCardGroup({
-        // Renamed from 'Demo Set' (Monkey A / Clown B), which databases may
-        // still hold: ensureNfcCardGroup returns an existing same-name group
-        // unchanged, so a new name is what picks up the A–D quiz cards.
-        name: 'Quiz Cards A-D',
-        description: 'Hardcoded quiz NFC cards A–D (seed)',
-        cards,
-      });
+      const groupId = await this.gameDataRepository.ensureNfcCardGroup(demoGroup);
       await this.gameDataRepository.assignNfcCardGroupToGame({ gameId, groupId });
       const group = await this.gameDataRepository.getActiveNfcCardGroupForGame(gameId);
       res.status(200).json({ group });

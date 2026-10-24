@@ -165,7 +165,22 @@ export class PlayerRepository {
       assignedAt: now,
       reason: input.reason ?? (hadBinding ? 'swap' : 'initial'),
     });
+    await Player.updateOne({ _id: playerId }, { $set: { lastBadgeName: input.badgeName } });
     return this.toBindingSummary(binding, toPlayerSummary(player));
+  }
+
+  /**
+   * The badge this player was last bound to: the remembered one, else their
+   * latest binding still stored (players bound before it was remembered).
+   */
+  async findLastBadgeName(playerId: string): Promise<string | null> {
+    const { Player, PlayerBinding } = this.mongoService.getModels();
+    const player = await Player.findById(asObjectId(playerId), { lastBadgeName: 1 }).lean();
+    if (player?.lastBadgeName) return player.lastBadgeName;
+    const latest = await PlayerBinding.findOne({ playerId: asObjectId(playerId) }, { badgeName: 1 })
+      .sort({ assignedAt: -1 })
+      .lean();
+    return latest?.badgeName ?? null;
   }
 
   /**

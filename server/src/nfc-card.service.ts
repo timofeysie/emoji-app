@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
+import type { SlotLabel } from './persistence/domain-types';
 
 export const nfcCardSchema = z.object({
   id: z.string().min(1),
@@ -53,6 +54,26 @@ export class NfcCardService {
 
   getCards(): NfcCard[] {
     return this.cards.map((card) => ({ ...card }));
+  }
+
+  /**
+   * The hardcoded quiz card group (seed cards with a slot), as
+   * `ensureNfcCardGroup` input. Renamed from 'Demo Set' (Monkey A / Clown B),
+   * which databases may still hold: ensureNfcCardGroup returns an existing
+   * same-name group unchanged, so a new name is what picks up the A–D cards.
+   */
+  demoGroupInput(): {
+    name: string;
+    description: string;
+    cards: Array<{ cardUid: string; slotLabel: SlotLabel; displayName: string }>;
+  } {
+    return {
+      name: 'Quiz Cards A-D',
+      description: 'Hardcoded quiz NFC cards A–D (seed)',
+      cards: this.cards
+        .filter((card): card is NfcCard & { slotLabel: SlotLabel } => Boolean(card.slotLabel))
+        .map((card) => ({ cardUid: card.id, slotLabel: card.slotLabel, displayName: card.name })),
+    };
   }
 
   findByUid(cardUid: string): NfcCard | undefined {
