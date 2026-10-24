@@ -287,6 +287,23 @@ function gamePlayers(
   return [...players].map(([pairName, stationName]) => ({ pairName, stationName }));
 }
 
+/**
+ * Players shown in round results and the guess chart: badges that joined
+ * this run, plus any badge that guessed. A badge bound with its station but
+ * never joined (switched off, not playing) isn't listed as "no answer".
+ * Scores still use every bound badge (`gamePlayers`), which the xAPI export
+ * reads.
+ */
+function playersWhoTookPart(
+  bindings: Array<{ pairName: string; stationName?: string | null; joined?: boolean | null }>,
+  guesses: Array<{ pairName?: string | null; stationName?: string | null }>,
+): Array<{ pairName: string; stationName: string }> {
+  return gamePlayers(
+    bindings.filter((binding) => binding.joined === true),
+    guesses,
+  );
+}
+
 @Injectable()
 export class GameDataRepository {
   constructor(private readonly mongoService: MongoService) {}
@@ -760,7 +777,7 @@ export class GameDataRepository {
 
     const [questions, bindings, assignment] = await Promise.all([
       Question.find({ gameId: asObjectId(gameId) }).sort({ sequence: 1 }).lean(),
-      PairBinding.find({ gameId: asObjectId(gameId) }, { pairName: 1, stationName: 1 }).lean(),
+      PairBinding.find({ gameId: asObjectId(gameId) }, { pairName: 1, stationName: 1, joined: 1 }).lean(),
       GameNfcCardGroupAssignment.findOne({
         gameId: asObjectId(gameId),
         status: 'active',
@@ -787,7 +804,7 @@ export class GameDataRepository {
         : Promise.resolve([]),
     ]);
 
-    const players = gamePlayers(bindings, guesses);
+    const players = playersWhoTookPart(bindings, guesses);
     const pairs = players.map((p) => p.pairName);
     const pairStations = Object.fromEntries(players.map((p) => [p.pairName, p.stationName]));
 
@@ -1200,6 +1217,37 @@ export class GameDataRepository {
   }
 
   /**
+   * A badge that answers is playing: mark its binding joined if the join
+   * itself was never recorded (otherwise the round would never auto-close).
+   * Returns true when it changed.
+   */
+  async markJoinedByGuess(gameId: string, badgeName: string): Promise<boolean> {
+    const { PairBinding } = this.mongoService.getModels();
+    const result = await PairBinding.updateOne(
+      { gameId: asObjectId(gameId), pairName: badgeName, joined: { $ne: true } },
+      { $set: { joined: true, updatedAt: new Date() } },
+    );
+    return result.modifiedCount > 0;
+  }
+
+  /** Who the open round is waiting for (logging): joined badges, who answered, bound but not joined. */
+  async answerStatus(
+    gameId: string,
+    questionId: string,
+  ): Promise<{ joined: string[]; answered: string[]; notJoined: string[] }> {
+    const { PairBinding, Guess } = this.mongoService.getModels();
+    const [bindings, guesses] = await Promise.all([
+      PairBinding.find({ gameId: asObjectId(gameId) }, { pairName: 1, joined: 1 }).lean(),
+      Guess.find({ gameId: asObjectId(gameId), questionId: asObjectId(questionId) }, { pairName: 1 }).lean(),
+    ]);
+    return {
+      joined: bindings.filter((b) => b.joined === true).map((b) => b.pairName),
+      answered: [...new Set(guesses.map((g) => g.pairName).filter((name): name is string => Boolean(name)))],
+      notJoined: bindings.filter((b) => b.joined !== true).map((b) => b.pairName),
+    };
+  }
+
+  /**
    * True when every joined player has a Guess for this question. Bound players
    * that never joined (e.g. an unpowered badge) do not hold the question open.
    * No joined players → false (do not auto-close).
@@ -1231,8 +1279,8 @@ export class GameDataRepository {
 
   /**
    * Build per-player correct/wrong outcomes for a closed question.
-   * Includes every bound player plus any unbound player that guessed;
-   * `slotLabel: null` means no guess was submitted.
+   * Includes every joined player plus any player that guessed;
+   * `slotLabel: null` means a joined player didn't answer.
    */
   async computeQuestionResult(gameId: string, questionId: string): Promise<QuestionResultPayload> {
     const { AnswerOption, Guess, PairBinding } = this.mongoService.getModels();
@@ -1258,11 +1306,11 @@ export class GameDataRepository {
 
     const bindings = await PairBinding.find(
       { gameId: asObjectId(gameId) },
-      { pairName: 1, stationName: 1 },
+      { pairName: 1, stationName: 1, joined: 1 },
     ).lean();
 
     const correctSlotLabel = correct.slotLabel as string;
-    const results = gamePlayers(bindings, guesses).map((player) => {
+    const results = playersWhoTookPart(bindings, guesses).map((player) => {
       const slotLabel = guessByPair.get(player.pairName) ?? null;
       return {
         pairName: player.pairName,

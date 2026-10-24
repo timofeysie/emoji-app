@@ -58,6 +58,10 @@ export class GameExportService {
       return failure(400, { error: 'Game has no startedAt/endedAt; cannot export.' });
     }
 
+    if (game.kind === 'leitner-solo') {
+      // One student: a badge that answered without a player was theirs.
+      await this.playerRepository.attributeLeitnerGuesses(gameId);
+    }
     const { missingBadges, bindings } = await this.playerRepository.getGamePlayerBindings(gameId);
     if (missingBadges.length > 0) {
       return this.leitnerFailure(game.kind, gameId, 400, {

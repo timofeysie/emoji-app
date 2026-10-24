@@ -52,7 +52,7 @@ describe('GameExportService', () => {
     deleteGame: jest.fn(),
     recordExportFailure: jest.fn(),
   };
-  const players = { getGamePlayerBindings: jest.fn(), getPlayer: jest.fn() };
+  const players = { getGamePlayerBindings: jest.fn(), getPlayer: jest.fn(), attributeLeitnerGuesses: jest.fn() };
   const service = new GameExportService(games as unknown as GameDataRepository, players as unknown as PlayerRepository);
 
   /** GET → the student's earlier statements; POST → `postStatus`. */
@@ -83,6 +83,20 @@ describe('GameExportService', () => {
   afterEach(() => {
     process.env = { ...originalEnv };
     global.fetch = originalFetch;
+  });
+
+  it("binds the student to a Leitner game's unassigned badge before exporting, but never for class games", async () => {
+    lrs([]);
+    await service.exportGame(GAME_ID);
+    expect(players.attributeLeitnerGuesses).toHaveBeenCalledWith(GAME_ID);
+    expect(players.attributeLeitnerGuesses.mock.invocationCallOrder[0]).toBeLessThan(
+      players.getGamePlayerBindings.mock.invocationCallOrder[0],
+    );
+
+    players.attributeLeitnerGuesses.mockClear();
+    games.getGameExportData.mockResolvedValue(leitnerGame({ kind: 'class', leitner: null }));
+    await service.exportGame(GAME_ID);
+    expect(players.attributeLeitnerGuesses).not.toHaveBeenCalled();
   });
 
   it('exports a Leitner game, deletes it, and summarises what moved (L10)', async () => {

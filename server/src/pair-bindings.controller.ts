@@ -5,6 +5,7 @@ import { GameDataRepository } from './persistence/game-data.repository';
 import { BadgeStateService } from './badge-state.service';
 import { QuestionCloser } from './question-closer';
 import { LeitnerFlowService } from './learning/leitner-flow.service';
+import { PlayerRepository } from './persistence/player.repository';
 import { broadcastBindingsChanged } from './station-roster-sync';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
@@ -49,6 +50,7 @@ export class PairBindingsController {
     private readonly gameDataRepository: GameDataRepository,
     private readonly badgeStateService: BadgeStateService,
     leitnerFlow?: LeitnerFlowService,
+    private readonly playerRepository?: PlayerRepository,
   ) {
     this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService, leitnerFlow);
   }
@@ -214,11 +216,27 @@ export class PairBindingsController {
 
     try {
       const { pairName, controllerId } = payloadResult.data;
+      const requested = payloadResult.data.badgeNames ?? [pairName];
       const joined = await this.gameDataRepository.markJoined({
         gameId,
         stationName: pairName,
-        badgeNames: payloadResult.data.badgeNames ?? [pairName],
+        badgeNames: requested,
       });
+      const unmatched = requested.filter((badge) => !joined.includes(badge));
+      console.log(
+        `[GAME] server | join | station=${pairName} gameId=${gameId} requested=[${requested.join(',')}] joined=[${joined.join(',')}]` +
+          (unmatched.length > 0 ? ` unmatched=[${unmatched.join(',')}] (not bound to this station in this game)` : ''),
+      );
+      // A solo Leitner game binds its student to the joining badge.
+      let boundStudent = false;
+      for (const badgeName of joined) {
+        if (await this.playerRepository?.bindLeitnerStudentOnJoin({ gameId, badgeName })) {
+          boundStudent = true;
+        }
+      }
+      if (boundStudent) {
+        broadcastBindingsChanged(this.badgeStateService, { gameId });
+      }
       const serverTime = new Date().toISOString();
       for (const badgeName of joined) {
         this.badgeStateService.broadcastDashboard({

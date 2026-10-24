@@ -7,6 +7,10 @@ export const LEITNER_START_COUNTDOWN_MS = 5_000;
 /** The student view's answer reveal (`REVEAL_MS` in GamePlayView): the next round opens when it ends. */
 export const LEITNER_REVEAL_MS = 5_000;
 
+function log(gameId: string, message: string): void {
+  console.log(`[GAME] server | leitner_flow | gameId=${gameId} ${message}`);
+}
+
 /** `start`: the game is starting (or resuming). `next`: the previous round's reveal is running. */
 export type LeitnerCountdownReason = 'start' | 'next';
 
@@ -41,16 +45,24 @@ export class LeitnerFlowService implements OnModuleDestroy {
   onGameState(game: Pick<GameDetail, 'id' | 'kind' | 'questions'> | null, state: string): void {
     if (!game || game.kind !== 'leitner-solo') return;
     if (state !== 'active') {
+      if (this.scheduled.has(game.id)) log(game.id, `countdown cancelled: game ${state}`);
       this.cancel(game.id);
       return;
     }
-    if (game.questions.some((question) => question.state === 'open')) return;
+    if (game.questions.some((question) => question.state === 'open')) {
+      log(game.id, 'no start countdown: a round is already open');
+      return;
+    }
     this.schedule(game.id, 'start', LEITNER_START_COUNTDOWN_MS);
   }
 
   /** After a round closed (any reason): the next one opens when the reveal ends. */
   onQuestionClosed(game: Pick<GameDetail, 'id' | 'kind' | 'state'> | null, isFinalRound: boolean): void {
-    if (!game || game.kind !== 'leitner-solo' || game.state !== 'active' || isFinalRound) return;
+    if (!game || game.kind !== 'leitner-solo') return;
+    if (game.state !== 'active' || isFinalRound) {
+      log(game.id, `no next round: ${isFinalRound ? 'that was the final round' : `game ${game.state}`}`);
+      return;
+    }
     this.schedule(game.id, 'next', LEITNER_REVEAL_MS);
   }
 
@@ -81,6 +93,7 @@ export class LeitnerFlowService implements OnModuleDestroy {
     }, delayMs);
     timer.unref?.();
     this.scheduled.set(gameId, { timer, reason, opensAt });
+    log(gameId, `countdown ${reason}: next round opens in ${delayMs}ms`);
     this.badgeStateService.broadcastDashboard({
       type: 'question.countdown',
       gameId,
@@ -95,9 +108,15 @@ export class LeitnerFlowService implements OnModuleDestroy {
   private async openNext(gameId: string): Promise<void> {
     try {
       const game = await this.gameDataRepository.getGameDetail(gameId);
-      if (!game || game.kind !== 'leitner-solo' || game.state !== 'active') return;
+      if (!game || game.kind !== 'leitner-solo' || game.state !== 'active') {
+        log(gameId, `countdown ended, nothing opened: game ${game ? game.state : 'gone'}`);
+        return;
+      }
       const questionId = await this.gameDataRepository.openNextUnplayedQuestion(gameId);
-      if (!questionId) return;
+      if (!questionId) {
+        log(gameId, 'countdown ended, nothing opened: a round is already open or none are left');
+        return;
+      }
       const questionEvent = {
         type: 'question.opened' as const,
         gameId,

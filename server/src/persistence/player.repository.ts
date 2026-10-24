@@ -168,6 +168,44 @@ export class PlayerRepository {
     return this.toBindingSummary(binding, toPlayerSummary(player));
   }
 
+  /**
+   * Solo Leitner games have only one possible player: when a badge joins and
+   * neither it nor the student is bound yet, bind the student to it, so the
+   * game exports without the referee assigning anyone. Returns whether it bound.
+   */
+  async bindLeitnerStudentOnJoin(input: { gameId: string; badgeName: string }): Promise<boolean> {
+    const { Game, PlayerBinding } = this.mongoService.getModels();
+    const gameId = asObjectId(input.gameId);
+    const game = await Game.findById(gameId, { kind: 1, leitner: 1 }).lean();
+    const studentId = game?.kind === 'leitner-solo' ? (game.leitner?.playerId as Types.ObjectId | undefined) : undefined;
+    if (!studentId) return false;
+    const taken = await PlayerBinding.exists({
+      gameId,
+      unassignedAt: null,
+      $or: [{ badgeName: input.badgeName }, { playerId: studentId }],
+    });
+    if (taken) return false;
+    await this.bindPlayer({ gameId: input.gameId, badgeName: input.badgeName, playerId: studentId.toString() });
+    return true;
+  }
+
+  /**
+   * Export fallback for a solo Leitner game: when exactly one badge answered
+   * without a player, it was the student's. A badge's first binding covers
+   * its earlier guesses (`bindingAt`), so binding now attributes them.
+   * Returns the badges it bound.
+   */
+  async attributeLeitnerGuesses(gameId: string): Promise<string[]> {
+    const { Game } = this.mongoService.getModels();
+    const game = await Game.findById(asObjectId(gameId), { kind: 1, leitner: 1 }).lean();
+    const studentId = game?.kind === 'leitner-solo' ? (game.leitner?.playerId as Types.ObjectId | undefined) : undefined;
+    if (!studentId) return [];
+    const { missingBadges } = await this.getGamePlayerBindings(gameId);
+    if (missingBadges.length !== 1) return [];
+    await this.bindPlayer({ gameId, badgeName: missingBadges[0], playerId: studentId.toString() });
+    return missingBadges;
+  }
+
   /** End the badge's active binding. Returns false when it had none. */
   async unbindPlayer(input: { gameId: string; badgeName: string }): Promise<boolean> {
     const { PlayerBinding } = this.mongoService.getModels();

@@ -214,6 +214,50 @@ describe('PlayerRepository', () => {
     });
   });
 
+  describe('Leitner student auto-binding', () => {
+    const leitner = { _id: GAME_ID, kind: 'leitner-solo', leitner: { playerId: PLAYER_A } };
+    let bindPlayer: jest.SpyInstance;
+
+    beforeEach(() => {
+      bindPlayer = jest.spyOn(repository, 'bindPlayer').mockResolvedValue({} as never);
+    });
+    afterEach(() => bindPlayer.mockRestore());
+
+    it('binds the student to the joining badge when neither is bound yet', async () => {
+      models.Game.findById.mockReturnValue(createLeanQuery(leitner));
+      models.PlayerBinding.exists.mockResolvedValue(null);
+
+      expect(await repository.bindLeitnerStudentOnJoin({ gameId: GAME_ID, badgeName: 'red' })).toBe(true);
+      expect(bindPlayer).toHaveBeenCalledWith({ gameId: GAME_ID, badgeName: 'red', playerId: PLAYER_A.toString() });
+    });
+
+    it('leaves existing bindings and class games alone', async () => {
+      models.Game.findById.mockReturnValue(createLeanQuery(leitner));
+      models.PlayerBinding.exists.mockResolvedValue({ _id: 'x' });
+      expect(await repository.bindLeitnerStudentOnJoin({ gameId: GAME_ID, badgeName: 'red' })).toBe(false);
+
+      models.Game.findById.mockReturnValue(createLeanQuery({ _id: GAME_ID, kind: 'class' }));
+      models.PlayerBinding.exists.mockResolvedValue(null);
+      expect(await repository.bindLeitnerStudentOnJoin({ gameId: GAME_ID, badgeName: 'red' })).toBe(false);
+      expect(bindPlayer).not.toHaveBeenCalled();
+    });
+
+    it('attributes the one unassigned badge to the student at export, and only when there is exactly one', async () => {
+      models.Game.findById.mockReturnValue(createLeanQuery(leitner));
+      const bindings = jest.spyOn(repository, 'getGamePlayerBindings');
+
+      bindings.mockResolvedValue({ gameId: GAME_ID, badgeNames: ['red'], bindings: [], missingBadges: ['red'] } as never);
+      expect(await repository.attributeLeitnerGuesses(GAME_ID)).toEqual(['red']);
+      expect(bindPlayer).toHaveBeenCalledWith({ gameId: GAME_ID, badgeName: 'red', playerId: PLAYER_A.toString() });
+
+      bindPlayer.mockClear();
+      bindings.mockResolvedValue({ gameId: GAME_ID, badgeNames: [], bindings: [], missingBadges: ['red', 'blue'] } as never);
+      expect(await repository.attributeLeitnerGuesses(GAME_ID)).toEqual([]);
+      expect(bindPlayer).not.toHaveBeenCalled();
+      bindings.mockRestore();
+    });
+  });
+
   describe('getGamePlayerBindings', () => {
     it('lists badges whose guesses no binding covers', async () => {
       models.Game.findById.mockReturnValue(createLeanQuery({ _id: GAME_ID, startedAt: at(0) }));

@@ -44,6 +44,8 @@ describe('GameFlowController', () => {
     getGameDetail: jest.fn(),
     getGameGuessChart: jest.fn(),
     haveAllJoinedPlayersGuessed: jest.fn(),
+    markJoinedByGuess: jest.fn(),
+    answerStatus: jest.fn(),
     syncStationRoster: jest.fn(),
     getOpenQuestionId: jest.fn(),
     recordExportFailure: jest.fn(),
@@ -85,6 +87,8 @@ describe('GameFlowController', () => {
       boundPairs: [],
     });
     repository.haveAllJoinedPlayersGuessed.mockResolvedValue(false);
+    repository.markJoinedByGuess.mockResolvedValue(false);
+    repository.answerStatus.mockResolvedValue({ joined: [], answered: [], notJoined: [] });
     repository.setQuestionState.mockResolvedValue(undefined);
     repository.syncStationRoster.mockResolvedValue([]);
     badgeStateService.getStationRoster.mockReturnValue(null);
@@ -174,6 +178,35 @@ describe('GameFlowController', () => {
     expect(repository.createGame).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({ gameId: '507f1f77bcf86cd799439011' });
+  });
+
+  it('lists only joined players in student play', async () => {
+    const res = createResponseMock();
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
+      exportError: null,
+      exportAttemptedAt: null,
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [
+        { pairName: 'power-cable', stationName: 'power-cable', joined: true, readyForNextQuestion: null },
+        { pairName: 'black', stationName: 'power-cable', joined: false, readyForNextQuestion: null },
+      ],
+      questions: [],
+    });
+
+    await controller.getGamePlayView('507f1f77bcf86cd799439011', res as unknown as Response);
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        boundPairs: [{ pairName: 'power-cable', stationName: 'power-cable', readyForNextQuestion: null }],
+      }),
+    );
   });
 
   it('returns only the open question without correct-answer flags for student play', async () => {
@@ -762,6 +795,41 @@ describe('GameFlowController', () => {
       expect.objectContaining({ type: 'question.result' }),
     );
     expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('counts a badge that answers as joined, so its round can close (its join was never recorded)', async () => {
+    const res = createResponseMock();
+    const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    repository.submitGuess.mockResolvedValue({
+      guessId: '507f1f77bcf86cd799439020',
+      answerOptionId: '507f1f77bcf86cd799439021',
+      slotLabel: 'D',
+      isCorrect: true,
+      cardLabel: 'D',
+      gameTitle: 'Leitner',
+    });
+    repository.markJoinedByGuess.mockResolvedValue(true);
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'power-cable',
+        cardUid: '5B:6F:B8:08',
+      },
+      res as unknown as Response,
+    );
+
+    expect(repository.markJoinedByGuess).toHaveBeenCalledWith('507f1f77bcf86cd799439017', 'power-cable');
+    expect(repository.markJoinedByGuess.mock.invocationCallOrder[0]).toBeLessThan(
+      repository.haveAllJoinedPlayersGuessed.mock.invocationCallOrder[0],
+    );
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'controller.joined', badgeName: 'power-cable' }),
+    );
+    // Not closed here (mock says someone is still to answer): the decision is logged.
+    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('round_waiting'));
+    consoleLog.mockRestore();
   });
 
   it('keeps the successful guess response when automatic closing fails', async () => {

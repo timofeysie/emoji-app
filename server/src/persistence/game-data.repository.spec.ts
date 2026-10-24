@@ -194,7 +194,7 @@ describe('GameDataRepository', () => {
     });
   });
 
-  it('computes question results for every bound pair', async () => {
+  it('computes question results for every joined player, skipping bound badges that never joined', async () => {
     models.AnswerOption.findOne.mockReturnValue(
       createLeanQuery({ slotLabel: 'B', isCorrect: true }),
     );
@@ -206,9 +206,11 @@ describe('GameDataRepository', () => {
     );
     models.PairBinding.find.mockReturnValue(
       createLeanQuery([
-        { pairName: 'green' },
-        { pairName: 'white', stationName: 'white' },
-        { pairName: 'white-2', stationName: 'white' },
+        { pairName: 'green', joined: true },
+        { pairName: 'white', stationName: 'white', joined: true },
+        { pairName: 'white-2', stationName: 'white', joined: true },
+        // Bound with its station but switched off: not shown as "no answer".
+        { pairName: 'black', stationName: 'white', joined: false },
       ]),
     );
 
@@ -226,6 +228,33 @@ describe('GameDataRepository', () => {
         { pairName: 'white', stationName: 'white', badgeName: 'white', slotLabel: 'A', isCorrect: false },
         { pairName: 'white-2', stationName: 'white', badgeName: 'white-2', slotLabel: null, isCorrect: false },
       ],
+    });
+  });
+
+  it('charts only joined players (and anyone who guessed)', async () => {
+    models.Game.findById.mockReturnValue(createLeanQuery({ _id: { toString: () => 'g1' }, title: 'Demo Night' }));
+    models.Question.find.mockReturnValue({
+      sort: () => createLeanQuery([{ _id: { toString: () => 'q1' }, sequence: 1 }]),
+    });
+    models.PairBinding.find.mockReturnValue(
+      createLeanQuery([
+        { pairName: 'power-cable', stationName: 'power-cable', joined: true },
+        { pairName: 'black', stationName: 'power-cable', joined: false },
+      ]),
+    );
+    models.GameNfcCardGroupAssignment.findOne.mockReturnValue(createLeanQuery(null));
+    models.Guess.find.mockReturnValue(
+      createLeanQuery([{ questionId: { toString: () => 'q1' }, pairName: 'power-cable', slotLabel: 'A' }]),
+    );
+    models.AnswerOption.find.mockReturnValue(
+      createLeanQuery([{ questionId: { toString: () => 'q1' }, slotLabel: 'A', isCorrect: true }]),
+    );
+
+    const chart = await repository.getGameGuessChart('507f1f77bcf86cd799439024');
+
+    expect(chart.pairs).toEqual(['power-cable']);
+    expect(chart.questions[0].byPair).toEqual({
+      'power-cable': expect.objectContaining({ slotLabel: 'A', isCorrect: true }),
     });
   });
 
@@ -468,7 +497,7 @@ describe('GameDataRepository', () => {
     );
     models.AnswerOption.findOne.mockReturnValue(createLeanQuery({ slotLabel: 'A', isCorrect: true }));
     models.PairBinding.find.mockReturnValue(
-      createLeanQuery([{ pairName: 'power-cable', stationName: 'power-cable' }]),
+      createLeanQuery([{ pairName: 'power-cable', stationName: 'power-cable', joined: true }]),
     );
 
     const scores = await repository.getGameScores('507f1f77bcf86cd799439024');

@@ -747,6 +747,8 @@ export function GameDetailView() {
           message.type === 'question.closed' ||
           message.type === 'game.state.changed' ||
           message.type === 'game.bindings.changed' ||
+          // The chart lists joined players only.
+          message.type === 'controller.joined' ||
           message.type === 'nfc.tagged'
         ) {
           void loadGuessChart();
@@ -869,6 +871,8 @@ export function GameDetailView() {
     game.state,
     game.startedAt ?? '',
     game.boundPairs.map((bp) => bp.pairName).sort().join(','),
+    // A Leitner game binds its student when the badge joins.
+    game.boundPairs.filter((bp) => bp.joined).length,
     game.questions.reduce((sum, q) => sum + (q.guessCount ?? 0), 0),
     guessChart?.questions.length ?? 0,
   ].join('|');

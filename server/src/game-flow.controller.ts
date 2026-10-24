@@ -225,7 +225,8 @@ export class GameFlowController {
         id: game.id,
         title: game.title,
         state: game.state,
-        boundPairs: game.boundPairs.map((pair) => ({
+        // Badges that never joined aren't waited for, so they aren't shown.
+        boundPairs: game.boundPairs.filter((pair) => pair.joined).map((pair) => ({
           pairName: pair.pairName,
           stationName: pair.stationName,
           readyForNextQuestion: pair.readyForNextQuestion,
@@ -806,13 +807,33 @@ export class GameFlowController {
     res.status(201).json({ ...outcome, cardLabel });
 
     const { gameId, questionId } = result.data;
+    const guessBadge = result.data.badgeName ?? result.data.pairName;
     try {
+      // Answering proves the badge is playing, even if its join never arrived.
+      if (outcome.guessId && guessBadge && (await this.gameDataRepository.markJoinedByGuess(gameId, guessBadge))) {
+        console.log(`[GAME] server | joined_by_guess | badge=${guessBadge} gameId=${gameId} (no join was recorded)`);
+        this.badgeStateService.broadcastDashboard({
+          type: 'controller.joined',
+          gameId,
+          pairName: result.data.pairName,
+          badgeName: guessBadge,
+          serverTime: new Date().toISOString(),
+        });
+      }
       // Last joined player to answer → close so badges leave NFC-armed state.
       if (
         outcome.guessId &&
         (await this.gameDataRepository.haveAllJoinedPlayersGuessed(gameId, questionId))
       ) {
         await this.questionCloser.closeAndNotify(gameId, questionId, 'all_pairs_answered');
+      } else if (outcome.guessId) {
+        const status = await this.gameDataRepository.answerStatus(gameId, questionId);
+        const waitingFor = status.joined.filter((badge) => !status.answered.includes(badge));
+        console.log(
+          `[GAME] server | round_waiting | questionId=${questionId} gameId=${gameId} answered=[${status.answered.join(',')}] ` +
+            `waitingFor=[${waitingFor.join(',')}] notJoined=[${status.notJoined.join(',')}]` +
+            (status.joined.length === 0 ? ' (no joined badges: the round only closes by hand)' : ''),
+        );
       }
     } catch (error) {
       // The successful response has already been sent. Closing failures must not
