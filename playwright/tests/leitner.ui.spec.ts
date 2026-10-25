@@ -86,6 +86,14 @@ test('a played game: rounds open by themselves, End Game shows the summary, and 
   await expect(page.getByText('Unchanged (2)')).toBeVisible();
   expect(await leitner.gameOrNull(game.gameId)).toBeNull();
 
+  // The student view shows the same results, with the badge's outcome, even after a reload.
+  await expect(studentView.getByRole('heading', { name: `Well done, ${student.firstName}!` })).toBeVisible();
+  await expect(studentView.getByRole('img', { name: 'Fireworks' })).toBeVisible();
+  await expect(studentView.getByText('Promoted (1)')).toBeVisible();
+  await studentView.reload();
+  await expect(studentView.getByText('1 of 3 correct')).toBeVisible();
+  await expect(studentView.getByText('sent to the LRS')).toHaveCount(0);
+
   await page.getByRole('button', { name: 'Back to games' }).click();
   await expect(page).toHaveURL(/\/games$/);
   await expect(page.getByText(titleFor(student))).toHaveCount(0);

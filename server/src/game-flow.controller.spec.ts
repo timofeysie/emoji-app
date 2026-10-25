@@ -61,7 +61,10 @@ describe('GameFlowController', () => {
 
   const nfcCardService = new NfcCardService();
 
-  const gameExportService: jest.Mocked<Pick<GameExportService, 'exportGame'>> = { exportGame: jest.fn() };
+  const gameExportService: jest.Mocked<Pick<GameExportService, 'exportGame' | 'getFinished'>> = {
+    exportGame: jest.fn(),
+    getFinished: jest.fn(),
+  };
 
   const controller = new GameFlowController(
     repository,
@@ -92,6 +95,37 @@ describe('GameFlowController', () => {
     repository.setQuestionState.mockResolvedValue(undefined);
     repository.syncStationRoster.mockResolvedValue([]);
     badgeStateService.getStationRoster.mockReturnValue(null);
+    gameExportService.getFinished.mockReturnValue(null);
+  });
+
+  describe('GET /api/games/:gameId/play for a deleted game', () => {
+    it("answers 410 with a finished Leitner game's results", async () => {
+      const finished = {
+        gameId: '507f1f77bcf86cd799439011',
+        title: 'Leitner: Player 7F3A · ch. 27',
+        playerId: '507f1f77bcf86cd7994390aa',
+        finishedAt: new Date().toISOString(),
+        statementsSent: 3,
+        summary: { score: { correct: 1, total: 1 }, changes: [] },
+      };
+      repository.getGameDetail.mockResolvedValue(null);
+      gameExportService.getFinished.mockReturnValue(finished);
+      const res = createResponseMock();
+
+      await controller.getGamePlayView('507f1f77bcf86cd799439011', res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(410);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ finished }));
+    });
+
+    it('answers 404 for any other missing game', async () => {
+      repository.getGameDetail.mockResolvedValue(null);
+      const res = createResponseMock();
+
+      await controller.getGamePlayView('507f1f77bcf86cd799439011', res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
   });
 
   describe('createQuestion learning tag', () => {
@@ -263,6 +297,7 @@ describe('GameFlowController', () => {
       id: '507f1f77bcf86cd799439011',
       title: 'Demo Night',
       state: 'active',
+      kind: 'class',
       boundPairs: [],
       totalRounds: 2,
       nextRoundSequence: null,

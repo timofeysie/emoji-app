@@ -8,6 +8,7 @@ import {
   Pause,
   Play,
   ScanLine,
+  Trophy,
   XCircle,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -15,6 +16,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '../shared/button';
 import { TextReveal } from '../shared/text-reveal';
 import { getWsUrl } from '../shared/ws-url';
+import { LeitnerSummaryCard, useLeitnerPlayer } from './components/LeitnerGamePanel';
+import type { GameKind, LeitnerSummary } from './leitner';
 
 type GameState =
   | 'draft'
@@ -61,6 +64,8 @@ type GamePlayDetail = {
   id: string;
   title: string;
   state: GameState;
+  /** Absent on older servers: a class game. */
+  kind?: GameKind;
   boundPairs: Array<{
     pairName: string;
     stationName?: string;
@@ -74,6 +79,15 @@ type GamePlayDetail = {
   previousResult: PreviousResult | null;
 };
 
+/** A Leitner game exported and deleted: `GET …/play` answers 410 with its results. */
+type FinishedGame = {
+  gameId: string;
+  title: string;
+  playerId: string;
+  statementsSent: number;
+  summary: LeitnerSummary;
+};
+
 const LIVE_STATES: GameState[] = ['lobby', 'active', 'paused'];
 const REFRESH_MS = 5_000;
 /** How long the answer stays on screen after a round closes. */
@@ -83,6 +97,73 @@ const stageSpring = {
   stiffness: 220,
   damping: 24,
 };
+
+/**
+ * A finished Leitner game, for the student: the badge's outcome (fireworks
+ * for a win, rain otherwise; docs/real-time-game/game-modes.md), then the
+ * same results the referee sees.
+ */
+function StudentResults({
+  finished,
+  studentName,
+  onBack,
+}: {
+  finished: FinishedGame;
+  studentName: string | null;
+  onBack: () => void;
+}) {
+  const { score } = finished.summary;
+  const won = score.correct > 0;
+  return (
+    <div className="flex flex-col gap-4">
+      <Button type="button" variant="ghost" className="w-fit" onClick={onBack}>
+        <ChevronLeft aria-hidden />
+        Games
+      </Button>
+
+      <motion.section
+        initial={{ opacity: 0, scale: 0.9, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={stageSpring}
+        className="flex flex-col items-center gap-2 rounded-xl border bg-card p-8 text-center shadow-sm"
+        aria-labelledby="student-results-heading"
+      >
+        <motion.span
+          className="text-6xl leading-none"
+          role="img"
+          aria-label={won ? 'Fireworks' : 'Rain'}
+          initial={{ scale: 0.3, rotate: -20 }}
+          animate={{ scale: [0.3, 1.25, 1], rotate: [-20, 8, 0] }}
+          transition={{ duration: 0.8, times: [0, 0.6, 1], ease: [0.22, 1, 0.36, 1] }}
+        >
+          {won ? '🎆' : '🌧️'}
+        </motion.span>
+        <h1 id="student-results-heading" className="mt-2 flex items-center gap-2 text-2xl font-bold">
+          {won && <Trophy className="h-6 w-6 text-amber-500" aria-hidden />}
+          {won ? 'Well done' : 'Keep practising'}
+          {studentName ? `, ${studentName}` : ''}!
+        </h1>
+        <p className="text-lg tabular-nums">
+          <span className="font-semibold">{score.correct}</span> of {score.total} correct
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {won
+            ? 'Here’s how your words moved. Any you missed come back soon.'
+            : 'These words come back in your next game.'}
+        </p>
+      </motion.section>
+
+      <LeitnerSummaryCard
+        result={{ statementsSent: finished.statementsSent, summary: finished.summary }}
+        forStudent
+      />
+
+      <Button className="self-start" onClick={onBack}>
+        Back to games
+      </Button>
+    </div>
+  );
+}
 
 function unavailableMessage(state: GameState): string {
   if (state === 'draft' || state === 'ready') {
@@ -238,6 +319,8 @@ export function GamePlayView() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
   const [game, setGame] = useState<GamePlayDetail | null>(null);
+  const [finished, setFinished] = useState<FinishedGame | null>(null);
+  const finishedPlayer = useLeitnerPlayer(finished?.playerId);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   // Question id whose answer is on screen; set when we see that round close.
@@ -256,6 +339,14 @@ export function GamePlayView() {
         const res = await fetch(`/api/games/${gameId}/play`, {
           credentials: 'same-origin',
         });
+        if (res.status === 410) {
+          const body = (await res.json().catch(() => ({}))) as { finished?: FinishedGame };
+          if (body.finished) {
+            setFinished(body.finished);
+            setFetchError(null);
+            return;
+          }
+        }
         if (!res.ok) {
           setFetchError(
             res.status === 404 ? 'Game not found.' : `Server returned ${res.status}.`,
@@ -299,6 +390,8 @@ export function GamePlayView() {
           (message.type === 'game.state.changed' ||
             message.type === 'question.opened' ||
             message.type === 'question.countdown' ||
+            // A Leitner game is deleted once exported: reload for its results.
+            message.type === 'game.deleted' ||
             message.type === 'question.closed' ||
             message.type === 'question.result' ||
             message.type === 'game.bindings.changed' ||
@@ -314,11 +407,12 @@ export function GamePlayView() {
   }, [gameId, loadGame]);
 
   useEffect(() => {
+    if (finished) return;
     const id = window.setInterval(() => {
       void loadGame({ silent: true });
     }, REFRESH_MS);
     return () => window.clearInterval(id);
-  }, [loadGame]);
+  }, [loadGame, finished]);
 
   useEffect(() => {
     if (!game) return;
@@ -343,6 +437,16 @@ export function GamePlayView() {
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
         Loading game…
       </div>
+    );
+  }
+
+  if (finished) {
+    return (
+      <StudentResults
+        finished={finished}
+        studentName={finishedPlayer?.firstName ?? null}
+        onBack={() => navigate('/games')}
+      />
     );
   }
 
@@ -395,7 +499,15 @@ export function GamePlayView() {
         <h1 className="text-2xl font-bold">{game.title}</h1>
       </div>
 
-      {!isLive ? (
+      {game.kind === 'leitner-solo' && game.state === 'completed' ? (
+        <div className="rounded-lg border border-dashed p-8 text-center">
+          <Loader2 className="mx-auto mb-3 h-9 w-9 animate-spin text-primary" aria-hidden />
+          <p className="font-semibold">Game over · saving your results…</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            They&apos;ll show here as soon as they&apos;re saved.
+          </p>
+        </div>
+      ) : !isLive ? (
         <div className="rounded-lg border border-dashed p-8 text-center">
           <Play className="mx-auto mb-3 h-9 w-9 text-muted-foreground" aria-hidden />
           <p className="font-semibold">Student mode unavailable</p>

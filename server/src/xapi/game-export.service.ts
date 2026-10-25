@@ -30,6 +30,23 @@ export type GameExportOutcome =
     }
   | { ok: false; status: number; body: Record<string, unknown> };
 
+/**
+ * A deleted Leitner game's end screen. Kept in memory for a while so the
+ * student view (and a reload of it) can still show the results; the LRS
+ * has the evidence. A server restart forgets them.
+ */
+export type FinishedLeitnerGame = {
+  gameId: string;
+  title: string;
+  playerId: string;
+  finishedAt: string;
+  statementsSent: number;
+  summary: LeitnerGameSummary;
+};
+
+const FINISHED_KEEP_MS = 12 * 60 * 60 * 1000;
+const FINISHED_MAX = 200;
+
 function failure(status: number, body: Record<string, unknown>): GameExportOutcome {
   return { ok: false, status, body };
 }
@@ -41,6 +58,8 @@ function failure(status: number, body: Record<string, unknown>): GameExportOutco
  */
 @Injectable()
 export class GameExportService {
+  private readonly finished = new Map<string, FinishedLeitnerGame>();
+
   constructor(
     private readonly gameDataRepository: GameDataRepository,
     private readonly playerRepository: PlayerRepository,
@@ -141,7 +160,38 @@ export class GameExportService {
       changes: prior ? this.changes(prior, statements, game.questions) : null,
     };
     await this.gameDataRepository.deleteGame(gameId);
+    if (game.leitner) {
+      this.rememberFinished({
+        gameId,
+        title: game.title,
+        playerId: game.leitner.playerId,
+        finishedAt: new Date().toISOString(),
+        statementsSent: sent,
+        summary,
+      });
+    }
     return { ok: true, statementsSent: sent, deleted: true, summary };
+  }
+
+  /** The end screen of a Leitner game deleted in the last 12 hours, or null. */
+  getFinished(gameId: string, now = Date.now()): FinishedLeitnerGame | null {
+    const entry = this.finished.get(gameId);
+    if (!entry) return null;
+    if (now - Date.parse(entry.finishedAt) > FINISHED_KEEP_MS) {
+      this.finished.delete(gameId);
+      return null;
+    }
+    return entry;
+  }
+
+  private rememberFinished(entry: FinishedLeitnerGame): void {
+    this.finished.set(entry.gameId, entry);
+    // Oldest first (insertion order): drop the oldest beyond the cap.
+    while (this.finished.size > FINISHED_MAX) {
+      const oldest = this.finished.keys().next().value;
+      if (oldest === undefined) break;
+      this.finished.delete(oldest);
+    }
   }
 
   private async priorEvidence(

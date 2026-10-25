@@ -187,6 +187,12 @@ export class GameFlowController {
     try {
       const game = await this.gameDataRepository.getGameDetail(gameId);
       if (!game) {
+        // A Leitner game is deleted once exported: the student view still shows its results.
+        const finished = this.gameExportService.getFinished(gameId);
+        if (finished) {
+          res.status(410).json({ error: 'Game finished and deleted', finished });
+          return;
+        }
         res.status(404).json({ error: 'Game not found' });
         return;
       }
@@ -228,6 +234,7 @@ export class GameFlowController {
         id: game.id,
         title: game.title,
         state: game.state,
+        kind: game.kind,
         // Badges that never joined aren't waited for, so they aren't shown.
         boundPairs: game.boundPairs.filter((pair) => pair.joined).map((pair) => ({
           pairName: pair.pairName,

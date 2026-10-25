@@ -692,6 +692,15 @@ game:
   the same transition as End Game). The referee can still end it early.
   `game.deleted` carries the export result (`leitnerExport`), so the
   referee view shows the summary for a game that ended itself.
+- **The student view's end screen.** The export service remembers each
+  deleted Leitner game's results in memory for 12 hours (up to 200 games;
+  a restart forgets them). `GET /api/games/:id/play` then answers
+  **410** `{ finished: { gameId, title, playerId, finishedAt, statementsSent,
+  summary } }` instead of 404, and the student view shows the badge's
+  outcome (🎆 and a trophy when any answer was right, 🌧️ otherwise, as in
+  `docs/real-time-game/game-modes.md`), the score, and the same
+  promoted / demoted / retired lists the referee sees. Between End Game
+  and the export it shows "Game over · saving your results…".
 - A server restart drops pending timers. The referee can still open the
   next round by hand.
 

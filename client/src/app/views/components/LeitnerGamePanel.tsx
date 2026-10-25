@@ -167,8 +167,8 @@ const CHANGE_STYLES: Record<TrackChange['change'], { label: string; className: s
   unchanged: { label: 'Unchanged', className: 'text-muted-foreground', icon: Minus },
 };
 
-/** End-of-game summary: the score and how each track moved. */
-export function LeitnerSummaryCard({ result }: { result: LeitnerExported }) {
+/** End-of-game summary: the score and how each track moved. `forStudent` leaves out the LRS details. */
+export function LeitnerSummaryCard({ result, forStudent = false }: { result: LeitnerExported; forStudent?: boolean }) {
   const { summary } = result;
   return (
     <div className="flex flex-col gap-3 rounded-lg border p-4">
@@ -178,9 +178,11 @@ export function LeitnerSummaryCard({ result }: { result: LeitnerExported }) {
             ? `${summary.score.correct} / ${summary.score.total} correct`
             : 'Exported'}
         </p>
-        <p className="text-[11px] text-muted-foreground">
-          {result.statementsSent} statement{result.statementsSent === 1 ? '' : 's'} sent to the LRS
-        </p>
+        {!forStudent && (
+          <p className="text-[11px] text-muted-foreground">
+            {result.statementsSent} statement{result.statementsSent === 1 ? '' : 's'} sent to the LRS
+          </p>
+        )}
       </div>
 
       {!summary || summary.changes === null ? (

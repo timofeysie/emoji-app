@@ -124,6 +124,13 @@ describe('GameExportService', () => {
       },
     });
     expect(games.deleteGame).toHaveBeenCalledWith(GAME_ID);
+    // Remembered for the student view's end screen.
+    expect(service.getFinished(GAME_ID)).toMatchObject({
+      gameId: GAME_ID,
+      statementsSent: 3,
+      summary: { score: { correct: 1, total: 1 } },
+    });
+    expect(service.getFinished(GAME_ID, Date.now() + 13 * 60 * 60 * 1000)).toBeNull();
     const posted = JSON.parse(fetchMock.mock.calls.find((call) => call[1]?.method === 'POST')[1].body);
     expect(posted.map((s: { verb: { id: string } }) => s.verb.id.split('/').pop())).toEqual(['answered', 'assessed', 'scored']);
   });
