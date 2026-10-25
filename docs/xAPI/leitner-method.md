@@ -55,6 +55,7 @@ Related:
 | L17 | 2026-10-23 | **Evidence is `assessed` statements** (`learning-objects.md` A2). Each tagged guess gives one `answered` statement (what happened) plus one `assessed` statement per observation (what it shows), about the learning object itself. The fold reads **only** `assessed`. Today's scorer, `choice-whole@1`, gives one direct observation on the whole. |
 | L18 | 2026-10-23 | **The kind is part of the identity** (`learning-objects.md` A3): `lexeme` (one word in one sense, activity type `…/activity-types/lexeme-sense`) or `expression` (multi-word entry, `…/activity-types/expression`). The registry stores it per sense; new senses default to `expression` when the word contains a space. |
 | L20 | 2026-10-23 | **A game fills up with extra new words** when overdue, review, `maxNew` new and practice still leave it short of `count` (and `fill` is on). A new student's first ch. 27 game is 10 new words, not 4. `maxNew` caps new words only while there's other work to ask. |
+| L22 | 2026-10-25 | **Badge countdown and auto-end**: the badge counts each countdown down (seconds shown, a tone pulse each), and the question melody plays only while a round is open. After the final round's reveal the game **ends by itself**, like End Game. See [Continuous flow](#continuous-flow-l21). |
 | L21 | 2026-10-24 | **Continuous flow**: a Leitner game's rounds open by themselves. Start Game (and Resume) shows a **5-second countdown** in the student view, then opens round 1; when a round closes, the next one opens as the **5-second answer reveal** ends. Class games keep the referee opening each round. See [Continuous flow](#continuous-flow-l21). |
 | L19 | 2026-10-23 | Built-in choices made in Step 3 (revisit any of them freely): a student with a Leitner game **being played** (`active`/`paused`) can't get a new plan (409) — end it first; a **cancelled** Leitner game is discarded (its guesses are never exported) and is superseded like an unplayed one; creating a game with **nothing to ask** returns 422, not an empty game; review scope only brings back words with a source **in this book** (distractors need that book's chapter); new words **alternate aspects** within a game. |
 
@@ -507,9 +508,9 @@ both:
    - the **chapter** (ch. 27 for the pilot);
    - the **scope (L11)**:
      - **This chapter only**: only this chapter's learning objects.
-     - **This chapter + review**: this chapter, plus due tracks the
-       student met in **any other chapter they've already played**
-       (L15);
+     - **This chapter + review** (the dialog's default): this chapter,
+       plus due tracks the student met in **any other chapter they've
+       already played** (L15);
    - optionally the aspects (default reading + writing).
 2. **Preview Plan** (optional) shows the **plan**: the student's progress
    table (including retired counts) and the 10 picks, each with its reason
@@ -666,11 +667,16 @@ game:
 | --- | --- |
 | Start Game, or Resume, with no round open | Countdown `start`, 5 s (`LEITNER_START_COUNTDOWN_MS`), then the next unplayed round opens |
 | A round closes (last answer, referee Close, player removed), not the final round | Countdown `next`, 5 s (`LEITNER_REVEAL_MS`, the student view's reveal), then the next round opens |
+| The final round closes | After the 5 s reveal the game **ends by itself**, exactly like End Game (badges get `game.ended`, then the auto-export) |
 | Pause, End Game, Cancel | Timer cancelled |
 | Timer fires but the game isn't `active`, or a round is already open | Nothing |
 
-- Each countdown is broadcast to the dashboard as `question.countdown`
-  `{ gameId, reason, opensAt, opensInMs }`. `GET /api/games/:id/play`
+- Each countdown is broadcast to the dashboard **and sent to the game's
+  stations** as `question.countdown` `{ gameId, reason, opensAt, opensInMs }`.
+  The Zero forwards it as `GAME:countdown:<seconds>`, and the badge shows
+  the seconds left with a tone pulse on each (the question melody only
+  plays while a round is open). The final round's wait isn't a countdown:
+  nothing is broadcast for it, and `countdown` stays `null`. `GET /api/games/:id/play`
   returns the pending one as `countdown: { reason, opensAt, opensInMs } | null`,
   so a reloaded student view picks it up. The view counts from
   `opensInMs`, so clock differences don't matter.
@@ -681,8 +687,11 @@ game:
   as `question.opened`, as Start Game does.
 - "Next unplayed round" is the lowest-sequence `draft` round, or a
   `closed` one with no `closedAt` (`openNextUnplayedQuestion`).
-- After the final round nothing opens; the referee ends the game, which
-  exports it.
+- After the final round's reveal the game ends by itself
+  (`LeitnerFlowService.setAutoEnd`, registered by `GameFlowController`, runs
+  the same transition as End Game). The referee can still end it early.
+  `game.deleted` carries the export result (`leitnerExport`), so the
+  referee view shows the summary for a game that ended itself.
 - A server restart drops pending timers. The referee can still open the
   next round by hand.
 

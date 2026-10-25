@@ -41,6 +41,9 @@ export class QuestionCloser {
       ...(gameTitle ? { gameTitle } : {}),
       questionId,
       isFinalRound,
+      // Leitner continuous flow: the next round opens by itself (question.countdown
+      // follows), so controllers skip the ready / wait prompt.
+      ...(gameDetail?.kind === 'leitner-solo' && this.leitnerFlow ? { autoNext: true } : {}),
       serverTime,
     };
 

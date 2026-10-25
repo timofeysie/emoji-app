@@ -77,8 +77,53 @@ describe('LeitnerFlowService', () => {
     await jest.advanceTimersByTimeAsync(1);
     expect(repository.openNextUnplayedQuestion).toHaveBeenCalledTimes(1);
 
+    // No auto-end registered: the final round leaves the game to the referee.
     flow.onQuestionClosed(detail(), true);
     expect(flow.countdown(GAME_ID)).toBeNull();
+    await jest.advanceTimersByTimeAsync(LEITNER_REVEAL_MS);
+    expect(repository.openNextUnplayedQuestion).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends each countdown to the game's stations, so the badge counts down", async () => {
+    flow.onQuestionClosed(detail(), false);
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(badges.sendToPairNames).toHaveBeenCalledWith(
+      ['green'],
+      expect.objectContaining({ type: 'question.countdown', gameId: GAME_ID, reason: 'next', opensInMs: LEITNER_REVEAL_MS }),
+    );
+  });
+
+  it("ends the game when the final round's reveal ends", async () => {
+    const autoEnd = jest.fn().mockResolvedValue(undefined);
+    flow.setAutoEnd(autoEnd);
+
+    flow.onQuestionClosed(detail(), true);
+    // Not a round countdown: nothing for the play view or the badge to count.
+    expect(flow.countdown(GAME_ID)).toBeNull();
+    expect(events('question.countdown')).toEqual([]);
+    await jest.advanceTimersByTimeAsync(LEITNER_REVEAL_MS - 1);
+    expect(autoEnd).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(autoEnd).toHaveBeenCalledWith(GAME_ID);
+    expect(repository.openNextUnplayedQuestion).not.toHaveBeenCalled();
+  });
+
+  it('does not end a game the referee paused or ended during the final reveal', async () => {
+    const autoEnd = jest.fn().mockResolvedValue(undefined);
+    flow.setAutoEnd(autoEnd);
+
+    flow.onQuestionClosed(detail(), true);
+    flow.onGameState(detail(), 'paused');
+    await jest.advanceTimersByTimeAsync(LEITNER_REVEAL_MS);
+    expect(autoEnd).not.toHaveBeenCalled();
+
+    // The timer fired, but the game had already left active.
+    flow.onQuestionClosed(detail(), true);
+    repository.getGameDetail.mockResolvedValue(detail({ state: 'completed' }));
+    await jest.advanceTimersByTimeAsync(LEITNER_REVEAL_MS);
+    expect(autoEnd).not.toHaveBeenCalled();
   });
 
   it('leaves class games to the referee', () => {

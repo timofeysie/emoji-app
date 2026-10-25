@@ -76,9 +76,22 @@ test.describe('continuous flow (L21)', () => {
     const nextWait = await waitForRound(api, game, 2);
     expect(nextWait).toBeGreaterThan(COUNTDOWN_MS - 1_500);
 
-    // The final round: nothing more opens; the referee ends the game.
+    // The final round: nothing more opens; after the reveal the game ends
+    // itself, exports and is deleted.
     await closedRound(api, leitner, game, 2);
     expect((await playView(api, game.gameId)).countdown).toBeNull();
+    await expect
+      .poll(() => leitner.gameOrNull(game.gameId), { timeout: COUNTDOWN_MS + 5_000 })
+      .toBeNull();
+  });
+
+  test('End Game during the final reveal ends it at once', async ({ api, leitner }) => {
+    const student = await leitner.student();
+    const game = await leitner.newGame(student, { count: 1 });
+
+    await leitner.start(game);
+    await waitForRound(api, game, 1);
+    await closedRound(api, leitner, game, 1);
     const result = await leitner.end(game);
     expect(result).toMatchObject({ exported: true, deleted: true });
   });

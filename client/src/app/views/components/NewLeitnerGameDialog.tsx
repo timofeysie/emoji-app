@@ -64,7 +64,7 @@ export function NewLeitnerGameDialog() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [playerId, setPlayerId] = useState('');
   const [chapter, setChapter] = useState(DEFAULT_CHAPTER);
-  const [scope, setScope] = useState<LeitnerScope>('chapter');
+  const [scope, setScope] = useState<LeitnerScope>('review');
   const [aspects, setAspects] = useState<string[]>([...LEITNER_ASPECTS]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [planning, setPlanning] = useState(false);
@@ -106,7 +106,7 @@ export function NewLeitnerGameDialog() {
 
   const reset = () => {
     setPlayerId('');
-    setScope('chapter');
+    setScope('review');
     setAspects([...LEITNER_ASPECTS]);
     setPreview(null);
     setError(null);
@@ -377,8 +377,8 @@ export function NewLeitnerGameDialog() {
           </Button>
           <Button
             onClick={() => void createGame()}
-            disabled={!playerId || (preview !== null && picks.length === 0) || creating || planning}
-            title={preview && picks.length === 0 ? 'Nothing to ask' : undefined}
+            disabled={!playerId || blocked !== null || (preview !== null && picks.length === 0) || creating || planning}
+            title={blocked ? 'Resolve the blocking game first' : preview && picks.length === 0 ? 'Nothing to ask' : undefined}
           >
             {creating ? (
               <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden />

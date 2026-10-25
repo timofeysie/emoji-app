@@ -944,7 +944,7 @@ describe('GameFlowController', () => {
     });
 
     it('counts a Leitner game down into its first round instead of opening it at once', async () => {
-      const leitnerFlow = { onGameState: jest.fn(), countdown: jest.fn() };
+      const leitnerFlow = { onGameState: jest.fn(), countdown: jest.fn(), setAutoEnd: jest.fn() };
       const flowController = new GameFlowController(
         repository,
         badgeStateService as unknown as BadgeStateService,
@@ -1098,8 +1098,32 @@ describe('GameFlowController', () => {
           }),
         );
         expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
-          expect.objectContaining({ type: 'game.deleted', gameId: '507f1f77bcf86cd799439011' }),
+          expect.objectContaining({
+            type: 'game.deleted',
+            gameId: '507f1f77bcf86cd799439011',
+            leitnerExport: { exported: true, statementsSent: 3, deleted: true, summary },
+          }),
         );
+      });
+
+      it('ends and exports the game when the Leitner flow ends it after the final round', async () => {
+        const leitnerFlow = { onGameState: jest.fn(), countdown: jest.fn(), setAutoEnd: jest.fn() };
+        new GameFlowController(
+          repository,
+          badgeStateService as unknown as BadgeStateService,
+          nfcCardService,
+          gameExportService as unknown as GameExportService,
+          leitnerFlow as unknown as LeitnerFlowService,
+        );
+        const autoEnd = leitnerFlow.setAutoEnd.mock.calls[0][0] as (gameId: string) => Promise<void>;
+        repository.getGameDetail.mockResolvedValue(leitnerDetail);
+        gameExportService.exportGame.mockResolvedValue({ ok: true, statementsSent: 3, deleted: true, summary: null });
+
+        await autoEnd('507f1f77bcf86cd799439011');
+
+        expect(repository.setGameState).toHaveBeenCalledWith({ gameId: '507f1f77bcf86cd799439011', state: 'completed' });
+        expect(leitnerFlow.onGameState).toHaveBeenCalledWith(leitnerDetail, 'completed');
+        expect(gameExportService.exportGame).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
       });
 
       it('still completes the game when the export fails (pending export)', async () => {

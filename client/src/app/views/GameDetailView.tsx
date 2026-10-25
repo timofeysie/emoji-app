@@ -736,9 +736,15 @@ export function GameDetailView() {
           slotLabel?: string;
           cardUid?: string;
           isCorrect?: boolean;
+          leitnerExport?: LeitnerExportResult;
         };
         if (message.gameId !== gameId) return;
         if (message.type === 'game.deleted') {
+          // A Leitner game that ended by itself: its summary comes with the event.
+          if (message.leitnerExport?.exported) {
+            const { statementsSent, summary } = message.leitnerExport;
+            setLeitnerResult((current) => current ?? { statementsSent, summary });
+          }
           setGone(true);
           return;
         }

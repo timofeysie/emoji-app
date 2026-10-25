@@ -133,6 +133,10 @@ export class GameFlowController {
     private readonly leitnerFlow?: LeitnerFlowService,
   ) {
     this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService, leitnerFlow);
+    // A Leitner game ends by itself after its final round, like End Game.
+    leitnerFlow?.setAutoEnd(async (gameId) => {
+      await this.applyGameState(gameId, 'completed');
+    });
   }
 
   @Get('games')
@@ -417,111 +421,7 @@ export class GameFlowController {
 
     try {
       const { state } = payloadResult.data;
-      // Read before the transition: Play Again / Restart deletes the bindings.
-      const stationNames = await this.gameDataRepository.getStationNamesByGameId(gameId);
-      await this.gameDataRepository.setGameState({ gameId, state });
-
-      if (state === 'lobby') {
-        // Backstop for missed roster posts: bound stations match their live roster.
-        for (const stationName of stationNames) {
-          const roster = this.badgeStateService.getStationRoster(stationName);
-          if (!roster) continue;
-          const changes = await this.gameDataRepository.syncStationRoster({
-            stationName,
-            badgeNames: roster,
-          });
-          for (const change of changes) {
-            reportRosterChange(this.badgeStateService, change, console);
-          }
-        }
-      } else if (state === 'ready' && stationNames.length > 0) {
-        broadcastBindingsChanged(this.badgeStateService, { gameId });
-      }
-
-      const serverTime = new Date().toISOString();
-      const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
-      const gameTitle = gameDetail?.title;
-
-      // Notify dashboard of the state change
-      this.badgeStateService.broadcastDashboard({
-        type: 'game.state.changed',
-        gameId,
-        ...(gameTitle ? { gameTitle } : {}),
-        state,
-        serverTime,
-      });
-
-      if (state === 'completed' && stationNames.length > 0) {
-        // Enriched per-player game.ended (rank / score / isWinner), ranked
-        // across badges, sent to the badge's station room. Ties for first
-        // place all get isWinner: true, but a 0-correct field is never a win
-        // (solo/all-wrong → rain on the badge, not fireworks).
-        const { scores } = await this.gameDataRepository.getGameScores(gameId);
-        const topScore = scores.reduce((max, row) => Math.max(max, row.correct), 0);
-        for (const row of scores) {
-          const rank = scores.filter((other) => other.correct > row.correct).length + 1;
-          const isWinner = topScore > 0 && row.correct === topScore;
-          console.log(
-            `[GAME] server | ${isWinner ? 'winner' : 'loser'} | ${
-              isWinner ? 'Game winner' : 'Game loser'
-            } | badge=${row.badgeName} station=${row.stationName} rank=${rank} score=${row.correct}`,
-          );
-          this.badgeStateService.sendToPairNames([row.stationName], {
-            type: 'game.ended',
-            gameId,
-            pairName: row.stationName,
-            stationName: row.stationName,
-            badgeName: row.badgeName,
-            isWinner,
-            rank,
-            score: row.correct,
-            serverTime,
-          });
-        }
-      } else {
-        const controllerEvent = controllerEventForState[state];
-        if (controllerEvent && stationNames.length > 0) {
-          this.badgeStateService.sendToPairNames(stationNames, {
-            type: controllerEvent,
-            gameId,
-            serverTime,
-          });
-        }
-      }
-
-      // Start Game → arm NFC: open the next closed question and notify controllers.
-      // Without this, devices stay on green "active" and never poll for cards.
-      // Leitner games count down into their first round instead (continuous flow).
-      let openedQuestionId: string | null = null;
-      if (state === 'active' && !(gameDetail?.kind === 'leitner-solo' && this.leitnerFlow)) {
-        openedQuestionId = await this.gameDataRepository.openNextQuestionForGame(gameId);
-        if (openedQuestionId) {
-          const questionEvent = {
-            type: 'question.opened' as const,
-            gameId,
-            ...(gameTitle ? { gameTitle } : {}),
-            questionId: openedQuestionId,
-            serverTime: new Date().toISOString(),
-          };
-          console.log(
-            `[GAME] server | question_open | Question open | auto on Start Game questionId=${openedQuestionId}${
-              gameTitle ? ` game="${gameTitle}"` : ''
-            }`,
-          );
-          this.badgeStateService.broadcastDashboard(questionEvent);
-          if (stationNames.length > 0) {
-            this.badgeStateService.sendToPairNames(stationNames, questionEvent);
-          }
-        }
-      }
-
-      this.leitnerFlow?.onGameState(gameDetail, state);
-
-      // Leitner games export themselves on completion and are deleted when
-      // the LRS has everything (docs/xAPI/leitner-method.md → lifecycle).
-      const leitnerExport =
-        state === 'completed' && gameDetail?.kind === 'leitner-solo' ? await this.autoExport(gameId) : undefined;
-
+      const { openedQuestionId, leitnerExport } = await this.applyGameState(gameId, state);
       res.status(200).json({
         ok: true,
         gameId,
@@ -532,6 +432,123 @@ export class GameFlowController {
     } catch (error) {
       res.status(400).json({ error: 'Failed to update game state', message: String(error) });
     }
+  }
+
+  /**
+   * A game state change and everything that follows it: dashboard and badge
+   * events, Start Game's first round, and a Leitner game's export. Used by
+   * the referee's buttons and by a Leitner game ending itself.
+   */
+  private async applyGameState(
+    gameId: string,
+    state: z.infer<typeof gameLifecycleStateSchema>,
+  ): Promise<{ openedQuestionId: string | null; leitnerExport: Record<string, unknown> | undefined }> {
+    // Read before the transition: Play Again / Restart deletes the bindings.
+    const stationNames = await this.gameDataRepository.getStationNamesByGameId(gameId);
+    await this.gameDataRepository.setGameState({ gameId, state });
+
+    if (state === 'lobby') {
+      // Backstop for missed roster posts: bound stations match their live roster.
+      for (const stationName of stationNames) {
+        const roster = this.badgeStateService.getStationRoster(stationName);
+        if (!roster) continue;
+        const changes = await this.gameDataRepository.syncStationRoster({
+          stationName,
+          badgeNames: roster,
+        });
+        for (const change of changes) {
+          reportRosterChange(this.badgeStateService, change, console);
+        }
+      }
+    } else if (state === 'ready' && stationNames.length > 0) {
+      broadcastBindingsChanged(this.badgeStateService, { gameId });
+    }
+
+    const serverTime = new Date().toISOString();
+    const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
+    const gameTitle = gameDetail?.title;
+
+    // Notify dashboard of the state change
+    this.badgeStateService.broadcastDashboard({
+      type: 'game.state.changed',
+      gameId,
+      ...(gameTitle ? { gameTitle } : {}),
+      state,
+      serverTime,
+    });
+
+    if (state === 'completed' && stationNames.length > 0) {
+      // Enriched per-player game.ended (rank / score / isWinner), ranked
+      // across badges, sent to the badge's station room. Ties for first
+      // place all get isWinner: true, but a 0-correct field is never a win
+      // (solo/all-wrong → rain on the badge, not fireworks).
+      const { scores } = await this.gameDataRepository.getGameScores(gameId);
+      const topScore = scores.reduce((max, row) => Math.max(max, row.correct), 0);
+      for (const row of scores) {
+        const rank = scores.filter((other) => other.correct > row.correct).length + 1;
+        const isWinner = topScore > 0 && row.correct === topScore;
+        console.log(
+          `[GAME] server | ${isWinner ? 'winner' : 'loser'} | ${
+            isWinner ? 'Game winner' : 'Game loser'
+          } | badge=${row.badgeName} station=${row.stationName} rank=${rank} score=${row.correct}`,
+        );
+        this.badgeStateService.sendToPairNames([row.stationName], {
+          type: 'game.ended',
+          gameId,
+          pairName: row.stationName,
+          stationName: row.stationName,
+          badgeName: row.badgeName,
+          isWinner,
+          rank,
+          score: row.correct,
+          serverTime,
+        });
+      }
+    } else {
+      const controllerEvent = controllerEventForState[state];
+      if (controllerEvent && stationNames.length > 0) {
+        this.badgeStateService.sendToPairNames(stationNames, {
+          type: controllerEvent,
+          gameId,
+          serverTime,
+        });
+      }
+    }
+
+    // Start Game → arm NFC: open the next closed question and notify controllers.
+    // Without this, devices stay on green "active" and never poll for cards.
+    // Leitner games count down into their first round instead (continuous flow).
+    let openedQuestionId: string | null = null;
+    if (state === 'active' && !(gameDetail?.kind === 'leitner-solo' && this.leitnerFlow)) {
+      openedQuestionId = await this.gameDataRepository.openNextQuestionForGame(gameId);
+      if (openedQuestionId) {
+        const questionEvent = {
+          type: 'question.opened' as const,
+          gameId,
+          ...(gameTitle ? { gameTitle } : {}),
+          questionId: openedQuestionId,
+          serverTime: new Date().toISOString(),
+        };
+        console.log(
+          `[GAME] server | question_open | Question open | auto on Start Game questionId=${openedQuestionId}${
+            gameTitle ? ` game="${gameTitle}"` : ''
+          }`,
+        );
+        this.badgeStateService.broadcastDashboard(questionEvent);
+        if (stationNames.length > 0) {
+          this.badgeStateService.sendToPairNames(stationNames, questionEvent);
+        }
+      }
+    }
+
+    this.leitnerFlow?.onGameState(gameDetail, state);
+
+    // Leitner games export themselves on completion and are deleted when
+    // the LRS has everything (docs/xAPI/leitner-method.md → lifecycle).
+    const leitnerExport =
+      state === 'completed' && gameDetail?.kind === 'leitner-solo' ? await this.autoExport(gameId) : undefined;
+
+    return { openedQuestionId, leitnerExport };
   }
 
   /** Never fails the state change: a failed export leaves the game pending, with Retry. */
@@ -547,8 +564,10 @@ export class GameFlowController {
       `[GAME] server | leitner_export | ${outcome.ok ? `exported, deleted=${outcome.deleted}` : `pending (${outcome.status})`} gameId=${gameId}`,
     );
     if (outcome.ok) {
-      this.badgeStateService.broadcastDashboard({ type: 'game.deleted', gameId, serverTime: new Date().toISOString() });
-      return { exported: true, statementsSent: outcome.statementsSent, deleted: outcome.deleted, summary: outcome.summary };
+      const leitnerExport = { exported: true, statementsSent: outcome.statementsSent, deleted: outcome.deleted, summary: outcome.summary };
+      // Carries the summary: a game that ended by itself has no response to show it from.
+      this.badgeStateService.broadcastDashboard({ type: 'game.deleted', gameId, leitnerExport, serverTime: new Date().toISOString() });
+      return leitnerExport;
     }
     return { exported: false, status: outcome.status, error: outcome.body };
   }
