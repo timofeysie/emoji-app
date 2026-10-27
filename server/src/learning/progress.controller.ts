@@ -12,7 +12,8 @@ import {
   UnregisteredSensesError,
 } from './book-content';
 import { buildProgress, DEFAULT_LEITNER_CONFIG, foldTracks } from './leitner';
-import { fetchStudentEvidence } from './student-evidence';
+import { fetchStudentEvidence, fetchStudentStatements } from './student-evidence';
+import { summarizePlayerActivity } from './player-activity';
 import { KOREAN_BOOK } from './learning-object';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
@@ -29,6 +30,13 @@ const progressQuerySchema = z
       .transform((value) => [...new Set(value.split(',').map((aspect) => aspect.trim()).filter(Boolean))])
       .pipe(z.array(slugSchema).min(1)),
     /** Pretend it's this time (testing the schedule). */
+    now: z.string().datetime({ offset: true }).optional(),
+  })
+  .strict();
+
+const activityQuerySchema = z
+  .object({
+    book: slugSchema.default(KOREAN_BOOK),
     now: z.string().datetime({ offset: true }).optional(),
   })
   .strict();
@@ -167,6 +175,82 @@ export class LearningProgressController {
         return;
       }
       res.status(500).json({ error: 'Failed to load progress', message: String(error) });
+    }
+  }
+
+  /**
+   * Everything the LRS has for one student (Players → detail): games,
+   * recent answers and Leitner tracks across every chapter of the book's
+   * language, plus their Leitner games still in our database.
+   */
+  @Get('players/:playerId/activity')
+  async getActivity(
+    @Param('playerId') playerId: string,
+    @Query() query: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    const idResult = objectIdSchema.safeParse(playerId);
+    const queryResult = activityQuerySchema.safeParse(query);
+    if (!idResult.success || !queryResult.success) {
+      const details = [
+        ...(!idResult.success ? getValidationErrors(idResult.error) : []),
+        ...(!queryResult.success ? getValidationErrors(queryResult.error) : []),
+      ];
+      res.status(400).json({ error: 'Validation failed', details });
+      return;
+    }
+    const { book, now: nowParam } = queryResult.data;
+
+    let content;
+    try {
+      content = getBookContent(book);
+    } catch (error) {
+      if (error instanceof UnknownBookError) {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+
+    try {
+      const player = await this.playerRepository.getPlayer(playerId);
+      if (!player) {
+        res.status(404).json({ error: 'Player not found' });
+        return;
+      }
+      // Our own games come first: they don't need the LRS, so they show even when it's down.
+      const leitnerGames = (await this.gameDataRepository.listLeitnerGamesForPlayer(playerId)).map((game) => ({
+        gameId: game.id,
+        state: game.state,
+        endedAt: game.endedAt,
+        guessCount: game.guessCount,
+        exportError: game.exportError,
+      }));
+
+      let config: LrsConfig;
+      try {
+        config = loadLrsConfigFromEnv();
+      } catch (error) {
+        res.status(503).json({ error: error instanceof Error ? error.message : String(error), leitnerGames });
+        return;
+      }
+
+      const now = nowParam ? new Date(nowParam) : new Date();
+      const statements = await fetchStudentStatements(config, player.externalId);
+      res.status(200).json({
+        player: { id: player.id, label: player.label },
+        book,
+        language: content.language,
+        asOf: now.toISOString(),
+        leitnerGames,
+        ...summarizePlayerActivity({ statements, content, now }),
+      });
+    } catch (error) {
+      if (error instanceof LrsRequestError) {
+        res.status(502).json({ error: 'The LRS request failed', status: error.status });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to load activity', message: String(error) });
     }
   }
 }

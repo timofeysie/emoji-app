@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Menu, MessageSquare, X } from 'lucide-react';
 import { AuthBar } from '../auth/AuthBar';
 import { useAuthStore } from '../auth/auth.store';
 import { Button } from '../shared/button';
@@ -15,6 +15,7 @@ import {
 
 const NAV_LINKS = [
   { to: '/games', label: 'Games' },
+  { to: '/players', label: 'Players' },
   { to: '/badges', label: 'Badges' },
   { to: '/lights', label: 'Lights' },
   { to: '/profile', label: 'Profile' },
@@ -25,6 +26,8 @@ function viewTitleForPathname(pathname: string): string {
   if (pathname === '/games') return 'Games';
   if (/^\/games\/[^/]+\/play$/.test(pathname)) return 'Student Game';
   if (pathname.startsWith('/games/')) return 'Game';
+  if (pathname === '/players') return 'Players';
+  if (pathname.startsWith('/players/')) return 'Player';
   if (pathname === '/badges') return 'Badges';
   if (pathname === '/lights') return 'Lights';
   if (pathname === '/scenes') return 'Scenes';
@@ -33,7 +36,12 @@ function viewTitleForPathname(pathname: string): string {
   return 'Emoji App';
 }
 
-export function AppHeader() {
+type AppHeaderProps = {
+  chatOpen: boolean;
+  onToggleChat: () => void;
+};
+
+export function AppHeader({ chatOpen, onToggleChat }: AppHeaderProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -106,6 +114,17 @@ export function AppHeader() {
             <div className="hidden lg:block">
               <AuthBar />
             </div>
+            <Button
+              type="button"
+              variant={chatOpen ? 'secondary' : 'ghost'}
+              size="icon"
+              aria-pressed={chatOpen}
+              aria-label={chatOpen ? 'Hide chat' : 'Show chat'}
+              title={chatOpen ? 'Hide chat' : 'Show chat'}
+              onClick={onToggleChat}
+            >
+              <MessageSquare aria-hidden />
+            </Button>
             <Button
               type="button"
               variant="ghost"

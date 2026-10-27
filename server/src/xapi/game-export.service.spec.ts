@@ -135,6 +135,21 @@ describe('GameExportService', () => {
     expect(posted.map((s: { verb: { id: string } }) => s.verb.id.split('/').pop())).toEqual(['answered', 'assessed', 'scored']);
   });
 
+  it('scores the game, not each bound badge, so a second badge does not double the total', async () => {
+    lrs([]);
+    games.getGameScores.mockResolvedValue({
+      gameId: GAME_ID,
+      scores: [
+        { badgeName: 'red', correct: 1, total: 1 },
+        { badgeName: 'blue', correct: 0, total: 1 },
+      ],
+    });
+
+    const outcome = await service.exportGame(GAME_ID);
+
+    expect(outcome).toMatchObject({ ok: true, summary: { score: { correct: 1, total: 1 } } });
+  });
+
   it('still exports and deletes when the earlier evidence cannot be read (no change list)', async () => {
     global.fetch = jest.fn().mockImplementation(async (_url: string, init?: { method?: string }) =>
       init?.method === 'POST'

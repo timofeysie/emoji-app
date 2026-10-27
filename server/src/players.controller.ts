@@ -44,6 +44,25 @@ export class PlayersController {
     }
   }
 
+  @Get('players/:playerId')
+  async getPlayer(@Param('playerId') playerId: string, @Res() res: Response): Promise<void> {
+    const idResult = objectIdSchema.safeParse(playerId);
+    if (!idResult.success) {
+      res.status(400).json({ error: 'Invalid playerId', details: getValidationErrors(idResult.error) });
+      return;
+    }
+    try {
+      const player = await this.playerRepository.getPlayer(playerId);
+      if (!player) {
+        res.status(404).json({ error: 'Player not found' });
+        return;
+      }
+      res.status(200).json({ player });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch player', message: String(error) });
+    }
+  }
+
   @Post('players')
   async createPlayer(@Body() body: unknown, @Res() res: Response): Promise<void> {
     const payload = createPlayerSchema.safeParse(body);

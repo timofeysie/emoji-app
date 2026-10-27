@@ -11,6 +11,7 @@ import {
   sendStatements,
   type LrsConfig,
 } from './lrs-client';
+import { ANSWERED_VERB_ID } from './iris';
 import { buildGameStatements, UnattributedBadgeError, type XApiStatement } from './statement-builder';
 
 /** End-of-game summary for a Leitner game (docs/xAPI/leitner-method.md → lifecycle). */
@@ -151,10 +152,14 @@ export class GameExportService {
       return { ok: true, statementsSent: sent, deleted: false, summary: null };
     }
 
-    const score = scores.reduce(
-      (total, row) => ({ correct: total.correct + row.correct, total: total.total + row.total }),
-      { correct: 0, total: 0 },
+    // One student, so score the game, not its badges: every bound badge has a
+    // score row out of all the rounds, and summing them double-counts (9/20).
+    const correctRounds = new Set(
+      statements
+        .filter((statement) => statement.verb.id === ANSWERED_VERB_ID && 'success' in statement.result && statement.result.success)
+        .map((statement) => statement.object.id),
     );
+    const score = { correct: correctRounds.size, total: game.questions.length };
     const summary: LeitnerGameSummary = {
       score,
       changes: prior ? this.changes(prior, statements, game.questions) : null,

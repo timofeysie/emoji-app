@@ -170,4 +170,63 @@ describe('LearningProgressController', () => {
     expect(res.status).toHaveBeenCalledWith(502);
     expect(res.json).toHaveBeenCalledWith({ error: 'The LRS request failed', status: 401 });
   });
+
+  describe('activity', () => {
+    it("reads every statement for this student, with no verb filter, and summarises it", async () => {
+      const fetchMock = lrsReturns([
+        assessedStatement({ id: 'a', word: '시험', sense: 'test', success: true, timestamp: '2026-10-22T18:00:00Z' }),
+      ]);
+      games.listLeitnerGamesForPlayer.mockResolvedValue([
+        { id: 'g1', state: 'completed', endedAt: '2026-10-22T18:00:00.000Z', guessCount: 10, exportError: 'nope' },
+      ]);
+      const res = createResponseMock();
+
+      await controller.getActivity(PLAYER_ID, { now: '2026-10-23T09:00:00Z' }, res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const body = res.json.mock.calls[0][0];
+      expect(body.player).toEqual({ id: PLAYER_ID, label: 'Player 7F3A' });
+      expect(body.statementCount).toBe(1);
+      expect(body.leitnerGames).toEqual([
+        { gameId: 'g1', state: 'completed', endedAt: '2026-10-22T18:00:00.000Z', guessCount: 10, exportError: 'nope' },
+      ]);
+      expect(body.tracks).toEqual([expect.objectContaining({ word: '시험', level: 1, due: false })]);
+
+      const url = new URL(fetchMock.mock.calls[0][0]);
+      expect(JSON.parse(url.searchParams.get('agent')!).account.name).toBe(EXTERNAL_ID);
+      expect(url.searchParams.has('verb')).toBe(false);
+    });
+
+    it('returns 400 for a bad id, 404 for an unknown player or book', async () => {
+      const bad = createResponseMock();
+      await controller.getActivity('nope', {}, bad as unknown as Response);
+      expect(bad.status).toHaveBeenCalledWith(400);
+
+      const book = createResponseMock();
+      await controller.getActivity(PLAYER_ID, { book: 'no-such-book' }, book as unknown as Response);
+      expect(book.status).toHaveBeenCalledWith(404);
+
+      repository.getPlayer.mockResolvedValue(null);
+      const missing = createResponseMock();
+      await controller.getActivity(PLAYER_ID, {}, missing as unknown as Response);
+      expect(missing.status).toHaveBeenCalledWith(404);
+    });
+
+    it("returns 503 with the student's Leitner games when the LRS is not configured", async () => {
+      delete process.env['XAPI_LRS_ENDPOINT'];
+      const res = createResponseMock();
+      await controller.getActivity(PLAYER_ID, {}, res as unknown as Response);
+      expect(res.status).toHaveBeenCalledWith(503);
+      expect(res.json.mock.calls[0][0].leitnerGames).toEqual([]);
+    });
+
+    it('returns 502 when the LRS request fails', async () => {
+      global.fetch = jest
+        .fn()
+        .mockResolvedValue({ ok: false, status: 500, text: async () => 'down' }) as unknown as typeof fetch;
+      const res = createResponseMock();
+      await controller.getActivity(PLAYER_ID, {}, res as unknown as Response);
+      expect(res.status).toHaveBeenCalledWith(502);
+    });
+  });
 });

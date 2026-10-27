@@ -595,6 +595,18 @@ GET /api/games, /api/games/:id             // both have kind; detail also has le
 
 GET /api/books/:book/chapters              // the referee's chapter picker
 → 200 { book, language, chapters: [{ chapter, entryCount }] } · 404 unknown book
+
+GET /api/players/:playerId                 // Players page: one player (first name stays in the app)
+GET /api/players/:playerId/activity[?book=…][&now=<iso>]
+                                           // Players → detail: every statement for the actor (no verb filter)
+→ 200 { player: { id, label }, book, language, asOf, statementCount,
+        leitnerGames: [{ gameId, state, endedAt, guessCount, exportError }],  // still in Mongo
+        summary: { games, answered, correct, firstActivityAt, lastActivityAt,
+                   words, tracks, active: { L0…L3 }, retired, due },
+        sessions: [{ gameId, title, kind, firstAnswerAt, lastAnswerAt, answered, correct, score, chapters }],
+        recentAnswers: [ …latest 50 answered … ],
+        tracks: (TrackState & { due, word, gloss, kind })[] }   // every chapter, same fold
+→ 400 · 404 unknown player or book · 503 LRS not configured (with leitnerGames) · 502 LRS read failed
 ```
 
 Both are referee-only once Step 0 auth lands, like the other player

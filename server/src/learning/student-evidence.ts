@@ -24,3 +24,14 @@ export async function fetchStudentEvidence(
   });
   return { statements, observations: observationsFromStatements(statements, language, leitnerConfig) };
 }
+
+/**
+ * Every statement about one student, any verb (Players → activity). One
+ * read for games, answers and the fold; the fold still keeps only `assessed`.
+ */
+export async function fetchStudentStatements(config: LrsConfig, externalId: string): Promise<unknown[]> {
+  return fetchStatements(config, {
+    agent: { objectType: 'Agent', account: { homePage: XAPI_HOMEPAGE, name: externalId } },
+    limit: PAGE_SIZE,
+  });
+}
