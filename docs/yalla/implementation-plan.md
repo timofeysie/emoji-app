@@ -684,18 +684,37 @@ only kept in memory, so reloading a `/yalla` page while signed in sends
 you back to `/`. Fix this in Y2 together with the user record, e.g. by
 keeping the token in `sessionStorage`.
 
-#### Y2: identity (user ↔ player)
+#### Y2: identity (user ↔ player) ✅ built 2026-10-30
 
-- [ ] `User` upsert from `sub`; `GET /api/me`; `User.playerId`;
-      `PUT /api/me/player` (link, unlink, create); `resolveLearner(req)`
-      (403 without a link).
-- [ ] Profile page: "Practise as" picker.
-- [ ] Specs: the learner always comes from the token, never the body;
-      unique link per player.
-- [ ] *(Optional)* replace `DEMO_CREATOR_ID` with the signed-in user's id.
+- [x] `User` upsert from `sub` (`server/src/persistence/user.repository.ts`);
+      `GET /api/me`; `User.playerId` (unique per player, partial index
+      `uniq_user_per_player`); `PUT /api/me/player` (link `{ playerId }`,
+      unlink `{ playerId: null }`, create `{ create: { firstName } }`;
+      400 / 404 / 409) in `server/src/me.controller.ts`;
+      `LearnerService.resolveLearner(req)` (403 `No linked player`) in
+      `server/src/learner.service.ts`. `/api/me` never returns the
+      `externalId`.
+- [x] Profile page: "Practise as" card (pick, create, unlink). The Profile
+      link now also shows in local dev (auth off), where you're the
+      `local-dev` user. YALLA home shows "Practising as …" or "Link your
+      profile to a player".
+- [x] D14 recorded in `security.md` (done in Phase 0).
+- [x] Specs: learner always from the token, never the body (extra body
+      keys are rejected); 409 when another user has the player; dangling
+      link reads as unlinked (`learner.service.spec.ts`,
+      `me.controller.spec.ts`, `user.repository.spec.ts`). Playwright
+      `yalla-identity.spec.ts`: create + link, link existing + reload, API
+      validation.
+- [x] Reload fix: the access token is kept in `sessionStorage` for the tab
+      (dropped once expired), so reloading `/yalla` or `/profile` no
+      longer signs you out (`client/src/app/auth/auth.store.ts`).
+- [ ] *(Optional, not done)* replace `DEMO_CREATOR_ID` with the signed-in
+      user's id. Games still record the demo referee as creator.
 
 **Done when** the link survives signing out and back in. First
 `terraform apply`: check this with your real Cognito login on staging.
+Also check by hand that YALLA and Profile are hidden when signed out, and
+that a reload keeps you signed in (e2e runs with auth off, so it can't).
 
 #### Y3: progress and pills (read-only LRS)
 

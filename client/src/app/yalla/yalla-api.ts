@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { authFetchMiddleware } from '../auth/authFetchMiddleware';
+import { authFetch } from '../auth/authFetch';
 
 export type ChapterSummary = { chapter: string; titleTarget: string; titleNative: string };
 
@@ -67,8 +67,7 @@ export function fetchYalla<T>(path: string): Promise<T> {
     return cached as Promise<T>;
   }
   const request = (async () => {
-    const init = await authFetchMiddleware({ credentials: 'same-origin' });
-    const res = await fetch(`/api/yalla${path}`, init);
+    const res = await authFetch(`/api/yalla${path}`);
     if (!res.ok) {
       throw new YallaRequestError(res.status);
     }

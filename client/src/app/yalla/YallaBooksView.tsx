@@ -1,5 +1,6 @@
 import { BookOpen, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { PractisingAs } from './PractisingAs';
 import { YallaStatus } from './YallaStatus';
 import { bookPath, useYallaResource, type BookSummary } from './yalla-api';
 
@@ -13,6 +14,7 @@ export function YallaBooksView() {
         <h1 className="text-2xl font-bold">YALLA</h1>
         <p className="text-sm text-muted-foreground">Yet Another Language Learning App</p>
       </div>
+      <PractisingAs />
 
       <h2 className="text-lg font-semibold">Books</h2>
       <YallaStatus loading={loading} error={error} what="books" />

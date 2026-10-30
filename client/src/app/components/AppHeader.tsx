@@ -50,7 +50,8 @@ export function AppHeader({ chatOpen, onToggleChat }: AppHeaderProps) {
   const accessToken = useAuthStore((s) => s.accessToken);
   const viewTitle = viewTitleForPathname(location.pathname);
   const visibleNavLinks = NAV_LINKS.filter((link) => {
-    if (link.to === '/profile') return Boolean(accessToken);
+    // Profile holds "Practise as", so local dev (auth off) needs it too.
+    if (link.to === '/profile') return canUseYalla(accessToken);
     if (link.to === '/yalla') return canUseYalla(accessToken);
     return true;
   });

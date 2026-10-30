@@ -31,10 +31,20 @@ const userSchema = new Schema(
   {
     displayName: { type: String, required: true, trim: true },
     authProviderId: { type: String, required: true, immutable: true },
+    /**
+     * The player this user practises as in YALLA (security.md D14); its
+     * `externalId` is their LRS actor. The player still never logs in.
+     */
+    playerId: { type: objectId, ref: 'Player', default: null },
   },
   { timestamps: true, collection: 'users' },
 );
 userSchema.index({ authProviderId: 1 }, { unique: true });
+// One user per player, so two logins never write one learner's evidence.
+userSchema.index(
+  { playerId: 1 },
+  { unique: true, partialFilterExpression: { playerId: { $type: 'objectId' } }, name: 'uniq_user_per_player' },
+);
 
 const badgeSchema = new Schema(
   {
