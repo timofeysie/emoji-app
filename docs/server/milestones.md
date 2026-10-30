@@ -10,6 +10,7 @@
 - [Milestone 5: Gameplay integrity and scoring](#milestone-5-gameplay-integrity-and-scoring)
 - [Milestone 6: Real-time features for game rooms](#milestone-6-real-time-features-for-game-rooms)
 - [Milestone 7: Production readiness and scale](#milestone-7-production-readiness-and-scale)
+- [Feature roadmap: learning](#feature-roadmap-learning)
 - [Future directions (optional)](#future-directions-optional)
 - [Immediate next actions (this week)](#immediate-next-actions-this-week)
 
@@ -268,6 +269,19 @@ This milestone is where “product correctness” meets “database engineering 
 - Target load passes with stable latency and error rates
 - Runbooks are validated in at least one game-day simulation
 - Security and reliability checklist is complete
+
+## Feature roadmap: learning
+
+The learning features have their own roadmap, separate from the platform
+milestones above (they build on Milestones 3A–4 and the xAPI/LRS work in
+`docs/xAPI/`).
+
+| Item | Status | Plan |
+| --- | --- | --- |
+| **YALLA Phase 1**: solo study and practice in the emoji-app (milestones Y1–Y6: study pages, user ↔ player link, pills, on-screen and keyboard practice, evidence cache) | Next | [`docs/yalla/implementation-plan.md`](../yalla/implementation-plan.md) |
+| **YALLA Phase 2**: installable offline PWA with an answer outbox | Later | same, Phase 2 |
+| **YALLA Phase 3**: always-available persistent tier (S3 + CloudFront, Lambda) | Only if needed | same, Phase 3 |
+| **Game formats**: one "create a game" flow where badge games, YALLA and future sensors are formats with a chosen input channel per aspect | **Future improvement** (after YALLA Phase 1) | [`docs/yalla/future-game-formats.md`](../yalla/future-game-formats.md) |
 
 ## Future directions (optional)
 

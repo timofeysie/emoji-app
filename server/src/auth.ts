@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
 
@@ -53,46 +53,71 @@ function getSigningKey(
 type CognitoAccessPayload = jwt.JwtPayload & {
   token_use?: string;
   client_id?: string;
+  username?: string;
 };
 
-export const requireAuth: RequestHandler = (req, res, next) => {
-  if (disableAuth) {
-    next();
-    return;
-  }
+/** Who made a request: the Cognito user (`sub`), or the fixed local-dev identity. */
+export type AuthClaims = { sub: string; username: string };
 
-  const header = req.headers.authorization;
+/** Used for every request when `disableAuth` (local dev and e2e only). */
+export const LOCAL_DEV_AUTH: AuthClaims = { sub: 'local-dev', username: 'local-dev' };
+
+export type AuthResult = { ok: true; auth: AuthClaims } | { ok: false; error: string };
+
+/** Checks an `Authorization` header: a Cognito access token for our app client. */
+export function authenticate(header: string | undefined): Promise<AuthResult> {
+  if (disableAuth) {
+    return Promise.resolve({ ok: true, auth: LOCAL_DEV_AUTH });
+  }
   if (!header?.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Missing token' });
-    return;
+    return Promise.resolve({ ok: false, error: 'Missing token' });
   }
 
   const token = header.slice(7);
+  return new Promise((resolve) => {
+    jwt.verify(
+      token,
+      getSigningKey,
+      {
+        algorithms: ['RS256'],
+        issuer: expectedIssuer,
+      },
+      (err, decoded) => {
+        if (err || !decoded || typeof decoded === 'string') {
+          resolve({ ok: false, error: 'Invalid token' });
+          return;
+        }
 
-  jwt.verify(
-    token,
-    getSigningKey,
-    {
-      algorithms: ['RS256'],
-      issuer: expectedIssuer,
-    },
-    (err, decoded) => {
-      if (err || !decoded || typeof decoded === 'string') {
-        res.status(401).json({ error: 'Invalid token' });
-        return;
-      }
+        const payload = decoded as CognitoAccessPayload;
+        if (payload.token_use !== 'access') {
+          resolve({ ok: false, error: 'Invalid token type' });
+          return;
+        }
+        if (payload.client_id !== appClientId) {
+          resolve({ ok: false, error: 'Invalid token audience' });
+          return;
+        }
+        if (!payload.sub) {
+          resolve({ ok: false, error: 'Invalid token' });
+          return;
+        }
 
-      const payload = decoded as CognitoAccessPayload;
-      if (payload.token_use !== 'access') {
-        res.status(401).json({ error: 'Invalid token type' });
-        return;
-      }
-      if (payload.client_id !== appClientId) {
-        res.status(401).json({ error: 'Invalid token audience' });
-        return;
-      }
+        resolve({ ok: true, auth: { sub: payload.sub, username: payload.username ?? payload.sub } });
+      },
+    );
+  });
+}
 
-      next();
-    },
-  );
+/** A request `requireAuth` or `AuthGuard` has let through. */
+export type AuthedRequest = Request & { auth?: AuthClaims };
+
+export const requireAuth: RequestHandler = (req, res, next) => {
+  void authenticate(req.headers.authorization).then((result) => {
+    if (!result.ok) {
+      res.status(401).json({ error: result.error });
+      return;
+    }
+    (req as AuthedRequest).auth = result.auth;
+    next();
+  });
 };

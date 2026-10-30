@@ -61,6 +61,7 @@ are decided here, before the `Player` record and export are coded.
 | D11 | **Australia first.** Privacy Act / APPs, the OAIC Children's Online Privacy Code and ST4S are the target. Other jurisdictions wait until the project is funded. See [Australia first](#australia-first-what-applies). |
 | D12 | **Prototype first; heavy lifting after funding.** Now: the learning sport's rules and play flow, plus the cheap, permanent decisions (D2–D4, D7 default). Deferred until funded: Step 0 access control (D5, D6, device credentials, WebSocket split), audit log, tenancy build-out, parental consent, AU-hosted LRS, per-actor deletion, ST4S, SOC 2. |
 | D13 | **`emoji-os` stays in `rainbow-connection` for now.** The move into the emoji-app repo and the shared device-contract file are deferred with Step 0. |
+| D14 | **A signed-in user may practise as a `Player` (YALLA, prototype, 2026-10-30).** A Cognito `User` can link themselves to one `Player` (`User.playerId`) and then send that player's evidence (actor = `externalId`) from YALLA solo practice. This **doesn't change D1 or D4**: the player still never logs in and still has no email. The person who logs in is a `User` (in the pilot, an adult self-learner, i.e. the referee practising on their own record). Prototype rule: any user may link to any player. **Before children or a class use YALLA**, linking must be done by the referee or with a one-time link code, and a child must not get a login of their own without revisiting D1. See `docs/yalla/implementation-plan.md` §4. |
 
 ---
 

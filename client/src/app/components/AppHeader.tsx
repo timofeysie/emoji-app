@@ -5,6 +5,7 @@ import { AuthBar } from '../auth/AuthBar';
 import { useAuthStore } from '../auth/auth.store';
 import { Button } from '../shared/button';
 import { cn } from '../shared/utils';
+import { canUseYalla } from '../yalla/yalla-access';
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -14,6 +15,7 @@ import {
 } from '../shared/navigation-menu';
 
 const NAV_LINKS = [
+  { to: '/yalla', label: 'YALLA' },
   { to: '/games', label: 'Games' },
   { to: '/players', label: 'Players' },
   { to: '/badges', label: 'Badges' },
@@ -33,6 +35,7 @@ function viewTitleForPathname(pathname: string): string {
   if (pathname === '/scenes') return 'Scenes';
   if (pathname === '/scheduled-scenes') return 'Scheduled Scenes';
   if (pathname === '/profile') return 'User Profile';
+  if (pathname === '/yalla' || pathname.startsWith('/yalla/')) return 'YALLA';
   return 'Emoji App';
 }
 
@@ -46,9 +49,11 @@ export function AppHeader({ chatOpen, onToggleChat }: AppHeaderProps) {
   const location = useLocation();
   const accessToken = useAuthStore((s) => s.accessToken);
   const viewTitle = viewTitleForPathname(location.pathname);
-  const visibleNavLinks = accessToken
-    ? NAV_LINKS
-    : NAV_LINKS.filter((link) => link.to !== '/profile');
+  const visibleNavLinks = NAV_LINKS.filter((link) => {
+    if (link.to === '/profile') return Boolean(accessToken);
+    if (link.to === '/yalla') return canUseYalla(accessToken);
+    return true;
+  });
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -191,7 +196,8 @@ export function AppHeader({ chatOpen, onToggleChat }: AppHeaderProps) {
                 className={cn(
                   'block rounded-md px-3 py-2.5 text-sm font-medium',
                   'hover:bg-accent hover:text-accent-foreground',
-                  location.pathname === to && 'bg-accent text-accent-foreground',
+                  (location.pathname === to || location.pathname.startsWith(`${to}/`)) &&
+                    'bg-accent text-accent-foreground',
                 )}
                 onClick={() => setMobileNavOpen(false)}
               >

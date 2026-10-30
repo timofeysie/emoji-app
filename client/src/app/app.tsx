@@ -19,6 +19,7 @@ import { Dashboard } from './components/dashboard/Dashboard';
 import { UserProfileView } from './views/UserProfileView';
 import { PlayersView } from './views/PlayersView';
 import { PlayerDetailView } from './views/PlayerDetailView';
+import { yallaRoutes } from './yalla/yalla-routes';
 
 const chatUrl = import.meta.env.VITE_CHAT_URL ?? '/api/chat';
 
@@ -55,6 +56,7 @@ function MainShell() {
                 element={<ScheduledScenesView />}
               />
               <Route path="/profile" element={<UserProfileView />} />
+              {yallaRoutes}
               <Route path="/" element={<Dashboard />} />
             </Routes>
           </div>

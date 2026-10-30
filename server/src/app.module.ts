@@ -18,6 +18,7 @@ import { LeitnerGamesController } from './learning/leitner-games.controller';
 import { LearningProgressController } from './learning/progress.controller';
 import { LeitnerFlowService } from './learning/leitner-flow.service';
 import { LeitnerSetupService } from './learning/leitner-setup.service';
+import { YallaContentController } from './yalla/yalla-content.controller';
 
 @Module({
   controllers: [
@@ -31,6 +32,7 @@ import { LeitnerSetupService } from './learning/leitner-setup.service';
     XapiExportController,
     LearningProgressController,
     LeitnerGamesController,
+    YallaContentController,
   ],
   providers: [
     BadgeStateService,

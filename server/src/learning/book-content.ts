@@ -1,9 +1,5 @@
-import chapter26 from '../games/content/chapter26Data.json';
-import chapter27 from '../games/content/chapter27Data.json';
-import chapter28 from '../games/content/chapter28Data.json';
-import chapter29 from '../games/content/chapter29Data.json';
-import chapter30 from '../games/content/chapter30Data.json';
 import koreanSenses from '../games/content/ko-senses.json';
+import { findCatalogueBook } from './book-catalogue';
 import {
   KOREAN_BOOK,
   learningObjectId,
@@ -17,9 +13,8 @@ import { chapterVocabulary, ChapterVocabulary, SenseRegistry } from './sense-reg
  * server): `(book, chapter) → vocabulary` and `sourceRef → learning object`.
  * Learning objects are language-scoped (learning-objects.md → A1); the
  * book only says where they were taught.
- * Chapter files are imported as modules so `tsc` ships them in dist/server
- * (the Docker image copies only that). Add a chapter here after running
- * `npm run content:senses`.
+ * Chapter files are imported as modules (`book-catalogue.ts`) so `tsc` ships
+ * them in dist/server (the Docker image copies only that).
  */
 
 export type LearningObject = LearningObjectKey & {
@@ -133,7 +128,7 @@ const loaders = new Map<string, () => BookContent>([
   [
     KOREAN_BOOK,
     () =>
-      buildBookContent(KOREAN_BOOK, koreanSenses as SenseRegistry, [chapter26, chapter27, chapter28, chapter29, chapter30]),
+      buildBookContent(KOREAN_BOOK, koreanSenses as SenseRegistry, findCatalogueBook(KOREAN_BOOK)?.chapters ?? []),
   ],
 ]);
 const cache = new Map<string, BookContent>();
