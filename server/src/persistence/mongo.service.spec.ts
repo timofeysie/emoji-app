@@ -29,7 +29,8 @@ describe('MongoService', () => {
     process.env['MONGODB_URI'] = 'mongodb://localhost:27017/emoji-app-test';
     const syncIndexes = jest.fn().mockResolvedValue(undefined);
     const close = jest.fn().mockResolvedValue(undefined);
-    const fakeModels = { Game: { modelName: 'Game' } } as unknown;
+    const deleteMany = jest.fn().mockResolvedValue({ deletedCount: 0 });
+    const fakeModels = { Game: { modelName: 'Game' }, PairBinding: { deleteMany } } as unknown;
     (connect as jest.Mock).mockResolvedValue({
       connection: { syncIndexes, close },
     });
@@ -41,6 +42,7 @@ describe('MongoService', () => {
     expect(connect).toHaveBeenCalled();
     expect(registerModels).toHaveBeenCalled();
     expect(syncIndexes).toHaveBeenCalled();
+    expect(deleteMany).toHaveBeenCalledWith({ stationName: null });
     expect(service.isConnected()).toBe(true);
     expect(service.getModels()).toBe(fakeModels);
 

@@ -49,9 +49,13 @@ export class BadgesController {
   }
 
   @Get('badges')
-  getBadges(): { badges: ReturnType<BadgeStateService['getBadges']> } {
+  getBadges(): {
+    badges: ReturnType<BadgeStateService['getBadges']>;
+    stations: ReturnType<BadgeStateService['getStations']>;
+  } {
     return {
       badges: this.badgeStateService.getBadges(),
+      stations: this.badgeStateService.getStations(),
     };
   }
 }

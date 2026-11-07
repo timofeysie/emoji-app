@@ -4,6 +4,14 @@ This app broadcasts badge updates from the server using **WebSockets** (`/ws`) a
 **polling `GET /api/badges`** when the browser cannot connect (for example on **AWS App Runner**,
 where HTTP `Upgrade` for WebSockets is often unreliable).
 
+> **Planned change (decided 2026-10-09; deferred until the prototype is funded):** the single
+> open `/ws` channel, which today broadcasts every event to every client,
+> splits into `/ws/referee` (Cognito token in the first message),
+> `/ws/public` (spectator share code; spectator-safe events for one game)
+> and `/ws/device` (station credential). Events are sent per game and
+> per audience. See [`xAPI/security.md`](./xAPI/security.md) → Access
+> control.
+
 Below are platforms that typically support **WebSockets** or **Server-Sent Events (SSE)** well, so
 you can rely on push instead of aggressive polling.
 

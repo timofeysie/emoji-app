@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
+import type { SlotLabel } from './persistence/domain-types';
 
 export const nfcCardSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   display: z.string().min(1),
+  slotLabel: z.enum(['A', 'B', 'C', 'D', 'E']).optional(),
 });
 
 export type NfcCard = z.infer<typeof nfcCardSchema>;
@@ -13,11 +15,38 @@ export type NfcCard = z.infer<typeof nfcCardSchema>;
 // making it dynamically editable (Mongo-backed / admin-authored) is a later
 // step. Mirrors the two entries the Zero previously hardcoded in
 // emoji-os-zero.py (NFC_CARD_MAP). `display` is the icon key the Pico badge
-// understands (currently "circle" or "x").
+// understands (currently "circle" or "x"). `slotLabel` maps the card to an
+// answer slot (A–E) so the Zero can resolve guesses without a MongoDB card
+// group assignment; cards without one are not answer cards.
 const SEED_NFC_CARDS: NfcCard[] = [
+  // Early-demo cards (NFC test scripts match on id only). No slotLabel, so a
+  // scan during a game counts as wrong.
   { id: '5B:6F:B8:08', name: 'R12 - Monkey', display: 'circle' },
-  { id: 'DB:93:B7:08', name: 'W3 - Clown', display: 'x' },
+  { id: 'DB:93:B7:08', name: 'W3 - Clown',   display: 'x' },
+  // Four-option quiz cards (docs/games/game-planning.md → Phase 0). Names are
+  // the numbers printed on the cards.
+  { id: '2B:73:B8:08', name: '12', display: 'A', slotLabel: 'A' },
+  { id: '4B:71:B8:08', name: '11', display: 'B', slotLabel: 'B' },
+  { id: 'DB:69:B8:08', name: '10', display: 'C', slotLabel: 'C' },
+  { id: '1B:5D:B8:08', name: 'D',  display: 'D', slotLabel: 'D' },
 ];
+
+/** "R12 - Monkey" → "monkey"; falls back to slot or "-". */
+export function shortCardLabel(
+  displayName: string | undefined | null,
+  fallback?: string | null,
+): string {
+  const raw = displayName?.trim();
+  if (raw) {
+    const dash = raw.lastIndexOf(' - ');
+    const name = (dash >= 0 ? raw.slice(dash + 3) : raw).trim();
+    if (name) {
+      return name.toLowerCase();
+    }
+  }
+  const fb = fallback?.trim();
+  return fb ? fb.toLowerCase() : '-';
+}
 
 @Injectable()
 export class NfcCardService {
@@ -25,5 +54,29 @@ export class NfcCardService {
 
   getCards(): NfcCard[] {
     return this.cards.map((card) => ({ ...card }));
+  }
+
+  /**
+   * The hardcoded quiz card group (seed cards with a slot), as
+   * `ensureNfcCardGroup` input. Renamed from 'Demo Set' (Monkey A / Clown B),
+   * which databases may still hold: ensureNfcCardGroup returns an existing
+   * same-name group unchanged, so a new name is what picks up the A–D cards.
+   */
+  demoGroupInput(): {
+    name: string;
+    description: string;
+    cards: Array<{ cardUid: string; slotLabel: SlotLabel; displayName: string }>;
+  } {
+    return {
+      name: 'Quiz Cards A-D',
+      description: 'Hardcoded quiz NFC cards A–D (seed)',
+      cards: this.cards
+        .filter((card): card is NfcCard & { slotLabel: SlotLabel } => Boolean(card.slotLabel))
+        .map((card) => ({ cardUid: card.id, slotLabel: card.slotLabel, displayName: card.name })),
+    };
+  }
+
+  findByUid(cardUid: string): NfcCard | undefined {
+    return this.cards.find((card) => card.id === cardUid);
   }
 }

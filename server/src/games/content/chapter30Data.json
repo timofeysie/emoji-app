@@ -1,0 +1,440 @@
+{
+    "id": "30",
+    "categoryMappingId": 0,
+    "chapter": "30",
+    "titleTarget": "저 이번에 비행기 처음 타 보는 거예요.",
+    "titleNative": "This is my first time on an  airplane. ",
+    "dialog": [
+        {
+            "index": 10,
+            "speakerNameTarget": "소연",
+            "speakerNameNative": "So-yeon",
+            "speechTarget": "언니, 저 이번에 비행기 처음 타 보는 거예요.",
+            "speechNative": "Eonni, this is my first time on an airplane."
+        },
+        {
+            "index": 11,
+            "speakerNameTarget": "지혜",
+            "speakerNameNative": "Ji-hye",
+            "speechTarget": "진짜? 고등학교 수학여행 갈 때 비행기 안 탔어?",
+            "speechNative": "Really? You didn’t take an airplane when you went on your high school excursion?"
+        },
+        {
+            "index": 12,
+            "speakerNameTarget": "소연",
+            "speakerNameNative": "So-yeon",
+            "speechTarget": "네. 저희 수학여행 배 타고 갔었어요.",
+            "speechNative": "Yeah. We took a boat when we went on our trip."
+        },
+        {
+            "index": 13,
+            "speakerNameTarget": "지혜",
+            "speakerNameNative": "Ji-hye",
+            "speechTarget": "제주도를?",
+            "speechNative": "To Jeju Island?"
+        },
+        {
+            "index": 14,
+            "speakerNameTarget": "소연",
+            "speakerNameNative": "So-yeon",
+            "speechTarget": "네.",
+            "speechNative": "Yes."
+        },
+        {
+            "index": 15,
+            "speakerNameTarget": "지혜",
+            "speakerNameNative": "Ji-hye",
+            "speechTarget": "그랬구나. 근데 나 같으면 비행기 타 보고 싶어서라도 제주도나 해외 여행 가려고 했을 것 같은데, 대학 다닐 동안 한 번도 안 갔던 거야?",
+            "speechNative": "I see. If I were you, since you wanted to take an airplane, I would have gone to Jeju Island or on an overseas trip at least. You never went anywhere during your college years?"
+        },
+        {
+            "index": 16,
+            "speakerNameTarget": "소연",
+            "speakerNameNative": "So-yeon",
+            "speechTarget": "네. 저는 여행을 막 그렇게 좋아하진 않아서, 여행 가려고 돈 모았다 가도 사고 싶은 게 생기면 그 돈으로 물건을 사 버렸어요. 노트북이나 그런 거요.",
+            "speechNative": "Yup. I don’t really like traveling that much, so even after saving up money, if there was something I wanted to buy, I just bought it with that money. A laptop or things like that."
+        },
+        {
+            "index": 17,
+            "speakerNameTarget": "지혜",
+            "speakerNameNative": "Ji-hye",
+            "speechTarget": "아, 정말? 여행을 안 좋아하다니! 근데 사실 비행기 막상 타 보면 별 거 없어. 좁고.",
+            "speechNative": "Oh, really? You don’t like traveling? Actually, when you are in the airplane, there’s nothing special. It’s really cramped."
+        },
+        {
+            "index": 18,
+            "speakerNameTarget": "소연",
+            "speakerNameNative": "So-yeon",
+            "speechTarget": "그래도 너무 아쉬워요. 탔다가 금방 내릴 테니까. 좀 더 길게 타고 싶은데.",
+            "speechNative": "But still, it’s too bad, because we’ll be getting off the airplane soon after we get on it. I want to ride for a little longer."
+        },
+        {
+            "index": 19,
+            "speakerNameTarget": "지혜",
+            "speakerNameNative": "Ji-hye",
+            "speechTarget": "다음에 돈 모아서 해외여행 가. 멀리 여행 가는 것도 조금이라도 어릴 때 가야 된대. 나이 먹을수록 장시간 비행기 타면 힘드니까.",
+            "speechNative": "Next time, save your money and go on an overseas trip. They say you should go on long-distance trips while you are still young. The older you get, the harder it becomes to fly for an extended period of time."
+        },
+        {
+            "index": 20,
+            "speakerNameTarget": "소연",
+            "speakerNameNative": "So-yeon",
+            "speechTarget": "그래요? 저는 좋기만 할 것 같은데.",
+            "speechNative": "Really? I think I’ll just be happy without it."
+        },
+        {
+            "index": 21,
+            "speakerNameTarget": "지혜",
+            "speakerNameNative": "Ji-hye",
+            "speechTarget": "너도 몇 번만 타 보면 비행기 오래 타는 게 얼마나 곤욕인지 알 수 있을 거야.",
+            "speechNative": "Once you take an airplane a few times, you will know how much of a pain it is to fly for a long time."
+        },
+        {
+            "index": 22,
+            "speakerNameTarget": "소연",
+            "speakerNameNative": "So-yeon",
+            "speechTarget": "비행기에 액체류 반입 제한 있다던데, 그건 뭐예요?",
+            "speechNative": "I heard that there is a limit to carrying liquid onto the airplane. What is that about?"
+        },
+        {
+            "index": 23,
+            "speakerNameTarget": "지혜",
+            "speakerNameNative": "Ji-hye",
+            "speechTarget": "아! 국제선 탈 때 액체류는 100ml 이하 용기에 담긴 것만 가지고 탈 수 있거든. 근데 우리는 국내선이라 상관없어.",
+            "speechNative": "Oh, when you take an international flight, you can only board the plane with liquid that’s in a container that is less than 100ml. But we are on a domestic flight, so it doesn’t affect us."
+        },
+        {
+            "index": 24,
+            "speakerNameTarget": "소연",
+            "speakerNameNative": "So-yeon",
+            "speechTarget": "아... 그렇게 많은 액체를 사람들은 왜 가지고 타죠?",
+            "speechNative": "Oh... Why do people carry so much liquid onboard?"
+        },
+        {
+            "index": 25,
+            "speakerNameTarget": "지혜",
+            "speakerNameNative": "Ji-hye",
+            "speechTarget": "대부분 화장품이나 치약, 아니면 마실 물, 이런 거지, 뭐. 나도 지난번에 아무 생각 없이 물병 들고 타려다가 버리라고 해서 한 모금밖에 안 마신 거였는데, 버렸잖아.",
+            "speechNative": "It’s mostly cosmetics, toothpaste, or drinking water, stuff like that, you know. I was about to get on a plane with a water bottle without thinking once, and they told me to throw it away, so I did, even though I had only taken a sip out of it."
+        },
+        {
+            "index": 26,
+            "speakerNameTarget": "소연",
+            "speakerNameNative": "So-yeon",
+            "speechTarget": "아, 치약 이런 것도 액체류에 속하는구나. 몰랐어요.",
+            "speechNative": "Oh, things like toothpaste are also considered a liquid. I didn’t know that."
+        },
+        {
+            "index": 27,
+            "speakerNameTarget": "지혜",
+            "speakerNameNative": "Ji-hye",
+            "speechTarget": "응. 액체류랑 젤류 둘 다 제한한대. 자, 그럼 비행기 타러 들어가 볼까?",
+            "speechNative": "Yeah, they restrict both liquid and gel. Now, shall we go get on our airplane?"
+        },
+        {
+            "index": 28,
+            "speakerNameTarget": "소연",
+            "speakerNameNative": "So-yeon",
+            "speechTarget": "꺅! 신나요. 면세점에서 쇼핑해야지!",
+            "speechNative": "Yes! I’m excited. I’m going to shop at the duty-free store."
+        },
+        {
+            "index": 29,
+            "speakerNameTarget": "지혜",
+            "speakerNameNative": "Ji-hye",
+            "speechTarget": "소연아, 미안하지만 김포공항 국내선에는 면세점이 없단다. 너무 실망하지 마. 제주공항에는 면세점 있으니까 올 때 쇼핑 마음껏 하렴.",
+            "speechNative": "So-yeon, I’m sorry but Gimpo Airport’s domestic terminal doesn’t have a duty-free shop. Don’t be so disappointed. There is a duty-free shop at Jeju Airport, so do all the shopping you want on our way back."
+        }
+    ],
+    "vocabulary": [
+        {
+            "id": 0,
+            "targetLanguageText": "제한",
+            "nativeLanguageText": "limit"
+        },
+        {
+            "id": 1,
+            "targetLanguageText": "국제선",
+            "nativeLanguageText": "international flight"
+        },
+        {
+            "id": 2,
+            "targetLanguageText": "용기",
+            "nativeLanguageText": "container"
+        },
+        {
+            "id": 3,
+            "targetLanguageText": "담기다",
+            "nativeLanguageText": "to be contained"
+        },
+        {
+            "id": 4,
+            "targetLanguageText": "국내선",
+            "nativeLanguageText": "domestic flight"
+        },
+        {
+            "id": 5,
+            "targetLanguageText": "대부분",
+            "nativeLanguageText": "mostly, majority, for the most part"
+        },
+        {
+            "id": 6,
+            "targetLanguageText": "화장품",
+            "nativeLanguageText": "cosmetics"
+        },
+        {
+            "id": 7,
+            "targetLanguageText": "치약",
+            "nativeLanguageText": "toothpaste"
+        },
+        {
+            "id": 8,
+            "targetLanguageText": "버리다",
+            "nativeLanguageText": "to throw away"
+        },
+        {
+            "id": 9,
+            "targetLanguageText": "속하다",
+            "nativeLanguageText": "to be included, to belong"
+        },
+        {
+            "id": 10,
+            "targetLanguageText": "젤",
+            "nativeLanguageText": "gel"
+        },
+        {
+            "id": 11,
+            "targetLanguageText": "제한하다",
+            "nativeLanguageText": "to limit, to restrict"
+        },
+        {
+            "id": 12,
+            "targetLanguageText": "면세점",
+            "nativeLanguageText": "duty-free shop"
+        },
+        {
+            "id": 13,
+            "targetLanguageText": "실망하다",
+            "nativeLanguageText": "to be disappointed"
+        },
+        {
+            "id": 14,
+            "targetLanguageText": "마음껏",
+            "nativeLanguageText": "as much as one likes"
+        },
+        {
+            "id": 15,
+            "targetLanguageText": "수학여행",
+            "nativeLanguageText": "school trip"
+        },
+        {
+            "id": 16,
+            "targetLanguageText": "해외여행",
+            "nativeLanguageText": "overseas trip"
+        },
+        {
+            "id": 17,
+            "targetLanguageText": "(돈을) 모으다",
+            "nativeLanguageText": "to save up (money)"
+        },
+        {
+            "id": 18,
+            "targetLanguageText": "막상",
+            "nativeLanguageText": "in the event, when S + is actually about to + V"
+        },
+        {
+            "id": 19,
+            "targetLanguageText": "별 거 없다",
+            "nativeLanguageText": "to be nothing special"
+        },
+        {
+            "id": 20,
+            "targetLanguageText": "좁다",
+            "nativeLanguageText": "to be narrow, to be cramped"
+        },
+        {
+            "id": 21,
+            "targetLanguageText": "아쉽다",
+            "nativeLanguageText": "to be such a pity"
+        },
+        {
+            "id": 22,
+            "targetLanguageText": "길다",
+            "nativeLanguageText": "to be long"
+        },
+        {
+            "id": 23,
+            "targetLanguageText": "멀다",
+            "nativeLanguageText": "to be far"
+        },
+        {
+            "id": 24,
+            "targetLanguageText": "나이 먹다",
+            "nativeLanguageText": "to get old"
+        },
+        {
+            "id": 25,
+            "targetLanguageText": "장시간",
+            "nativeLanguageText": "long time, long hours"
+        },
+        {
+            "id": 26,
+            "targetLanguageText": "힘들다",
+            "nativeLanguageText": "to be difficult, to be tough, to be hard"
+        },
+        {
+            "id": 27,
+            "targetLanguageText": "곤욕",
+            "nativeLanguageText": "trouble, difficulty"
+        },
+        {
+            "id": 28,
+            "targetLanguageText": "액체류",
+            "nativeLanguageText": "liquid"
+        },
+        {
+            "id": 29,
+            "targetLanguageText": "반입",
+            "nativeLanguageText": "carrying into"
+        }
+    ],
+    "patterns": [
+        {
+            "id": 0,
+            "patternTarget": "처음 VERB + -아/어/여 보는 거예요",
+            "patternNative": "This is my first time VERB-ing.",
+            "type": "formal",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "저 이번에 비행기 처음 타 보는 거예요.",
+            "exampleSentenceNative": "This is my first time on an airplane.",
+            "sampleSentences": [
+                {
+                    "id": 0,
+                    "targetText": "이거 처음 먹어 보는 거예요.",
+                    "nativeText": "This is my first time eating this."
+                },
+                {
+                    "id": 1,
+                    "targetText": "자동차 처음 사 보는 거예요.",
+                    "nativeText": "This is my first time buying a car."
+                }
+            ],
+            "exercises": [
+                {
+                    "id": 0,
+                    "exercise": "This is my first time listening to this song.",
+                    "answerKey": "이 노래 처음 들어 보는 거예요."
+                },
+                {
+                    "id": 1,
+                    "exercise": "This is my first time doing this exercise.",
+                    "answerKey": "이 운동 처음 해 보는 거예요."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 0,
+                    "pattern": "처음 VERB + -아/어/여 봐요",
+                    "patternTargetText": "This is my first time on an airplane.",
+                    "patternNativeText": "저 이번에 비행기 처음 타 봐요.",
+                    "patternNote": "처음 -아/어/여 봐요 is more of a plain statement than the -는 거예요 ending, which is used to “explain” the background."
+                },
+                {
+                    "id": 1,
+                    "pattern": "처음 VERB + -아/어/여요",
+                    "patternTargetText": "This is my first time on an airplane.",
+                    "patternNativeText": "저 이번에 비행기 처음 타요.",
+                    "patternNote": "Even without the verb -보다, since the phrase has 처음, which means “the first time”, the meaning mostly stays the same."
+                }
+            ]
+        },
+        {
+            "id": 1,
+            "patternTarget": "VERB + -아/어/여 버렸어요",
+            "patternNative": "I just ended up VERB-ing. / I just happened to VERB. / (SUBJECT) just PAST TENSE VERB.",
+            "type": "formal",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "그 돈으로 물건을 사 버렸어요.",
+            "exampleSentenceNative": "I just ended up buying something with that money.",
+            "sampleSentences": [
+                {
+                    "id": 0,
+                    "targetText": "여기까지 와 버렸어요.",
+                    "nativeText": "I ended up coming all the way here."
+                },
+                {
+                    "id": 1,
+                    "targetText": "치킨을 제 동생이 다 먹어 버렸어요.",
+                    "nativeText": "My brother just ate all of the chicken."
+                }
+            ],
+            "exercises": [
+                {
+                    "id": 0,
+                    "exercise": "The guy just left last month.",
+                    "answerKey": "그 남자 지난 달에 떠나 버렸어요."
+                },
+                {
+                    "id": 1,
+                    "exercise": "I just cut that part.",
+                    "answerKey": "그 부분 잘라 버렸어요."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 0,
+                    "pattern": "결국 VERB + -아/어/여 버렸어요",
+                    "patternTargetText": "I ended up buying something with that money.",
+                    "patternNativeText": "결국 그 돈으로 물건을 사 버렸어요."
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "patternTarget": "막상 VERB + -아/어/여 보면 별 거 없어",
+            "patternNative": "Actually, when you VERB, there’s nothing special.",
+            "type": "casual",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "비행기 막상 타 보면 별 거 없어.",
+            "exampleSentenceNative": "Actually, when you are in the airplane, there’s nothing special.",
+            "sampleSentences": [
+                {
+                    "id": 0,
+                    "targetText": "막상 올라가 보면 별 거 없어.",
+                    "nativeText": "Actually, if you go up there, there’s nothing special."
+                },
+                {
+                    "id": 1,
+                    "targetText": "막상 먹어 보면 별 거 없어.",
+                    "nativeText": "Actually, when you eat it, it’s nothing special."
+                }
+            ],
+            "exercises": [
+                {
+                    "id": 0,
+                    "exercise": "Actually, when you meet them, they're nothing special.",
+                    "answerKey": "막상 그 사람들 만나 보면 별 거 없어."
+                },
+                {
+                    "id": 1,
+                    "exercise": "Actually, if you go there, there’s nothing special.",
+                    "answerKey": "막상 가 보면 별 거 없어."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 0,
+                    "pattern": "막상 VERB + -아/어/여 보면 별 거 아니야",
+                    "patternTargetText": "Actually, when you are in the airplane, it’s nothing special.",
+                    "patternNativeText": "막상 타 보면 별 거 아니야."
+                },
+                {
+                    "id": 1,
+                    "pattern": "막상 VERB + -아/어/여 보면 아무것도 아니야",
+                    "patternTargetText": "Actually, when you are in the airplane, it’s just nothing.",
+                    "patternNativeText": "막상 타 보면 아무것도 아니야."
+                }
+            ]
+        }
+    ]
+}

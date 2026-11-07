@@ -3,6 +3,18 @@
 This document compares auth options for the smart-home sample and describes
 how to implement the recommended approach (AWS Cognito).
 
+> **Planned change (decided 2026-10-09; deferred until the prototype is funded):** API
+> authentication moves from "protect `POST /api/chat` only" to
+> **route-prefix authentication**:
+> - `/api/*`: Cognito login, default-deny. Only referees and admins log in.
+> - `/api/public/*`: spectators, via an expiring, read-only, rate-limited
+>   share code.
+> - `/api/device/*`: stations, via a per-device credential.
+>
+> `/ws` splits into `/ws/referee`, `/ws/public` and `/ws/device`. See
+> [`xAPI/security.md`](./xAPI/security.md) and Step 0 of
+> [`xAPI/xapi-export-plan.md`](./xAPI/xapi-export-plan.md).
+
 ## What we need
 
 - Protect `POST /api/chat` — every request proxies a paid OpenAI call

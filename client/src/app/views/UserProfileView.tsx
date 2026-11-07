@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '../auth/auth.store';
 import { authDisabledClient, getCognitoDomain } from '../auth/cognito-config';
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/card';
+import { PractiseAsCard } from '../yalla/PractiseAsCard';
 
 type JwtPayload = Record<string, unknown>;
 type UserInfoPayload = Record<string, unknown>;
@@ -155,14 +156,17 @@ export function UserProfileView() {
 
   if (!accessToken) {
     return (
-      <div className="max-w-3xl">
+      <div className="grid max-w-3xl gap-4">
+        {authDisabledClient && <PractiseAsCard />}
         <Card>
           <CardHeader>
             <CardTitle>User Profile</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              You are not signed in. Sign in to view Cognito user details.
+              {authDisabledClient
+                ? 'Auth is off for local dev, so there are no Cognito details. You practise as the local-dev user.'
+                : 'You are not signed in. Sign in to view Cognito user details.'}
             </p>
           </CardContent>
         </Card>
@@ -172,6 +176,7 @@ export function UserProfileView() {
 
   return (
     <div className="grid gap-4 max-w-5xl">
+      <PractiseAsCard />
       <Card>
         <CardHeader>
           <CardTitle>User Profile</CardTitle>

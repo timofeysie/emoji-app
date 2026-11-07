@@ -1,8 +1,14 @@
-import { Body, Controller, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { GameDataRepository } from './persistence/game-data.repository';
+import { learningTagSchema } from './learning/learning-object';
 import { BadgeStateService } from './badge-state.service';
+import { NfcCardService, shortCardLabel } from './nfc-card.service';
+import { QuestionCloser } from './question-closer';
+import { LeitnerFlowService } from './learning/leitner-flow.service';
+import { broadcastBindingsChanged, reportRosterChange } from './station-roster-sync';
+import { GameExportService, type GameExportOutcome } from './xapi/game-export.service';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 const slotLabelSchema = z.enum(['A', 'B', 'C', 'D', 'E']);
@@ -10,7 +16,15 @@ const playModeSchema = z.enum(['standard', 'cut-throat']);
 const participantRoleSchema = z.enum(['player', 'referee', 'spectator']);
 const questionModeSchema = z.enum(['standard', 'cut-throat', 'mixed']);
 const questionStateSchema = z.enum(['open', 'closed']);
-const gameLifecycleStateSchema = z.enum(['lobby', 'active', 'paused', 'completed', 'cancelled']);
+const gameLifecycleStateSchema = z.enum([
+  'draft',
+  'ready',
+  'lobby',
+  'active',
+  'paused',
+  'completed',
+  'cancelled',
+]);
 
 const createGameSchema = z.object({
   title: z.string().min(1),
@@ -48,7 +62,7 @@ const createNfcCardGroupSchema = z.object({
 });
 
 const attachNfcCardGroupSchema = z.object({
-  assignedByUserId: objectIdSchema,
+  assignedByUserId: objectIdSchema.optional(),
 });
 
 const createQuestionSchema = z.object({
@@ -67,6 +81,8 @@ const createQuestionSchema = z.object({
       }),
     )
     .min(2),
+  /** Leitner tag (docs/xAPI/leitner-method.md); class games leave it out. */
+  learning: learningTagSchema.optional(),
 });
 
 const setQuestionStateSchema = z.object({
@@ -84,7 +100,9 @@ const submitGuessSchema = z.object({
   guesserUserId: objectIdSchema.optional(),
   pairName: z.string().min(1).optional(),
   badgeId: objectIdSchema.optional(),
+  badgeName: z.string().min(1).optional(),
   cardUid: z.string().min(1),
+  slotLabel: slotLabelSchema.optional(),
 });
 
 function getValidationErrors(error: ZodError): Array<{ path: string; message: string }> {
@@ -96,6 +114,7 @@ function getValidationErrors(error: ZodError): Array<{ path: string; message: st
 
 /** Maps a new game state to the event name sent to bound controllers. */
 const controllerEventForState: Partial<Record<string, string>> = {
+  ready: 'game.ready',
   lobby: 'game.opened',
   active: 'game.started',
   completed: 'game.ended',
@@ -104,10 +123,275 @@ const controllerEventForState: Partial<Record<string, string>> = {
 
 @Controller('api')
 export class GameFlowController {
+  private readonly questionCloser: QuestionCloser;
+
   constructor(
     private readonly gameDataRepository: GameDataRepository,
     private readonly badgeStateService: BadgeStateService,
-  ) {}
+    private readonly nfcCardService: NfcCardService,
+    private readonly gameExportService: GameExportService,
+    private readonly leitnerFlow?: LeitnerFlowService,
+  ) {
+    this.questionCloser = new QuestionCloser(gameDataRepository, badgeStateService, leitnerFlow);
+    // A Leitner game ends by itself after its final round, like End Game.
+    leitnerFlow?.setAutoEnd(async (gameId) => {
+      await this.applyGameState(gameId, 'completed');
+    });
+  }
+
+  @Get('games')
+  async listGames(@Res() res: Response): Promise<void> {
+    try {
+      const games = await this.gameDataRepository.listGames();
+      res.status(200).json({ games });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to list games', message: String(error) });
+    }
+  }
+
+  @Get('games/:gameId')
+  async getGameDetail(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+    try {
+      const game = await this.gameDataRepository.getGameDetail(gameId);
+      if (!game) {
+        res.status(404).json({ error: 'Game not found' });
+        return;
+      }
+      res.status(200).json(game);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch game', message: String(error) });
+    }
+  }
+
+  @Get('games/:gameId/play')
+  async getGamePlayView(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({
+        error: 'Invalid gameId',
+        details: getValidationErrors(gameIdResult.error),
+      });
+      return;
+    }
+    try {
+      const game = await this.gameDataRepository.getGameDetail(gameId);
+      if (!game) {
+        // A Leitner game is deleted once exported: the student view still shows its results.
+        const finished = this.gameExportService.getFinished(gameId);
+        if (finished) {
+          res.status(410).json({ error: 'Game finished and deleted', finished });
+          return;
+        }
+        res.status(404).json({ error: 'Game not found' });
+        return;
+      }
+      const openQuestion = game.questions.find(
+        (question) => question.state === 'open',
+      );
+      const completedQuestions = game.questions.filter(
+        (question) =>
+          question.state === 'closed' || question.state === 'scored',
+      );
+      const previousQuestion =
+        completedQuestions
+          .filter((question) => question.closedAt)
+          .sort(
+            (a, b) =>
+              Date.parse(b.closedAt ?? '') - Date.parse(a.closedAt ?? ''),
+          )[0] ??
+        completedQuestions
+          .slice()
+          .reverse()
+          .find((question) => question.guessCount > 0) ??
+        completedQuestions.slice().reverse()[0];
+      const nextQuestion = previousQuestion
+        ? game.questions.find(
+            (question) =>
+              question.sequence > previousQuestion.sequence &&
+              question.state !== 'archived',
+          )
+        : null;
+      const previousChart = previousQuestion
+        ? await this.gameDataRepository.getGameGuessChart(gameId)
+        : null;
+      const previousChartQuestion = previousQuestion
+        ? previousChart?.questions.find(
+            (question) => question.questionId === previousQuestion.id,
+          )
+        : undefined;
+      res.status(200).json({
+        id: game.id,
+        title: game.title,
+        state: game.state,
+        kind: game.kind,
+        // Badges that never joined aren't waited for, so they aren't shown.
+        boundPairs: game.boundPairs.filter((pair) => pair.joined).map((pair) => ({
+          pairName: pair.pairName,
+          stationName: pair.stationName,
+          readyForNextQuestion: pair.readyForNextQuestion,
+        })),
+        totalRounds: game.questions.filter(
+          (question) => question.state !== 'archived',
+        ).length,
+        nextRoundSequence: openQuestion ? null : (nextQuestion?.sequence ?? null),
+        // Leitner games: the next round opens by itself (start countdown or after the reveal).
+        countdown: openQuestion ? null : (this.leitnerFlow?.countdown(gameId) ?? null),
+        currentQuestion: openQuestion
+          ? {
+              id: openQuestion.id,
+              text: openQuestion.text,
+              sequence: openQuestion.sequence,
+              answerOptions: openQuestion.answerOptions.map((option) => ({
+                id: option.id,
+                slotLabel: option.slotLabel,
+                text: option.text,
+                sequence: option.sequence,
+              })),
+            }
+          : null,
+        previousResult: previousQuestion
+          ? {
+              questionId: previousQuestion.id,
+              text: previousQuestion.text,
+              sequence: previousQuestion.sequence,
+              // The round is closed, so the answer can be shown.
+              answerOptions: previousQuestion.answerOptions
+                .slice()
+                .sort((a, b) => a.sequence - b.sequence)
+                .map((option) => ({
+                  id: option.id,
+                  slotLabel: option.slotLabel,
+                  text: option.text,
+                  sequence: option.sequence,
+                  isCorrect: option.isCorrect,
+                })),
+              scans: Object.entries(previousChartQuestion?.byPair ?? {}).map(
+                ([pairName, scan]) => ({
+                  pairName,
+                  stationName: previousChart?.pairStations?.[pairName] ?? pairName,
+                  cardLabel: scan?.cardLabel ?? null,
+                  slotLabel: scan?.slotLabel ?? null,
+                  isCorrect: scan?.isCorrect ?? false,
+                }),
+              ),
+            }
+          : null,
+      });
+    } catch (error) {
+      res.status(500).json({
+        error: 'Failed to fetch game play view',
+        message: String(error),
+      });
+    }
+  }
+
+  @Get('games/:gameId/nfc-card-group')
+  async getActiveNfcCardGroup(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+    try {
+      const group = await this.gameDataRepository.getActiveNfcCardGroupForGame(gameId);
+      res.status(200).json({ group });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch NFC card group', message: String(error) });
+    }
+  }
+
+  @Get('games/:gameId/questions')
+  async getGameQuestions(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+    try {
+      const questions = await this.gameDataRepository.getQuestionsByGameId(gameId);
+      res.status(200).json({ questions });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch questions', message: String(error) });
+    }
+  }
+
+  @Get('games/:gameId/scores')
+  async getGameScores(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+    try {
+      const scores = await this.gameDataRepository.getGameScores(gameId);
+      res.status(200).json(scores);
+    } catch (error) {
+      const message = String(error);
+      if (message.includes('Game not found')) {
+        res.status(404).json({ error: 'Game not found', message });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to fetch scores', message });
+    }
+  }
+
+  @Get('games/:gameId/guess-chart')
+  async getGameGuessChart(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+    try {
+      const chart = await this.gameDataRepository.getGameGuessChart(gameId);
+      const seedByUid = new Map(
+        this.nfcCardService.getCards().map((card) => [card.id, card.name]),
+      );
+      // Prefer Mongo card names; fill gaps from the demo seed (no group assigned).
+      for (const question of chart.questions) {
+        for (const pairName of chart.pairs) {
+          const cell = question.byPair[pairName];
+          if (!cell?.cardUid) continue;
+          const seedName = seedByUid.get(cell.cardUid);
+          if (!seedName) continue;
+          if (cell.cardLabel === '-' || cell.cardLabel === cell.slotLabel.toLowerCase()) {
+            cell.cardLabel = shortCardLabel(seedName, cell.slotLabel);
+          }
+        }
+      }
+      res.status(200).json(chart);
+    } catch (error) {
+      const message = String(error);
+      if (message.includes('Game not found')) {
+        res.status(404).json({ error: 'Game not found', message });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to fetch guess chart', message });
+    }
+  }
 
   @Post('games')
   async createGame(@Body() body: unknown, @Res() res: Response): Promise<void> {
@@ -144,35 +428,155 @@ export class GameFlowController {
 
     try {
       const { state } = payloadResult.data;
-      await this.gameDataRepository.setGameState({ gameId, state });
-
-      const serverTime = new Date().toISOString();
-
-      // Notify dashboard of the state change
-      this.badgeStateService.broadcastDashboard({
-        type: 'game.state.changed',
+      const { openedQuestionId, leitnerExport } = await this.applyGameState(gameId, state);
+      res.status(200).json({
+        ok: true,
         gameId,
         state,
-        serverTime,
+        ...(openedQuestionId ? { openedQuestionId } : {}),
+        ...(leitnerExport ? { leitnerExport } : {}),
       });
-
-      // Notify bound controllers if there's a matching controller event
-      const controllerEvent = controllerEventForState[state];
-      if (controllerEvent) {
-        const pairNames = await this.gameDataRepository.getBindingsByGameId(gameId);
-        if (pairNames.length > 0) {
-          this.badgeStateService.sendToPairNames(pairNames, {
-            type: controllerEvent,
-            gameId,
-            serverTime,
-          });
-        }
-      }
-
-      res.status(200).json({ ok: true, gameId, state });
     } catch (error) {
       res.status(400).json({ error: 'Failed to update game state', message: String(error) });
     }
+  }
+
+  /**
+   * A game state change and everything that follows it: dashboard and badge
+   * events, Start Game's first round, and a Leitner game's export. Used by
+   * the referee's buttons and by a Leitner game ending itself.
+   */
+  private async applyGameState(
+    gameId: string,
+    state: z.infer<typeof gameLifecycleStateSchema>,
+  ): Promise<{ openedQuestionId: string | null; leitnerExport: Record<string, unknown> | undefined }> {
+    // Read before the transition: Play Again / Restart deletes the bindings.
+    const stationNames = await this.gameDataRepository.getStationNamesByGameId(gameId);
+    await this.gameDataRepository.setGameState({ gameId, state });
+
+    if (state === 'lobby') {
+      // Backstop for missed roster posts: bound stations match their live roster.
+      for (const stationName of stationNames) {
+        const roster = this.badgeStateService.getStationRoster(stationName);
+        if (!roster) continue;
+        const changes = await this.gameDataRepository.syncStationRoster({
+          stationName,
+          badgeNames: roster,
+        });
+        for (const change of changes) {
+          reportRosterChange(this.badgeStateService, change, console);
+        }
+      }
+    } else if (state === 'ready' && stationNames.length > 0) {
+      broadcastBindingsChanged(this.badgeStateService, { gameId });
+    }
+
+    const serverTime = new Date().toISOString();
+    const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
+    const gameTitle = gameDetail?.title;
+
+    // Notify dashboard of the state change
+    this.badgeStateService.broadcastDashboard({
+      type: 'game.state.changed',
+      gameId,
+      ...(gameTitle ? { gameTitle } : {}),
+      state,
+      serverTime,
+    });
+
+    if (state === 'completed' && stationNames.length > 0) {
+      // Enriched per-player game.ended (rank / score / isWinner), ranked
+      // across badges, sent to the badge's station room. Ties for first
+      // place all get isWinner: true, but a 0-correct field is never a win
+      // (solo/all-wrong → rain on the badge, not fireworks).
+      const { scores } = await this.gameDataRepository.getGameScores(gameId);
+      const topScore = scores.reduce((max, row) => Math.max(max, row.correct), 0);
+      for (const row of scores) {
+        const rank = scores.filter((other) => other.correct > row.correct).length + 1;
+        const isWinner = topScore > 0 && row.correct === topScore;
+        console.log(
+          `[GAME] server | ${isWinner ? 'winner' : 'loser'} | ${
+            isWinner ? 'Game winner' : 'Game loser'
+          } | badge=${row.badgeName} station=${row.stationName} rank=${rank} score=${row.correct}`,
+        );
+        this.badgeStateService.sendToPairNames([row.stationName], {
+          type: 'game.ended',
+          gameId,
+          pairName: row.stationName,
+          stationName: row.stationName,
+          badgeName: row.badgeName,
+          isWinner,
+          rank,
+          score: row.correct,
+          serverTime,
+        });
+      }
+    } else {
+      const controllerEvent = controllerEventForState[state];
+      if (controllerEvent && stationNames.length > 0) {
+        this.badgeStateService.sendToPairNames(stationNames, {
+          type: controllerEvent,
+          gameId,
+          serverTime,
+        });
+      }
+    }
+
+    // Start Game → arm NFC: open the next closed question and notify controllers.
+    // Without this, devices stay on green "active" and never poll for cards.
+    // Leitner games count down into their first round instead (continuous flow).
+    let openedQuestionId: string | null = null;
+    if (state === 'active' && !(gameDetail?.kind === 'leitner-solo' && this.leitnerFlow)) {
+      openedQuestionId = await this.gameDataRepository.openNextQuestionForGame(gameId);
+      if (openedQuestionId) {
+        const questionEvent = {
+          type: 'question.opened' as const,
+          gameId,
+          ...(gameTitle ? { gameTitle } : {}),
+          questionId: openedQuestionId,
+          serverTime: new Date().toISOString(),
+        };
+        console.log(
+          `[GAME] server | question_open | Question open | auto on Start Game questionId=${openedQuestionId}${
+            gameTitle ? ` game="${gameTitle}"` : ''
+          }`,
+        );
+        this.badgeStateService.broadcastDashboard(questionEvent);
+        if (stationNames.length > 0) {
+          this.badgeStateService.sendToPairNames(stationNames, questionEvent);
+        }
+      }
+    }
+
+    this.leitnerFlow?.onGameState(gameDetail, state);
+
+    // Leitner games export themselves on completion and are deleted when
+    // the LRS has everything (docs/xAPI/leitner-method.md → lifecycle).
+    const leitnerExport =
+      state === 'completed' && gameDetail?.kind === 'leitner-solo' ? await this.autoExport(gameId) : undefined;
+
+    return { openedQuestionId, leitnerExport };
+  }
+
+  /** Never fails the state change: a failed export leaves the game pending, with Retry. */
+  private async autoExport(gameId: string): Promise<Record<string, unknown>> {
+    let outcome: GameExportOutcome;
+    try {
+      outcome = await this.gameExportService.exportGame(gameId);
+    } catch (error) {
+      await this.gameDataRepository.recordExportFailure(gameId, String(error)).catch(() => undefined);
+      outcome = { ok: false, status: 500, body: { error: 'Export failed', message: String(error) } };
+    }
+    console.log(
+      `[GAME] server | leitner_export | ${outcome.ok ? `exported, deleted=${outcome.deleted}` : `pending (${outcome.status})`} gameId=${gameId}`,
+    );
+    if (outcome.ok) {
+      const leitnerExport = { exported: true, statementsSent: outcome.statementsSent, deleted: outcome.deleted, summary: outcome.summary };
+      // Carries the summary: a game that ended by itself has no response to show it from.
+      this.badgeStateService.broadcastDashboard({ type: 'game.deleted', gameId, leitnerExport, serverTime: new Date().toISOString() });
+      return leitnerExport;
+    }
+    return { exported: false, status: outcome.status, error: outcome.body };
   }
 
   @Post('games/:gameId/participants')
@@ -209,10 +613,45 @@ export class GameFlowController {
     }
 
     try {
-      const groupId = await this.gameDataRepository.createNfcCardGroup(result.data);
+      // Idempotent: re-posting demo seed cards must not 500 on unique cardUid.
+      const groupId = await this.gameDataRepository.ensureNfcCardGroup(result.data);
       res.status(201).json({ groupId });
     } catch (error) {
       res.status(500).json({ error: 'Failed to create NFC card group', message: String(error) });
+    }
+  }
+
+  /**
+   * Ensure the hardcoded Demo Set (from NfcCardService seed) exists and attach
+   * it to the game. Preferred referee path — avoids create-then-attach races.
+   */
+  @Post('games/:gameId/nfc-card-groups/demo')
+  async assignDemoNfcCardGroup(
+    @Param('gameId') gameId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const gameIdResult = objectIdSchema.safeParse(gameId);
+    if (!gameIdResult.success) {
+      res.status(400).json({ error: 'Invalid gameId', details: getValidationErrors(gameIdResult.error) });
+      return;
+    }
+
+    const demoGroup = this.nfcCardService.demoGroupInput();
+    if (demoGroup.cards.length === 0) {
+      res.status(500).json({ error: 'Demo NFC seed has no cards with slotLabel' });
+      return;
+    }
+
+    try {
+      const groupId = await this.gameDataRepository.ensureNfcCardGroup(demoGroup);
+      await this.gameDataRepository.assignNfcCardGroupToGame({ gameId, groupId });
+      const group = await this.gameDataRepository.getActiveNfcCardGroupForGame(gameId);
+      res.status(200).json({ group });
+    } catch (error) {
+      res.status(500).json({
+        error: 'Failed to assign demo NFC card group',
+        message: String(error),
+      });
     }
   }
 
@@ -282,11 +721,53 @@ export class GameFlowController {
     }
 
     try {
+      const { gameId, state } = payloadResult.data;
+
+      if (state === 'closed') {
+        await this.questionCloser.closeAndNotify(gameId, questionId, 'referee');
+        res.status(200).json({ ok: true });
+        return;
+      }
+
+      // One round at a time: two open rounds leave guesses ambiguous and stall
+      // the Leitner auto-advance, which only opens a round when none is open.
+      const openQuestionId = await this.gameDataRepository.getOpenQuestionId(gameId);
+      if (openQuestionId && openQuestionId !== questionId) {
+        res.status(409).json({ error: 'Another round is already open; close it first.', openQuestionId });
+        return;
+      }
+      // The referee opened a round by hand: drop any pending Leitner countdown.
+      this.leitnerFlow?.cancel(gameId);
+
       await this.gameDataRepository.setQuestionState({
-        gameId: payloadResult.data.gameId,
+        gameId,
         questionId,
-        state: payloadResult.data.state,
+        state,
       });
+
+      const serverTime = new Date().toISOString();
+      const stationNames = await this.gameDataRepository.getStationNamesByGameId(gameId);
+      const gameDetail = await this.gameDataRepository.getGameDetail(gameId);
+      const gameTitle = gameDetail?.title;
+      const questionEvent = {
+        type: 'question.opened' as const,
+        gameId,
+        ...(gameTitle ? { gameTitle } : {}),
+        questionId,
+        serverTime,
+      };
+
+      console.log(
+        `[GAME] server | question_open | Question open | questionId=${questionId}${
+          gameTitle ? ` game="${gameTitle}"` : ''
+        }`,
+      );
+
+      this.badgeStateService.broadcastDashboard(questionEvent);
+      if (stationNames.length > 0) {
+        this.badgeStateService.sendToPairNames(stationNames, questionEvent);
+      }
+
       res.status(200).json({ ok: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to update question state', message: String(error) });
@@ -301,24 +782,77 @@ export class GameFlowController {
       return;
     }
 
+    let outcome: Awaited<ReturnType<GameDataRepository['submitGuess']>>;
+    let cardLabel: string;
     try {
-      const outcome = await this.gameDataRepository.submitGuess(result.data);
+      outcome = await this.gameDataRepository.submitGuess(result.data);
 
       const { gameId, questionId, pairName, badgeId, cardUid } = result.data;
+      // The scanning badge is the player; Mode 1 sends no badgeName.
+      const badgeName = result.data.badgeName ?? pairName;
+      const seedCard = cardUid ? this.nfcCardService.findByUid(cardUid) : undefined;
+      cardLabel = seedCard
+        ? shortCardLabel(seedCard.name, outcome.slotLabel)
+        : outcome.cardLabel;
       this.badgeStateService.broadcastDashboard({
         type: 'nfc.tagged',
         gameId,
+        ...(outcome.gameTitle ? { gameTitle: outcome.gameTitle } : {}),
         questionId,
-        ...(pairName ? { pairName } : {}),
+        ...(pairName ? { pairName, stationName: pairName } : {}),
         ...(badgeId ? { badgeId } : {}),
+        ...(badgeName ? { badgeName } : {}),
         ...(cardUid ? { cardUid } : {}),
         slotLabel: outcome.slotLabel ?? undefined,
+        cardLabel,
+        isCorrect: outcome.isCorrect,
         serverTime: new Date().toISOString(),
       });
-
-      res.status(201).json(outcome);
     } catch (error) {
       res.status(400).json({ error: 'Failed to submit guess', message: String(error) });
+      return;
+    }
+
+    // A stored guess is authoritative. Reply before auto-closing so controllers
+    // receive isCorrect without waiting for question-close database work/events.
+    res.status(201).json({ ...outcome, cardLabel });
+
+    const { gameId, questionId } = result.data;
+    const guessBadge = result.data.badgeName ?? result.data.pairName;
+    try {
+      // Answering proves the badge is playing, even if its join never arrived.
+      if (outcome.guessId && guessBadge && (await this.gameDataRepository.markJoinedByGuess(gameId, guessBadge))) {
+        console.log(`[GAME] server | joined_by_guess | badge=${guessBadge} gameId=${gameId} (no join was recorded)`);
+        this.badgeStateService.broadcastDashboard({
+          type: 'controller.joined',
+          gameId,
+          pairName: result.data.pairName,
+          badgeName: guessBadge,
+          serverTime: new Date().toISOString(),
+        });
+      }
+      // Last joined player to answer → close so badges leave NFC-armed state.
+      if (
+        outcome.guessId &&
+        (await this.gameDataRepository.haveAllJoinedPlayersGuessed(gameId, questionId))
+      ) {
+        await this.questionCloser.closeAndNotify(gameId, questionId, 'all_pairs_answered');
+      } else if (outcome.guessId) {
+        const status = await this.gameDataRepository.answerStatus(gameId, questionId);
+        const waitingFor = status.joined.filter((badge) => !status.answered.includes(badge));
+        console.log(
+          `[GAME] server | round_waiting | questionId=${questionId} gameId=${gameId} answered=[${status.answered.join(',')}] ` +
+            `waitingFor=[${waitingFor.join(',')}] notJoined=[${status.notJoined.join(',')}]` +
+            (status.joined.length === 0 ? ' (no joined badges: the round only closes by hand)' : ''),
+        );
+      }
+    } catch (error) {
+      // The successful response has already been sent. Closing failures must not
+      // turn a persisted correct guess into an HTTP error on the controller.
+      console.error(
+        `[GAME] server | auto-close failed | gameId=${gameId} questionId=${questionId}`,
+        error,
+      );
     }
   }
 }

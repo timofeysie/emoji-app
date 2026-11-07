@@ -1,0 +1,373 @@
+{
+    "id": "27",
+    "categoryMappingId": 0,
+    "chapter": "27",
+    "titleTarget": "그냥 몸이 좀 안 좋네.",
+    "titleNative": "I just don’t feel well.",
+    "dialog": [
+        {
+            "index": 0,
+            "speakerNameTarget": "다영",
+            "speakerNameNative": "Da-yeong",
+            "speechTarget": "다희야, 왜 그래? 어디 아파? 안색이 안 좋은데?",
+            "speechNative": "Da-hee. What’s wrong? Are you sick? You don’t look well."
+        },
+        {
+            "index": 1,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "응? 어... 그냥 몸이 좀 안 좋네.",
+            "speechNative": "Huh? Yeah... I just don’t feel well."
+        },
+        {
+            "index": 2,
+            "speakerNameTarget": "다영",
+            "speakerNameNative": "Da-yeong",
+            "speechTarget": "왜? 감기 걸렸어? 아님 뭐 잘못 먹었어?",
+            "speechNative": "Why? Have you caught a cold? Or did you eat something bad?"
+        },
+        {
+            "index": 3,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "아니. 뭐 잘못 먹은 건 아니고. 어제부터 기운이 없고 몸이 으슬으슬 떨리더니 계속 더 심해지네.",
+            "speechNative": "No, I didn’t eat anything bad. I haven’t had any energy since yesterday. I started feeling chilly, and it’s getting worse and worse."
+        },
+        {
+            "index": 4,
+            "speakerNameTarget": "다영",
+            "speakerNameNative": "Da-yeong",
+            "speechTarget": "감기네 감기. 몸살감기 걸렸나 보다.",
+            "speechNative": "It’s a cold. I think you caught a cold and now your body aches."
+        },
+        {
+            "index": 5,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "응. 그런 것 같아.",
+            "speechNative": "Yeah, I think so."
+        },
+        {
+            "index": 6,
+            "speakerNameTarget": "다영",
+            "speakerNameNative": "Da-yeong",
+            "speechTarget": "요즘 독감이 유행이더라. 세경이도 감기 걸렸다고 오늘 학교 안 왔어.",
+            "speechNative": "I heard that the flu is going around these days. Se-gyeong also didn’t come to school today because she caught a cold."
+        },
+        {
+            "index": 7,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "아, 그래?",
+            "speechNative": "Oh, really?"
+        },
+        {
+            "index": 8,
+            "speakerNameTarget": "다영",
+            "speakerNameNative": "Da-yeong",
+            "speechTarget": "응. 심하게 걸렸나 봐. 오늘 새벽부터 응급실 갔다 왔다더라.",
+            "speechNative": "Yeah, I guess she caught a really bad one. I heard that she went to the emergency room early in the morning today."
+        },
+        {
+            "index": 9,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "정말?",
+            "speechNative": "Really?"
+        },
+        {
+            "index": 10,
+            "speakerNameTarget": "다영",
+            "speakerNameNative": "Da-yeong",
+            "speechTarget": "응. 너는 약은 먹었어?",
+            "speechNative": "Yeah. Did you take some medicine?"
+        },
+        {
+            "index": 11,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "응, 약 먹었어.",
+            "speechNative": "Yeah, I took some medicine."
+        },
+        {
+            "index": 12,
+            "speakerNameTarget": "다영",
+            "speakerNameNative": "Da-yeong",
+            "speechTarget": "너도 병원 가 봐야 되는 거 아냐?",
+            "speechNative": "Shouldn't you go see a doctor too?"
+        },
+        {
+            "index": 13,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "아냐. 그 정돈 아니야. 다음 주 시험이라서 오늘 수업 빠지면 안 돼.",
+            "speechNative": "No, it’s not that bad. The exam is next week, so I can’t skip classes today."
+        },
+        {
+            "index": 14,
+            "speakerNameTarget": "Da-yeong",
+            "speakerNameNative": "다영",
+            "speechTarget": "으이구. 내가 필기해서 보여 줄게. 양호실이라도 가서 좀 쉬고 와.",
+            "speechNative": "Come on. I will take some notes and show them to you. At least go to the nurse’s room and get some rest."
+        },
+        {
+            "index": 15,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "아냐, 괜찮아. 말이라도 고맙다.",
+            "speechNative": "No, I’m good. Thanks for the offer though."
+        },
+        {
+            "index": 16,
+            "speakerNameTarget": "다영",
+            "speakerNameNative": "Da-yeong",
+            "speechTarget": "그래, 그럼. 몸 더 안 좋아지면 꼭 병원 가 봐.",
+            "speechNative": "Okay, then. If you feel worse, make sure you go to the hospital."
+        },
+        {
+            "index": 17,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "알겠어. 고마워.",
+            "speechNative": "I got it. Thank you."
+        },
+        {
+            "index": 18,
+            "speakerNameTarget": "다영",
+            "speakerNameNative": "Da-yeong",
+            "speechTarget": "응.",
+            "speechNative": "Okay."
+        },
+        {
+            "index": 19,
+            "speakerNameTarget": "Teacher",
+            "speakerNameNative": "선생님",
+            "speechTarget": "김다희. 너 왜 그래? 어디 아파?",
+            "speechNative": "Da-hee, what’s wrong? Are you sick?"
+        },
+        {
+            "index": 20,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "아... 괜찮아요.",
+            "speechNative": "Ah... I’m alright."
+        },
+        {
+            "index": 21,
+            "speakerNameTarget": "Teacher",
+            "speakerNameNative": "선생님",
+            "speechTarget": "괜찮기는. 너 머리가 불덩이야. 금방 쓰러질 것 같아.",
+            "speechNative": "You’re not alright. Your head is on fire. It looks like you’re about to faint."
+        },
+        {
+            "index": 22,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "아... 저 감기에 좀 걸려서... 선생님, 저 양호실에 좀 갔다 올게요.",
+            "speechNative": "Ah... I caught a cold... Let me go visit the nurse’s office."
+        },
+        {
+            "index": 23,
+            "speakerNameTarget": "Teacher",
+            "speakerNameNative": "선생님",
+            "speechTarget": "그래, 얼른 다녀와. 양호 선생님이 조퇴하라고 하시면 바로 조퇴하고 병원 가.",
+            "speechNative": "Okay. Hurry up. If the nurse tells you to leave early, take the rest of the day off and go to the hospital quickly."
+        },
+        {
+            "index": 24,
+            "speakerNameTarget": "다희",
+            "speakerNameNative": "Da-hee",
+            "speechTarget": "네. 알겠습니다. 다녀올게요.",
+            "speechNative": "Okay. I understand. See you."
+        }
+    ],
+    "vocabulary": [
+        {
+            "id": 0,
+            "targetLanguageText": "정도",
+            "nativeLanguageText": "level, degree, approximately"
+        },
+        {
+            "id": 1,
+            "targetLanguageText": "시험",
+            "nativeLanguageText": "test, exam"
+        },
+        {
+            "id": 2,
+            "targetLanguageText": "수업",
+            "nativeLanguageText": "class"
+        },
+        {
+            "id": 3,
+            "targetLanguageText": "빠지다",
+            "nativeLanguageText": "to be omitted, to not be included"
+        },
+        {
+            "id": 4,
+            "targetLanguageText": "필기하다",
+            "nativeLanguageText": "to take notes"
+        },
+        {
+            "id": 5,
+            "targetLanguageText": "보여 주다",
+            "nativeLanguageText": "to show"
+        },
+        {
+            "id": 6,
+            "targetLanguageText": "양호실",
+            "nativeLanguageText": "nurse's office"
+        },
+        {
+            "id": 7,
+            "targetLanguageText": "쉬다",
+            "nativeLanguageText": "to rest"
+        },
+        {
+            "id": 8,
+            "targetLanguageText": "괜찮다",
+            "nativeLanguageText": "to be okay, to be alright"
+        },
+        {
+            "id": 9,
+            "targetLanguageText": "고맙다",
+            "nativeLanguageText": "to be thankful, to be grateful"
+        },
+        {
+            "id": 10,
+            "targetLanguageText": "머리",
+            "nativeLanguageText": "head"
+        },
+        {
+            "id": 11,
+            "targetLanguageText": "불덩이",
+            "nativeLanguageText": "fireball"
+        },
+        {
+            "id": 12,
+            "targetLanguageText": "쓰러지다",
+            "nativeLanguageText": "to faint"
+        },
+        {
+            "id": 13,
+            "targetLanguageText": "조퇴하다",
+            "nativeLanguageText": "to leave school/office early"
+        }
+    ],
+    "patterns": [
+        {
+            "id": 0,
+            "patternTarget": "계속 더 ADJECTIVE + -아/어/여지네",
+            "patternNative": "(SUBJECT) am/is/are getting more and more ADJECTIVE.",
+            "type": "casual",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "계속 더 심해지네.",
+            "exampleSentenceNative": "It’s getting worse and worse.",
+            "sampleSentences": [
+                {
+                    "id": 0,
+                    "targetText": "계속 더 멀어지네.",
+                    "nativeText": "It's getting farther and farther."
+                },
+                {
+                    "id": 1,
+                    "targetText": "계속 더 배고파지네.",
+                    "nativeText": "I’m getting hungrier and hungrier."
+                }
+            ],
+            "exercises": [
+                {
+                    "id": 1,
+                    "exercise": "I’m getting more and more curious. (to be curious = 궁금하다)",
+                    "answerKey": "계속 더 궁금해지네."
+                },
+                {
+                    "id": 2,
+                    "exercise": "It’s getting bigger and bigger. (to be bigger = 더 크다)",
+                    "answerKey": "계속 더 커지네."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 0,
+                    "pattern": "계속 ADJECTIVE + -아/어/여지네",
+                    "patternTargetText": "계속 심해지네.",
+                    "patternNativeText": "It’s getting worse and worse.",
+                    "patternNote": "Even without the word 더, which means “more”, the sentence will have the same meaning here."
+                },
+                {
+                    "id": 1,
+                    "pattern": "계속 더 ADJECTIVE + -아/어/여져",
+                    "patternTargetText": "계속 더 심해져.",
+                    "patternNativeText": "It’s getting worse and worse.",
+                    "patternNote": "-져 is a more neutral ending than -지네, which shows one’s observation."
+                }
+            ]
+        },
+        {
+            "id": 1,
+            "type": "casual",
+            "patternTarget": "VERB + -(으)면 안 돼",
+            "patternNative": "I can’t VERB. / I shouldn’t VERB.",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "오늘 수업 빠지면 안 돼.",
+            "exampleSentenceNative": "I can’t skip classes today.",
+            "exercises": [
+                {
+                    "id": 1,
+                    "exercise": "I can’t get drunk today. (to get drunk = 취하다, today = 오늘)",
+                    "answerKey": "나 오늘 취하면 안 돼."
+                },
+                {
+                    "id": 2,
+                    "exercise": "I shouldn’t exercise today. (to exercise = 운동하다, today = 오늘)",
+                    "answerKey": "나 오늘 운동하면 안 돼."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 2,
+                    "type": "formal",
+                    "pattern": "VERB + -(으)면 안 돼요",
+                    "patternTargetText": "오늘 수업 빠지면 안 돼요.",
+                    "patternNativeText": "I can’t skip classes today."
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "type": "casual",
+            "patternTarget": "금방 VERB + -(으)ㄹ 것 같아",
+            "patternNative": "It looks like (SUBJECT) is about to VERB.",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "금방 쓰러질 것 같아.",
+            "exampleSentenceNative": "It looks like you’re about to faint.",
+            "exercises": [
+                {
+                    "id": 1,
+                    "exercise": "It looks like we’re about to get a call. (to get a call = 전화 오다)",
+                    "answerKey": "금방 전화 올 것 같아."
+                },
+                {
+                    "id": 2,
+                    "exercise": "It looks like they’re about to depart. (to depart = 출발하다)",
+                    "answerKey": "금방 출발할 것 같아."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 3,
+                    "pattern": "막 VERB + -(으)ㄹ 것 같아",
+                    "patternTargetText": "막 쓰러질 것 같아.",
+                    "patternNativeText": "It looks like you’re about to faint.",
+                    "patternNote": "Even though 막 can mean many things, in this context it means “soon” or “anytime now”."
+                },
+                {
+                    "id": 4,
+                    "pattern": "곧 VERB + -(으)ㄹ 것 같아",
+                    "patternTargetText": "곧 쓰러질 것 같아.",
+                    "patternNativeText": "It looks like you will faint soon."
+                }
+            ]
+        }
+    ]
+}

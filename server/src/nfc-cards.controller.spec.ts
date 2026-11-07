@@ -10,6 +10,10 @@ describe('NfcCardsController', () => {
     expect(result.cards).toEqual([
       { id: '5B:6F:B8:08', name: 'R12 - Monkey', display: 'circle' },
       { id: 'DB:93:B7:08', name: 'W3 - Clown', display: 'x' },
+      { id: '2B:73:B8:08', name: '12', display: 'A', slotLabel: 'A' },
+      { id: '4B:71:B8:08', name: '11', display: 'B', slotLabel: 'B' },
+      { id: 'DB:69:B8:08', name: '10', display: 'C', slotLabel: 'C' },
+      { id: '1B:5D:B8:08', name: 'D', display: 'D', slotLabel: 'D' },
     ]);
   });
 

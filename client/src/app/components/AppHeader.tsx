@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Menu, MessageSquare, X } from 'lucide-react';
 import { AuthBar } from '../auth/AuthBar';
 import { useAuthStore } from '../auth/auth.store';
 import { Button } from '../shared/button';
 import { cn } from '../shared/utils';
+import { canUseYalla } from '../yalla/yalla-access';
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -14,40 +15,46 @@ import {
 } from '../shared/navigation-menu';
 
 const NAV_LINKS = [
-  { to: '/lights', label: 'Lights' },
-  { to: '/scenes', label: 'Scenes' },
-  { to: '/scheduled-scenes', label: 'Scheduled Scenes' },
+  { to: '/yalla', label: 'YALLA' },
+  { to: '/games', label: 'Games' },
+  { to: '/players', label: 'Players' },
   { to: '/badges', label: 'Badges' },
+  { to: '/lights', label: 'Lights' },
   { to: '/profile', label: 'Profile' },
 ] as const;
 
 function viewTitleForPathname(pathname: string): string {
-  switch (pathname) {
-    case '/':
-      return 'Dashboard';
-    case '/lights':
-      return 'Lights';
-    case '/scenes':
-      return 'Scenes';
-    case '/scheduled-scenes':
-      return 'Scheduled Scenes';
-    case '/badges':
-      return 'Badges';
-    case '/profile':
-      return 'User Profile';
-    default:
-      return 'Emoji App';
-  }
+  if (pathname === '/') return 'Dashboard';
+  if (pathname === '/games') return 'Games';
+  if (/^\/games\/[^/]+\/play$/.test(pathname)) return 'Student Game';
+  if (pathname.startsWith('/games/')) return 'Game';
+  if (pathname === '/players') return 'Players';
+  if (pathname.startsWith('/players/')) return 'Player';
+  if (pathname === '/badges') return 'Badges';
+  if (pathname === '/lights') return 'Lights';
+  if (pathname === '/scenes') return 'Scenes';
+  if (pathname === '/scheduled-scenes') return 'Scheduled Scenes';
+  if (pathname === '/profile') return 'User Profile';
+  if (pathname === '/yalla' || pathname.startsWith('/yalla/')) return 'YALLA';
+  return 'Emoji App';
 }
 
-export function AppHeader() {
+type AppHeaderProps = {
+  chatOpen: boolean;
+  onToggleChat: () => void;
+};
+
+export function AppHeader({ chatOpen, onToggleChat }: AppHeaderProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
   const accessToken = useAuthStore((s) => s.accessToken);
   const viewTitle = viewTitleForPathname(location.pathname);
-  const visibleNavLinks = accessToken
-    ? NAV_LINKS
-    : NAV_LINKS.filter((link) => link.to !== '/profile');
+  const visibleNavLinks = NAV_LINKS.filter((link) => {
+    // Profile holds "Practise as", so local dev (auth off) needs it too.
+    if (link.to === '/profile') return canUseYalla(accessToken);
+    if (link.to === '/yalla') return canUseYalla(accessToken);
+    return true;
+  });
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -115,6 +122,17 @@ export function AppHeader() {
             </div>
             <Button
               type="button"
+              variant={chatOpen ? 'secondary' : 'ghost'}
+              size="icon"
+              aria-pressed={chatOpen}
+              aria-label={chatOpen ? 'Hide chat' : 'Show chat'}
+              title={chatOpen ? 'Hide chat' : 'Show chat'}
+              onClick={onToggleChat}
+            >
+              <MessageSquare aria-hidden />
+            </Button>
+            <Button
+              type="button"
               variant="ghost"
               size="icon"
               className="lg:hidden"
@@ -179,7 +197,8 @@ export function AppHeader() {
                 className={cn(
                   'block rounded-md px-3 py-2.5 text-sm font-medium',
                   'hover:bg-accent hover:text-accent-foreground',
-                  location.pathname === to && 'bg-accent text-accent-foreground',
+                  (location.pathname === to || location.pathname.startsWith(`${to}/`)) &&
+                    'bg-accent text-accent-foreground',
                 )}
                 onClick={() => setMobileNavOpen(false)}
               >

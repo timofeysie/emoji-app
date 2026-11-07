@@ -1,3 +1,4 @@
+import { Chat } from '@hashbrownai/core';
 import { UiChatMessage } from '@hashbrownai/react';
 import { Button } from './button';
 import { CircleAlert } from 'lucide-react';
@@ -7,7 +8,7 @@ export const RichMessage = ({
   onRetry,
   isLast,
 }: {
-  message: UiChatMessage<any>;
+  message: UiChatMessage<Chat.AnyTool>;
   onRetry: () => void;
   isLast: boolean;
 }) => {

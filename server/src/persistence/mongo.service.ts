@@ -27,6 +27,12 @@ export class MongoService implements OnModuleInit, OnModuleDestroy {
     this.models = registerModels(this.connection);
     await this.connection.syncIndexes();
     this.logger.log('MongoDB connected and indexes synchronized.');
+
+    // Pre-Milestone 8 bindings have no station; they show up as phantom stations.
+    const legacy = await this.models.PairBinding.deleteMany({ stationName: null });
+    if (legacy.deletedCount > 0) {
+      this.logger.log(`Removed ${legacy.deletedCount} legacy pair binding(s) without stationName.`);
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

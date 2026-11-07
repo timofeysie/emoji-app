@@ -1,6 +1,22 @@
 ﻿# Emoji App
 
-A generative-UI demo built with [Hashbrown](https://hashbrown.dev), React, and NestJS (Express-backed). An AI chat panel sits alongside a standard CRUD interface and can read and update app state directly — adding lights, creating scenes, and scheduling them — through structured tool calls rather than plain text.
+A generative-UI demo built with [Hashbrown](https://hashbrown.dev), React, and
+NestJS (Express-backed). An AI chat panel sits alongside a standard CRUD
+interface and can read and update app state directly through structured tool
+calls.
+
+The repository also contains **LandGrab**, a multiplayer game side project.
+Its Phaser web game is bundled inside an Expo `WebView`, allowing bots-only
+practice without a server. The planned online mode will use the existing Node
+server and WebSocket infrastructure for server-authoritative matches between
+human players and bots. Shared simulation logic lives in
+`packages/land-grab-core`.
+
+See
+[`land-grab-handoff/docs/overall-plan.md`](land-grab-handoff/docs/overall-plan.md)
+for the product plan and
+[`integration-with-emoji-app.md`](land-grab-handoff/docs/integration-with-emoji-app.md)
+for the workspace and mobile-bundling design.
 
 ## Workflow
 
@@ -12,29 +28,143 @@ A generative-UI demo built with [Hashbrown](https://hashbrown.dev), React, and N
 
 ### Local development
 
+Install all root and workspace dependencies from the repository root:
+
 ```bash
 npm install
-cp .env.example .env   # add OPENAI_API_KEY (and optionally Cognito values)
-npm run dev            # client on :5200, server on :3000 (open http://localhost:5200)
-npm run dev:client     # Vite SPA only
-npm run dev:server     # NestJS server only
-npm run build          # production build of both
-npm run typecheck      # TypeScript check across both
-npm run lint           # ESLint across client/src and server/src
-npm run test:server    # Jest server tests
-npm run docker:build   # build the production Docker image
-npm run docker:run     # run the image locally on port 3000
 ```
+
+Do not install Expo at the repository root. Expo and React Native belong to
+the `@emoji-app/land-grab-mobile` workspace and are installed by the root
+command above.
+
+#### Local MongoDB
+
+The game API needs MongoDB. Locally it runs from Homebrew as a single-node
+replica set; transactions require one. One-time setup is in
+[`docs/db/mongo.md`](docs/db/mongo.md). Day to day:
+
+```bash
+brew services start mongodb/brew/mongodb-community@7.0
+brew services list
+mongosh --quiet --eval "rs.status().ok"
+```
+
+- `brew services list` should show `mongodb-community@7.0` as `started`.
+- The `mongosh` check prints `1` when the replica set is healthy.
+- It starts automatically after a reboot, so usually only the check is
+  needed.
+
+To stop it:
+
+```bash
+brew services stop mongodb/brew/mongodb-community@7.0
+```
+
+If the check fails:
+
+- `MongoNetworkError` / `ECONNREFUSED` means it isn't running: start it,
+  or look at `/opt/homebrew/var/log/mongodb/mongo.log`.
+- `NotYetInitialized` means the one-time `rs.initiate(...)` from
+  `docs/db/mongo.md` step 3 hasn't been run.
+
+`.env` needs `MONGODB_URI=mongodb://127.0.0.1:27017/emoji-app?directConnection=true`.
+When the server connects, `npm run dev` logs `MongoDB connected and indexes
+synchronized.` To look at the data:
+
+```bash
+mongosh emoji-app --quiet --eval "db.getCollectionNames()"
+```
+
+#### Main emoji application
+
+```bash
+cp .env.example .env
+npm run dev # both apps started and frontend available at http://localhost:5200
+npm run dev:client
+npm run dev:server
+npm run build
+npm run typecheck
+npm run lint
+npm run test:server
+npm run docker:build
+npm run docker:run
+```
+
+`npm run dev` starts the browser client on port 5200 and the API server on
+port 3000. Add `OPENAI_API_KEY` and any optional Cognito values to `.env`.
+
+Test the API at `http://localhost:3000/api/version`.
+
+#### e2e Playwright tests
+
+The e2e tests drive the game against a real server and the local MongoDB.
+Mongo must be running as a single-node replica set
+([`docs/db/mongo.md`](docs/db/mongo.md)). Install the browser once:
+
+```bash
+npx playwright install chromium
+```
+
+Then, from the repository root:
+
+```bash
+npm run test:e2e                       # all tests, headless
+npm run test:e2e -- players            # only spec files whose name matches
+npm run test:e2e -- -g "swap"          # only tests whose title matches
+npm run test:e2e -- --headed           # watch the browser
+npm run test:e2e:ui                    # Playwright UI mode, for debugging
+npm run test:e2e:report                # open the HTML report of the last run
+npm run typecheck:e2e
+```
+
+A run starts its own API server on port 3100 and Vite on port 5210, using
+the `emoji-app-e2e` database, which is dropped at the start of each run.
+Your dev servers (3000/5200) and the `emoji-app` database are not touched,
+so `npm run dev` can stay running. The plan and coverage are in
+[`docs/testing/playwright-plan.md`](docs/testing/playwright-plan.md).
+
+#### LandGrab
+
+Run the browser version directly while changing game UI or simulation code.  The Expo app also uses generated, embedded HTML rather than the Vite development server. Rebuild that HTML after changing the web game, then start Expo:
+
+```bash
+npm run dev:land-grab-web
+npm run sync:land-grab-mobile
+npm run dev:land-grab-mobile
+```
+
+Scan the QR code with an up-to-date Expo Go app that supports Expo SDK 57.
+To restart Metro with a clean cache from the repository root, use:
+
+```bash
+npm exec --workspace @emoji-app/land-grab-mobile -- expo start --clear
+```
+
+Useful validation commands are:
+
+```bash
+npm run test:land-grab
+npm run test:land-grab-web
+npm run typecheck:land-grab
+npm run build:land-grab-web
+npm run export:land-grab-mobile
+```
+
+Local practice is bots-only and does not require the emoji API server. The
+game-server URL bridge exists for the future WebSocket mode, but multiplayer
+transport is not implemented yet.
 
 ### Deploy application changes to staging
 
-> **Windows (PowerShell) instructions.** Commands below use PowerShell syntax — backtick `` ` ``
-> for line continuation and `$var = "..."` for variables. If you are in Git Bash use `\` for
-> continuation and arname="..." (no $ on the left, no spaces around =).
-
-> **There is no automatic build pipeline for application code.** Merging to `main` only triggers
-> `terraform apply` for changes under `infra/terraform/`. Building the Docker image and pushing
-> it to ECR are always manual steps — ECS keeps running whatever image is pinned in
+> **Windows (PowerShell) instructions.** Commands below use PowerShell syntax
+> with a backtick for line continuation and `$var = "..."` for variables.
+> Git Bash uses `\` for continuation and `varname="..."`.
+>
+> **There is no automatic build pipeline for application code.** Merging to
+> `main` only triggers `terraform apply` for changes under
+> `infra/terraform/`. Building the Docker image and pushing it to ECR are
+> always manual steps. ECS keeps running whatever image is pinned in
 > `terraform.tfvars` until that file is updated **and** Terraform is applied.
 
 Run all commands from the **repository root**. Make sure Docker Desktop is running first — the
@@ -94,6 +224,7 @@ curl.exe -sS -w "`nHTTP %{http_code}`n" https://emoji-staging.kogs.link/api/badg
 
 If infra was previously torn down, steps 3-5 are still required for new code; step 6 alone
 only recreates AWS resources using the already-pinned image.
+
 ### Wake staging infrastructure (no code changes)
 
 When staging was destroyed to save cost and you only need the **last deployed image** back online:
@@ -103,7 +234,9 @@ cd infra/terraform/envs/staging
 terraform apply
 ```
 
-ECR images and Secrets Manager values survive destroy; ECS/ALB are recreated. DNS **https://emoji-staging.kogs.link/** updates automatically.
+ECR images and Secrets Manager values survive destroy; ECS/ALB are recreated.
+DNS [emoji-staging.kogs.link](https://emoji-staging.kogs.link/) updates
+automatically.
 
 ### Staging cost management (personal / side-project use)
 
@@ -177,15 +310,19 @@ terraform apply
 
 ```text
 emoji-app/
-├── client/              React SPA (Vite)
-├── server/              NestJS app (Express adapter)
-├── infra/terraform/      AWS staging (ECS, ALB, ACM, IAM) — see infra/terraform/README.md
-├── docs/                Deeper docs (deploy, auth, AWS, milestones)
-├── dist/                production build output (gitignored)
-│   ├── client/          Vite output — bundled into the Docker image as client-react
-│   └── server/          Compiled server entry (e.g. main.js + modules)
-├── Dockerfile           multi-stage prod image (Node 22 Alpine)
-└── .github/workflows/   CI (Terraform plan/apply for staging infra)
+├── apps/
+│   ├── land-grab-web/       React, Vite, and Phaser game
+│   └── land-grab-mobile/    Expo and WebView native shell
+├── packages/
+│   └── land-grab-core/      Shared simulation, bots, records, and tests
+├── client/                  Existing React SPA
+├── server/                  NestJS app with Express adapter
+├── infra/terraform/         AWS staging infrastructure
+├── docs/                    Main application documentation
+├── land-grab-handoff/docs/  LandGrab planning and migration notes
+├── dist/                    Production output (gitignored)
+├── Dockerfile               Production image
+└── .github/workflows/       CI workflows
 ```
 
 ### How the pieces fit together
@@ -332,16 +469,14 @@ your `.env` has your Atlas URI:
 MONGODB_URI=mongodb+srv://...
 ```
 
-Alternatively, run MongoDB locally with Docker:
-
-```bash
-docker run -d -p 27017:27017 mongo:7
-```
-
+Alternatively, run MongoDB locally. It must be a **single-node replica
+set**, because guesses run in transactions and a plain `mongod` rejects
+them. See [Local MongoDB](#local-mongodb) above and
+[`docs/db/mongo.md`](docs/db/mongo.md), which covers Homebrew and Docker.
 Then set:
 
 ```env
-MONGODB_URI=mongodb://localhost:27017/emoji-app
+MONGODB_URI=mongodb://127.0.0.1:27017/emoji-app?directConnection=true
 ```
 
 ### How it fits together

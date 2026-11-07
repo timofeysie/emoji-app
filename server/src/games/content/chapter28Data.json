@@ -1,0 +1,390 @@
+{
+    "id": "28",
+    "categoryMappingId": 0,
+    "chapter": "28",
+    "titleTarget": "어디로 모실까요?",
+    "titleNative": "Where to?",
+    "dialog": [
+        {
+            "index": 1,
+            "speakerNameTarget": "택시 기사",
+            "speakerNameNative": "Taxi Driver",
+            "speechTarget": "어서 오세요.",
+            "speechNative": "Welcome."
+        },
+        {
+            "index": 2,
+            "speakerNameTarget": "경호",
+            "speakerNameNative": "Kyeong-ho",
+            "speechTarget": "안녕하세요.",
+            "speechNative": "Hi."
+        },
+        {
+            "index": 3,
+            "speakerNameTarget": "택시 기사",
+            "speakerNameNative": "Taxi Driver",
+            "speechTarget": "어디로 모실까요?",
+            "speechNative": "Where to?"
+        },
+        {
+            "index": 4,
+            "speakerNameTarget": "경호",
+            "speakerNameNative": "Kyeong-ho",
+            "speechTarget": "구로 시장으로 가 주세요.",
+            "speechNative": "Please take me to Guro Market."
+        },
+        {
+            "index": 5,
+            "speakerNameTarget": "택시 기사",
+            "speakerNameNative": "Taxi Driver",
+            "speechTarget": "네.",
+            "speechNative": "Okay."
+        },
+        {
+            "index": 6,
+            "speakerNameTarget": "경호",
+            "speakerNameNative": "Kyeong-ho",
+            "speechTarget": "기사님, 얼마쯤 나올까요?",
+            "speechNative": "About how much will it be?"
+        },
+        {
+            "index": 7,
+            "speakerNameTarget": "택시 기사",
+            "speakerNameNative": "Taxi Driver",
+            "speechTarget": "지금은 막히는 시간대가 아니니까 15,000원 정도 나올 것 같네요. 여기서 성산대교 타실 거예요? 아니면 좌측으로 돌아서 갈까요?",
+            "speechNative": "I think it will be around 15,000 won since it’s not rush hour now. Do you want to take Seong-san Bridge from here? Or shall we turn left?"
+        },
+        {
+            "index": 8,
+            "speakerNameTarget": "경호",
+            "speakerNameNative": "Kyeong-ho",
+            "speechTarget": "성산대교로 가 주세요.",
+            "speechNative": "Please go to Seong-san Bridge."
+        },
+        {
+            "index": 9,
+            "speakerNameTarget": "택시 기사",
+            "speakerNameNative": "Taxi Driver",
+            "speechTarget": "네. 댁이 거기이신가 봐요.",
+            "speechNative": "Okay. I guess your house is around there."
+        },
+        {
+            "index": 10,
+            "speakerNameTarget": "경호",
+            "speakerNameNative": "Kyeong-ho",
+            "speechTarget": "네. 구로 시장 근처에 집이 있어요.",
+            "speechNative": "Yes, my house is near Guro Market."
+        },
+        {
+            "index": 11,
+            "speakerNameTarget": "택시 기사",
+            "speakerNameNative": "Taxi Driver",
+            "speechTarget": "거기는 집값이 비싸지 않아요?",
+            "speechNative": "Are house prices not that high around there?"
+        },
+        {
+            "index": 12,
+            "speakerNameTarget": "경호",
+            "speakerNameNative": "Kyeong-ho",
+            "speechTarget": "주위 다른 곳에 비해서 좀 싼 편이에요. 그리고 교통편도 좋아서 살기 좋은 것 같아요.",
+            "speechNative": "It’s a bit cheaper compared to other places nearby. And transportation is convenient, so I think it’s a good place to live."
+        },
+        {
+            "index": 13,
+            "speakerNameTarget": "택시 기사",
+            "speakerNameNative": "Taxi Driver",
+            "speechTarget": "시장 근처에서 살면 좀 시끄럽고 그렇지 않나요?",
+            "speechNative": "If you live near a market, isn’t it a bit noisy?"
+        },
+        {
+            "index": 14,
+            "speakerNameTarget": "경호",
+            "speakerNameNative": "Kyeong-ho",
+            "speechTarget": "생각보다 그렇게 시끄럽지는 않더라고요.",
+            "speechNative": "I find that it’s not that noisy, unlike what you would think."
+        }
+    ],
+    "vocabulary": [
+        {
+            "id": 0,
+            "targetLanguageText": "생각",
+            "nativeLanguageText": "thought"
+        },
+        {
+            "id": 1,
+            "targetLanguageText": "깔끔하다",
+            "nativeLanguageText": "to be neat"
+        },
+        {
+            "id": 2,
+            "targetLanguageText": "장 보러 가다",
+            "nativeLanguageText": "to go grocery shopping"
+        },
+        {
+            "id": 3,
+            "targetLanguageText": "편하다",
+            "nativeLanguageText": "to be comfortable"
+        },
+        {
+            "id": 4,
+            "targetLanguageText": "코앞",
+            "nativeLanguageText": "right around the corner, happening very soon"
+        },
+        {
+            "id": 5,
+            "targetLanguageText": "요금",
+            "nativeLanguageText": "charge, fee, fare"
+        },
+        {
+            "id": 6,
+            "targetLanguageText": "현금",
+            "nativeLanguageText": "cash"
+        },
+        {
+            "id": 7,
+            "targetLanguageText": "드리다",
+            "nativeLanguageText": "to give (honorific)"
+        },
+        {
+            "id": 8,
+            "targetLanguageText": "낫다",
+            "nativeLanguageText": "to be better"
+        },
+        {
+            "id": 9,
+            "targetLanguageText": "상관없다",
+            "nativeLanguageText": "to not matter"
+        },
+        {
+            "id": 10,
+            "targetLanguageText": "거스름돈",
+            "nativeLanguageText": "small change"
+        },
+        {
+            "id": 11,
+            "targetLanguageText": "번거롭다",
+            "nativeLanguageText": "to be cumbersome, inconvenient"
+        },
+        {
+            "id": 12,
+            "targetLanguageText": "선호하다",
+            "nativeLanguageText": "to prefer"
+        },
+        {
+            "id": 13,
+            "targetLanguageText": "다 오다",
+            "nativeLanguageText": "to arrive"
+        },
+        {
+            "id": 14,
+            "targetLanguageText": "세워 드리다",
+            "nativeLanguageText": "to drop someone off/stop the car (honorific)"
+        },
+        {
+            "id": 15,
+            "targetLanguageText": "모시다",
+            "nativeLanguageText": "to take to (honorific)"
+        },
+        {
+            "id": 16,
+            "targetLanguageText": "얼마쯤",
+            "nativeLanguageText": "about how much"
+        },
+        {
+            "id": 17,
+            "targetLanguageText": "막히다",
+            "nativeLanguageText": "traffic is bad, congested"
+        },
+        {
+            "id": 18,
+            "targetLanguageText": "타다",
+            "nativeLanguageText": "to ride"
+        },
+        {
+            "id": 19,
+            "targetLanguageText": "좌측",
+            "nativeLanguageText": "left side"
+        },
+        {
+            "id": 20,
+            "targetLanguageText": "돌아서 가다",
+            "nativeLanguageText": "to take a detour, turn around and go"
+        },
+        {
+            "id": 21,
+            "targetLanguageText": "댁",
+            "nativeLanguageText": "someone's house/place (honorific)"
+        },
+        {
+            "id": 22,
+            "targetLanguageText": "집값",
+            "nativeLanguageText": "house price"
+        },
+        {
+            "id": 23,
+            "targetLanguageText": "비싸다",
+            "nativeLanguageText": "to be expensive"
+        },
+        {
+            "id": 24,
+            "targetLanguageText": "주위",
+            "nativeLanguageText": "surroundings"
+        },
+        {
+            "id": 25,
+            "targetLanguageText": "다른 곳",
+            "nativeLanguageText": "somewhere else, another place"
+        },
+        {
+            "id": 26,
+            "targetLanguageText": "비하다",
+            "nativeLanguageText": "to compare, to be compared"
+        },
+        {
+            "id": 27,
+            "targetLanguageText": "싸다",
+            "nativeLanguageText": "to be cheap"
+        },
+        {
+            "id": 28,
+            "targetLanguageText": "교통편",
+            "nativeLanguageText": "transportation"
+        },
+        {
+            "id": 29,
+            "targetLanguageText": "시끄럽다",
+            "nativeLanguageText": "to be loud, to be noisy"
+        }
+    ],
+    "patterns": [
+        {
+            "id": 0,
+            "patternTarget": "계속 더 ADJECTIVE + -아/어/여지네",
+            "patternNative": "Continuously getting more and more ADJECTIVE.",
+            "type": "casual",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "계속 더 심해지네.",
+            "exampleSentenceNative": "It’s getting worse and worse.",
+            "sampleSentences": [
+                {
+                    "id": 0,
+                    "targetText": "계속 더 멀어지네.",
+                    "nativeText": "It's getting farther and farther."
+                },
+                {
+                    "id": 1,
+                    "targetText": "계속 더 배고파지네.",
+                    "nativeText": "I’m getting hungrier and hungrier."
+                }
+            ],
+            "exercises": [
+                {
+                    "id": 1,
+                    "exercise": "I’m getting more and more curious.",
+                    "answerKey": "계속 더 궁금해지네."
+                },
+                {
+                    "id": 2,
+                    "exercise": "It’s getting bigger and bigger.",
+                    "answerKey": "계속 더 커지네."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 1,
+                    "pattern": "계속 더 ADJECTIVE + -아/어/여지네",
+                    "patternTargetText": "Continuously getting more and more ADJECTIVE.",
+                    "patternNativeText": "계속 더 ADJECTIVE + -아/어/여지네."
+                },
+                {
+                    "id": 2,
+                    "pattern": "계속 더 ADJECTIVE + -아/어/여져",
+                    "patternTargetText": "Continuously getting more and more ADJECTIVE.",
+                    "patternNativeText": "계속 더 ADJECTIVE + -아/어/여져."
+                }
+            ]
+        },
+        {
+            "id": 1,
+            "patternTarget": "VERB + -(으)면 안 돼",
+            "patternNative": "I can’t VERB. / I shouldn’t VERB.",
+            "type": "casual",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "오늘 수업 빠지면 안 돼.",
+            "exampleSentenceNative": "I can’t skip classes today.",
+            "sampleSentences": [
+                {
+                    "id": 0,
+                    "targetText": "나 이거 다 먹으면 안 돼.",
+                    "nativeText": "I can’t eat them all."
+                },
+                {
+                    "id": 1,
+                    "targetText": "나 오늘 놀면 안 돼.",
+                    "nativeText": "I shouldn’t just play today."
+                }
+            ],
+            "exercises": [
+                {
+                    "id": 1,
+                    "exercise": "I can’t get drunk today.",
+                    "answerKey": "나 오늘 취하면 안 돼."
+                },
+                {
+                    "id": 2,
+                    "exercise": "I shouldn’t exercise today.",
+                    "answerKey": "나 오늘 운동하면 안 돼."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 1,
+                    "pattern": "VERB + -(으)면 안 돼",
+                    "patternTargetText": "I can’t VERB. / I shouldn’t VERB.",
+                    "patternNativeText": "VERB + -(으)면 안 돼."
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "patternTarget": "금방 VERB + -(으)ㄹ 것 같아",
+            "patternNative": "It looks like (SUBJECT) is about to VERB.",
+            "type": "casual",
+            "exampleSentenceNativeTitle": "Sentence Used in the Dialogue",
+            "exampleSentenceTarget": "금방 쓰러질 것 같아.",
+            "exampleSentenceNative": "It looks like you’re about to faint.",
+            "sampleSentences": [
+                {
+                    "id": 0,
+                    "targetText": "금방 시작할 것 같아.",
+                    "nativeText": "It looks like it’s about to start."
+                },
+                {
+                    "id": 1,
+                    "targetText": "금방 도착할 것 같아.",
+                    "nativeText": "It looks like he’s about to arrive."
+                }
+            ],
+            "exercises": [
+                {
+                    "id": 1,
+                    "exercise": "It looks like we’re about to get a call.",
+                    "answerKey": "금방 전화 올 것 같아."
+                },
+                {
+                    "id": 2,
+                    "exercise": "It looks like they’re about to depart.",
+                    "answerKey": "금방 출발할 것 같아."
+                }
+            ],
+            "appliedPatterns": [
+                {
+                    "id": 1,
+                    "pattern": "금방 VERB + -(으)ㄹ 것 같아",
+                    "patternTargetText": "It looks like (SUBJECT) is about to VERB.",
+                    "patternNativeText": "금방 VERB + -(으)ㄹ 것 같아."
+                }
+            ]
+        }
+    ]
+}

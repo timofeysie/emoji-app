@@ -9,13 +9,17 @@ import {
 import {
   assignmentReasonValues,
   badgeStatusValues,
+  gameKindValues,
   gameNfcCardGroupAssignmentStatusValues,
   gameStateValues,
+  leitnerPickReasonValues,
+  leitnerScopeValues,
   nfcCardGroupStatusValues,
   nfcCardStatusValues,
   participantRoleValues,
   participantStatusValues,
   playModeValues,
+  playerBindingReasonValues,
   questionModeValues,
   questionStateValues,
   slotLabelValues,
@@ -27,10 +31,20 @@ const userSchema = new Schema(
   {
     displayName: { type: String, required: true, trim: true },
     authProviderId: { type: String, required: true, immutable: true },
+    /**
+     * The player this user practises as in YALLA (security.md D14); its
+     * `externalId` is their LRS actor. The player still never logs in.
+     */
+    playerId: { type: objectId, ref: 'Player', default: null },
   },
   { timestamps: true, collection: 'users' },
 );
 userSchema.index({ authProviderId: 1 }, { unique: true });
+// One user per player, so two logins never write one learner's evidence.
+userSchema.index(
+  { playerId: 1 },
+  { unique: true, partialFilterExpression: { playerId: { $type: 'objectId' } }, name: 'uniq_user_per_player' },
+);
 
 const badgeSchema = new Schema(
   {
@@ -42,17 +56,49 @@ const badgeSchema = new Schema(
 );
 badgeSchema.index({ externalBadgeId: 1 }, { unique: true });
 
+/** The plan a solo Leitner game was made from (docs/xAPI/leitner-method.md, Step 3). */
+const leitnerPlanSchema = new Schema(
+  {
+    playerId: { type: objectId, ref: 'Player', required: true },
+    book: { type: String, required: true },
+    chapter: { type: String, required: true },
+    scope: { type: String, required: true, enum: leitnerScopeValues },
+    aspects: { type: [String], required: true },
+    seed: { type: Number, required: true },
+    plannedAt: { type: Date, required: true },
+    picks: [
+      new Schema(
+        {
+          learningObjectId: { type: String, required: true },
+          aspect: { type: String, required: true },
+          sourceRef: { type: String, required: true },
+          reason: { type: String, required: true, enum: leitnerPickReasonValues },
+        },
+        { _id: false },
+      ),
+    ],
+  },
+  { _id: false },
+);
+
 const gameSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
     state: { type: String, required: true, enum: gameStateValues, default: 'draft' },
+    /** Missing on games made before this field: read as `class`. */
+    kind: { type: String, enum: gameKindValues, default: 'class', immutable: true },
+    leitner: { type: leitnerPlanSchema, default: undefined, immutable: true },
     createdByUserId: { type: objectId, ref: 'User', required: true, immutable: true },
     startedAt: { type: Date },
     endedAt: { type: Date },
+    /** Last failed xAPI export (Leitner games: kept as pending export until it succeeds). */
+    exportError: { type: String },
+    exportAttemptedAt: { type: Date },
   },
   { timestamps: true, collection: 'games' },
 );
 gameSchema.index({ state: 1, createdAt: -1 });
+gameSchema.index({ 'leitner.playerId': 1 }, { partialFilterExpression: { kind: 'leitner-solo' } });
 
 const gameParticipantSchema = new Schema(
   {
@@ -98,6 +144,83 @@ playerBadgeAssignmentSchema.index(
   },
 );
 
+/**
+ * A person the referee plays with (security.md D4). Never logs in; no email.
+ * `externalId` is the only identifier that leaves our database (xAPI actor, D3).
+ */
+const playerSchema = new Schema(
+  {
+    /** First name, nickname or badge name the referee recognises; no surnames. */
+    firstName: { type: String, required: true, trim: true },
+    /** Random UUID v4; never the Mongo `_id`. */
+    externalId: { type: String, required: true, immutable: true },
+    /**
+     * Badge the player was last bound to, in any game. Kept here because a
+     * Leitner game's bindings are deleted with it; it presets the next one.
+     */
+    lastBadgeName: { type: String, default: null },
+  },
+  { timestamps: true, collection: 'players' },
+);
+playerSchema.index({ externalId: 1 }, { unique: true });
+
+/**
+ * Referee-made binding of a badge (the game's player key, `Guess.pairName`) to
+ * a `Player` (security.md D2). Time-ranged: changes end the old row and add a
+ * new one, so a guess belongs to whoever held the badge when it was made.
+ */
+const playerBindingSchema = new Schema(
+  {
+    gameId: { type: objectId, ref: 'Game', required: true, immutable: true },
+    badgeName: { type: String, required: true, immutable: true },
+    playerId: { type: objectId, ref: 'Player', required: true, immutable: true },
+    assignedAt: { type: Date, required: true, default: () => new Date(), immutable: true },
+    unassignedAt: { type: Date, default: null },
+    reason: { type: String, required: true, enum: playerBindingReasonValues },
+  },
+  { collection: 'playerBindings' },
+);
+playerBindingSchema.index({ gameId: 1, badgeName: 1, assignedAt: 1 });
+playerBindingSchema.index(
+  { gameId: 1, badgeName: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { unassignedAt: null },
+    name: 'uniq_active_binding_per_badge',
+  },
+);
+playerBindingSchema.index(
+  { gameId: 1, playerId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { unassignedAt: null },
+    name: 'uniq_active_binding_per_player',
+  },
+);
+
+/**
+ * What a question tests, for Leitner tracking and xAPI `grouping`
+ * (docs/xAPI/leitner-method.md → Statement changes). All or nothing: an
+ * untagged question exports exactly as before.
+ */
+const questionLearningSchema = new Schema(
+  {
+    /** Language-scoped: `ko/lexeme/시험/test`. */
+    learningObjectId: { type: String, required: true },
+    /** The book it was taught from: `korean-language-book`. */
+    book: { type: String, required: true },
+    /** Where in that book: `ch27/vocabulary/1`. */
+    sourceRef: { type: String, required: true },
+    /** `reading`, `writing`, … */
+    aspect: { type: String, required: true },
+    /** Korean, e.g. `시험`. */
+    target: { type: String, required: true },
+    /** English as the source gives it, e.g. `test, exam`. */
+    native: { type: String, required: true },
+  },
+  { _id: false },
+);
+
 const questionSchema = new Schema(
   {
     gameId: { type: objectId, ref: 'Game', required: true, immutable: true },
@@ -107,6 +230,7 @@ const questionSchema = new Schema(
     state: { type: String, required: true, enum: questionStateValues, default: 'draft' },
     openedAt: { type: Date },
     closedAt: { type: Date },
+    learning: { type: questionLearningSchema, default: undefined, immutable: true },
     createdByUserId: { type: objectId, ref: 'User', required: true, immutable: true },
   },
   { timestamps: true, collection: 'questions' },
@@ -183,8 +307,12 @@ const guessSchema = new Schema(
     questionId: { type: objectId, ref: 'Question', required: true, immutable: true },
     answerOptionId: { type: objectId, ref: 'AnswerOption', required: true, immutable: true },
     guesserUserId: { type: objectId, ref: 'User', immutable: true },
+    /** Player key: the badge name (Mode 1: the pair name). */
     pairName: { type: String },
+    /** Controller station that relayed the guess; absent on Mode 1 / legacy rows. */
+    stationName: { type: String },
     badgeId: { type: objectId, ref: 'Badge' },
+    badgeName: { type: String },
     cardUid: { type: String },
     slotLabel: { type: String, enum: slotLabelValues },
   },
@@ -205,22 +333,29 @@ guessSchema.index({ questionId: 1, createdAt: -1 });
 
 const pairBindingSchema = new Schema(
   {
+    /** Player key: the badge name (Mode 1: the pair name). */
     pairName: { type: String, required: true },
+    /** Controller station that owns this badge; absent on legacy rows (= pairName). */
+    stationName: { type: String },
     gameId: { type: objectId, ref: 'Game', default: null },
     controllerId: { type: String },
     joined: { type: Boolean, required: true, default: false },
+    readyForNextQuestion: { type: Boolean, default: null },
     updatedAt: { type: Date, default: () => new Date() },
   },
   { collection: 'pairBindings' },
 );
 pairBindingSchema.index({ pairName: 1 }, { unique: true });
 pairBindingSchema.index({ gameId: 1 });
+pairBindingSchema.index({ gameId: 1, stationName: 1 });
 
 export type User = InferSchemaType<typeof userSchema>;
 export type Badge = InferSchemaType<typeof badgeSchema>;
 export type Game = InferSchemaType<typeof gameSchema>;
 export type GameParticipant = InferSchemaType<typeof gameParticipantSchema>;
 export type PlayerBadgeAssignment = InferSchemaType<typeof playerBadgeAssignmentSchema>;
+export type Player = InferSchemaType<typeof playerSchema>;
+export type PlayerBinding = InferSchemaType<typeof playerBindingSchema>;
 export type Question = InferSchemaType<typeof questionSchema>;
 export type AnswerOption = InferSchemaType<typeof answerOptionSchema>;
 export type NfcCardGroup = InferSchemaType<typeof nfcCardGroupSchema>;
@@ -234,6 +369,8 @@ export type BadgeDocument = HydratedDocument<Badge>;
 export type GameDocument = HydratedDocument<Game>;
 export type GameParticipantDocument = HydratedDocument<GameParticipant>;
 export type PlayerBadgeAssignmentDocument = HydratedDocument<PlayerBadgeAssignment>;
+export type PlayerDocument = HydratedDocument<Player>;
+export type PlayerBindingDocument = HydratedDocument<PlayerBinding>;
 export type QuestionDocument = HydratedDocument<Question>;
 export type AnswerOptionDocument = HydratedDocument<AnswerOption>;
 export type NfcCardGroupDocument = HydratedDocument<NfcCardGroup>;
@@ -248,6 +385,8 @@ export type DbModels = {
   Game: Model<Game>;
   GameParticipant: Model<GameParticipant>;
   PlayerBadgeAssignment: Model<PlayerBadgeAssignment>;
+  Player: Model<Player>;
+  PlayerBinding: Model<PlayerBinding>;
   Question: Model<Question>;
   AnswerOption: Model<AnswerOption>;
   NfcCardGroup: Model<NfcCardGroup>;
@@ -264,6 +403,8 @@ export function registerModels(connection: Connection): DbModels {
     Game: connection.model('Game', gameSchema),
     GameParticipant: connection.model('GameParticipant', gameParticipantSchema),
     PlayerBadgeAssignment: connection.model('PlayerBadgeAssignment', playerBadgeAssignmentSchema),
+    Player: connection.model('Player', playerSchema),
+    PlayerBinding: connection.model('PlayerBinding', playerBindingSchema),
     Question: connection.model('Question', questionSchema),
     AnswerOption: connection.model('AnswerOption', answerOptionSchema),
     NfcCardGroup: connection.model('NfcCardGroup', nfcCardGroupSchema),

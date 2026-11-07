@@ -2,6 +2,9 @@ import type { Response } from 'express';
 import { GameFlowController } from './game-flow.controller';
 import { GameDataRepository } from './persistence/game-data.repository';
 import { BadgeStateService } from './badge-state.service';
+import { NfcCardService } from './nfc-card.service';
+import { GameExportService } from './xapi/game-export.service';
+import type { LeitnerFlowService } from './learning/leitner-flow.service';
 
 type ResponseMock = Pick<Response, 'status' | 'json'> & {
   status: jest.Mock;
@@ -25,26 +28,162 @@ describe('GameFlowController', () => {
     setQuestionState: jest.fn(),
     setGameState: jest.fn(),
     createNfcCardGroup: jest.fn(),
+    ensureNfcCardGroup: jest.fn(),
     assignNfcCardGroupToGame: jest.fn(),
+    getActiveNfcCardGroupForGame: jest.fn(),
+    openNextQuestionForGame: jest.fn(),
     submitGuess: jest.fn(),
     bindPair: jest.fn(),
     getBinding: jest.fn(),
     markJoined: jest.fn(),
-    getBindingsByGameId: jest.fn(),
+    setPairReadyForNextQuestion: jest.fn(),
+    resetPairReadiness: jest.fn(),
+    getStationNamesByGameId: jest.fn(),
+    computeQuestionResult: jest.fn(),
+    getGameScores: jest.fn(),
+    getGameDetail: jest.fn(),
+    getGameGuessChart: jest.fn(),
+    haveAllJoinedPlayersGuessed: jest.fn(),
+    markJoinedByGuess: jest.fn(),
+    answerStatus: jest.fn(),
+    syncStationRoster: jest.fn(),
+    getOpenQuestionId: jest.fn(),
+    recordExportFailure: jest.fn(),
   } as unknown as jest.Mocked<GameDataRepository>;
 
-  const badgeStateService: jest.Mocked<Pick<BadgeStateService, 'broadcastDashboard' | 'sendToPairNames'>> = {
+  const badgeStateService: jest.Mocked<
+    Pick<BadgeStateService, 'broadcastDashboard' | 'sendToPairNames' | 'getStationRoster'>
+  > = {
     broadcastDashboard: jest.fn(),
     sendToPairNames: jest.fn(),
+    getStationRoster: jest.fn(),
+  };
+
+  const nfcCardService = new NfcCardService();
+
+  const gameExportService: jest.Mocked<Pick<GameExportService, 'exportGame' | 'getFinished'>> = {
+    exportGame: jest.fn(),
+    getFinished: jest.fn(),
   };
 
   const controller = new GameFlowController(
     repository,
     badgeStateService as unknown as BadgeStateService,
+    nfcCardService,
+    gameExportService as unknown as GameExportService,
   );
 
   beforeEach(() => {
     jest.clearAllMocks();
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
+      exportError: null,
+      exportAttemptedAt: null,
+      state: 'lobby',
+      createdAt: new Date().toISOString(),
+      startedAt: null,
+      endedAt: null,
+      questions: [],
+      boundPairs: [],
+    });
+    repository.haveAllJoinedPlayersGuessed.mockResolvedValue(false);
+    repository.markJoinedByGuess.mockResolvedValue(false);
+    repository.answerStatus.mockResolvedValue({ joined: [], answered: [], notJoined: [] });
+    repository.setQuestionState.mockResolvedValue(undefined);
+    repository.syncStationRoster.mockResolvedValue([]);
+    badgeStateService.getStationRoster.mockReturnValue(null);
+    gameExportService.getFinished.mockReturnValue(null);
+  });
+
+  describe('GET /api/games/:gameId/play for a deleted game', () => {
+    it("answers 410 with a finished Leitner game's results", async () => {
+      const finished = {
+        gameId: '507f1f77bcf86cd799439011',
+        title: 'Leitner: Player 7F3A · ch. 27',
+        playerId: '507f1f77bcf86cd7994390aa',
+        finishedAt: new Date().toISOString(),
+        statementsSent: 3,
+        summary: { score: { correct: 1, total: 1 }, changes: [] },
+      };
+      repository.getGameDetail.mockResolvedValue(null);
+      gameExportService.getFinished.mockReturnValue(finished);
+      const res = createResponseMock();
+
+      await controller.getGamePlayView('507f1f77bcf86cd799439011', res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(410);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ finished }));
+    });
+
+    it('answers 404 for any other missing game', async () => {
+      repository.getGameDetail.mockResolvedValue(null);
+      const res = createResponseMock();
+
+      await controller.getGamePlayView('507f1f77bcf86cd799439011', res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+  });
+
+  describe('createQuestion learning tag', () => {
+    const question = {
+      gameId: '507f1f77bcf86cd799439011',
+      createdByUserId: '507f1f77bcf86cd799439012',
+      text: '시험',
+      sequence: 1,
+      mode: 'standard',
+      answerOptions: [
+        { text: 'test', sequence: 1, slotLabel: 'A', isCorrect: true },
+        { text: 'class', sequence: 2, slotLabel: 'B', isCorrect: false },
+      ],
+    };
+    const learning = {
+      learningObjectId: 'ko/lexeme/시험/test',
+      book: 'korean-language-book',
+      sourceRef: 'ch27/vocabulary/1',
+      aspect: 'reading',
+      target: '시험',
+      native: 'test, exam',
+    };
+
+    it('passes a valid tag through to the repository', async () => {
+      repository.createQuestionWithOptions.mockResolvedValue('q1');
+      const res = createResponseMock();
+
+      await controller.createQuestion({ ...question, learning }, res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(repository.createQuestionWithOptions).toHaveBeenCalledWith(expect.objectContaining({ learning }));
+    });
+
+    it('leaves untagged questions untagged (class games)', async () => {
+      repository.createQuestionWithOptions.mockResolvedValue('q1');
+      const res = createResponseMock();
+
+      await controller.createQuestion(question, res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(repository.createQuestionWithOptions.mock.calls[0][0]).not.toHaveProperty('learning');
+    });
+
+    it.each([
+      ['a malformed learning object id', { learningObjectId: 'ko/시험/test' }],
+      ['an old book-scoped learning object id', { learningObjectId: 'korean-language-book/vocabulary/시험/test' }],
+      ['a book that is not a slug', { book: 'Korean Book' }],
+      ['a sourceRef that is not a chapter entry', { sourceRef: 'vocabulary/1' }],
+      ['an aspect that is not a slug', { aspect: 'Reading Skill' }],
+      ['an unknown field', { extra: true }],
+    ])('rejects %s', async (_label, change) => {
+      const res = createResponseMock();
+
+      await controller.createQuestion({ ...question, learning: { ...learning, ...change } }, res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(repository.createQuestionWithOptions).not.toHaveBeenCalled();
+    });
   });
 
   it('returns 400 for invalid game creation payload', async () => {
@@ -63,6 +202,8 @@ describe('GameFlowController', () => {
     await controller.createGame(
       {
         title: 'Test Game',
+        kind: 'class',
+        leitner: null,
         createdByUserId: '507f1f77bcf86cd799439012',
       },
       res as unknown as Response,
@@ -71,6 +212,267 @@ describe('GameFlowController', () => {
     expect(repository.createGame).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({ gameId: '507f1f77bcf86cd799439011' });
+  });
+
+  it('lists only joined players in student play', async () => {
+    const res = createResponseMock();
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
+      exportError: null,
+      exportAttemptedAt: null,
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [
+        { pairName: 'power-cable', stationName: 'power-cable', joined: true, readyForNextQuestion: null },
+        { pairName: 'black', stationName: 'power-cable', joined: false, readyForNextQuestion: null },
+      ],
+      questions: [],
+    });
+
+    await controller.getGamePlayView('507f1f77bcf86cd799439011', res as unknown as Response);
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        boundPairs: [{ pairName: 'power-cable', stationName: 'power-cable', readyForNextQuestion: null }],
+      }),
+    );
+  });
+
+  it('returns only the open question without correct-answer flags for student play', async () => {
+    const res = createResponseMock();
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
+      exportError: null,
+      exportAttemptedAt: null,
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [],
+      questions: [
+        {
+          id: '507f1f77bcf86cd799439015',
+          text: 'Visible question',
+          sequence: 1,
+          mode: 'standard',
+          state: 'open',
+          guessCount: 0,
+          answerOptions: [
+            {
+              id: '507f1f77bcf86cd799439016',
+              slotLabel: 'A',
+              text: 'Visible answer',
+              isCorrect: true,
+              sequence: 1,
+            },
+          ],
+        },
+        {
+          id: '507f1f77bcf86cd799439017',
+          text: 'Future question',
+          sequence: 2,
+          mode: 'standard',
+          state: 'draft',
+          guessCount: 0,
+          answerOptions: [],
+        },
+      ],
+    });
+
+    await controller.getGamePlayView(
+      '507f1f77bcf86cd799439011',
+      res as unknown as Response,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      state: 'active',
+      kind: 'class',
+      boundPairs: [],
+      totalRounds: 2,
+      nextRoundSequence: null,
+      countdown: null,
+      currentQuestion: {
+        id: '507f1f77bcf86cd799439015',
+        text: 'Visible question',
+        sequence: 1,
+        answerOptions: [
+          {
+            id: '507f1f77bcf86cd799439016',
+            slotLabel: 'A',
+            text: 'Visible answer',
+            sequence: 1,
+          },
+        ],
+      },
+      previousResult: null,
+    });
+  });
+
+  it('returns the latest completed-round tag scans for student play', async () => {
+    const res = createResponseMock();
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
+      exportError: null,
+      exportAttemptedAt: null,
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [],
+      questions: [
+        {
+          id: '507f1f77bcf86cd799439015',
+          text: 'Completed question',
+          sequence: 1,
+          mode: 'standard',
+          state: 'closed',
+          guessCount: 1,
+          answerOptions: [
+            {
+              id: '507f1f77bcf86cd799439016',
+              slotLabel: 'A',
+              text: 'Correct answer',
+              isCorrect: true,
+              sequence: 1,
+            },
+          ],
+        },
+        {
+          id: '507f1f77bcf86cd799439017',
+          text: 'Hidden next question',
+          sequence: 2,
+          mode: 'standard',
+          state: 'closed',
+          guessCount: 0,
+          answerOptions: [],
+        },
+      ],
+    });
+    repository.getGameGuessChart.mockResolvedValue({
+      gameId: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      pairs: ['green', 'white-2'],
+      pairStations: { green: 'green', 'white-2': 'white' },
+      questions: [
+        {
+          questionId: '507f1f77bcf86cd799439015',
+          sequence: 1,
+          byPair: {
+            green: {
+              cardLabel: 'Monkey',
+              slotLabel: 'A',
+              isCorrect: true,
+            },
+            'white-2': null,
+          },
+        },
+      ],
+    });
+
+    await controller.getGamePlayView(
+      '507f1f77bcf86cd799439011',
+      res as unknown as Response,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentQuestion: null,
+        nextRoundSequence: 2,
+        previousResult: {
+          questionId: '507f1f77bcf86cd799439015',
+          text: 'Completed question',
+          sequence: 1,
+          answerOptions: [
+            {
+              id: '507f1f77bcf86cd799439016',
+              slotLabel: 'A',
+              text: 'Correct answer',
+              sequence: 1,
+              isCorrect: true,
+            },
+          ],
+          scans: [
+            {
+              pairName: 'green',
+              stationName: 'green',
+              cardLabel: 'Monkey',
+              slotLabel: 'A',
+              isCorrect: true,
+            },
+            {
+              pairName: 'white-2',
+              stationName: 'white',
+              cardLabel: null,
+              slotLabel: null,
+              isCorrect: false,
+            },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('marks the player view complete after the final round closes', async () => {
+    const res = createResponseMock();
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
+      exportError: null,
+      exportAttemptedAt: null,
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [],
+      questions: [
+        {
+          id: '507f1f77bcf86cd799439015',
+          text: 'Final question',
+          sequence: 1,
+          mode: 'standard',
+          state: 'closed',
+          guessCount: 1,
+          answerOptions: [],
+        },
+      ],
+    });
+    repository.getGameGuessChart.mockResolvedValue({
+      gameId: '507f1f77bcf86cd799439011',
+      title: 'Demo Night',
+      pairs: [],
+      pairStations: {},
+      questions: [],
+    });
+
+    await controller.getGamePlayView(
+      '507f1f77bcf86cd799439011',
+      res as unknown as Response,
+    );
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentQuestion: null,
+        nextRoundSequence: null,
+        totalRounds: 1,
+      }),
+    );
   });
 
   it('returns 400 when player participant is missing playMode', async () => {
@@ -89,8 +491,24 @@ describe('GameFlowController', () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
-  it('returns 200 for valid question state update', async () => {
+  it('refuses to open a round while another one is open', async () => {
     const res = createResponseMock();
+    repository.getOpenQuestionId.mockResolvedValueOnce('507f1f77bcf86cd799439099');
+
+    await controller.setQuestionState(
+      '507f1f77bcf86cd799439015',
+      { gameId: '507f1f77bcf86cd799439016', state: 'open' },
+      res as unknown as Response,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(repository.setQuestionState).not.toHaveBeenCalled();
+    expect(badgeStateService.broadcastDashboard).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 for valid question state update and emits question.opened', async () => {
+    const res = createResponseMock();
+    repository.getStationNamesByGameId.mockResolvedValue(['green']);
 
     await controller.setQuestionState(
       '507f1f77bcf86cd799439015',
@@ -106,8 +524,96 @@ describe('GameFlowController', () => {
       questionId: '507f1f77bcf86cd799439015',
       state: 'open',
     });
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'question.opened',
+        questionId: '507f1f77bcf86cd799439015',
+      }),
+    );
+    expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+      ['green'],
+      expect.objectContaining({ type: 'question.opened' }),
+    );
+    expect(repository.computeQuestionResult).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it('emits question.closed and question.result when a question is closed', async () => {
+    const res = createResponseMock();
+    repository.getStationNamesByGameId.mockResolvedValue(['green', 'white']);
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439016',
+      title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
+      exportError: null,
+      exportAttemptedAt: null,
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [],
+      questions: [
+        {
+          id: '507f1f77bcf86cd799439015',
+          text: 'Round 1',
+          sequence: 1,
+          mode: 'standard',
+          state: 'closed',
+          guessCount: 2,
+          answerOptions: [],
+        },
+        {
+          id: '507f1f77bcf86cd799439017',
+          text: 'Round 2',
+          sequence: 2,
+          mode: 'standard',
+          state: 'draft',
+          guessCount: 0,
+          answerOptions: [],
+        },
+      ],
+    });
+    repository.computeQuestionResult.mockResolvedValue({
+      gameId: '507f1f77bcf86cd799439016',
+      questionId: '507f1f77bcf86cd799439015',
+      correctSlotLabel: 'B',
+      results: [
+        { pairName: 'green', stationName: 'green', badgeName: 'green', slotLabel: 'B', isCorrect: true },
+        { pairName: 'white', stationName: 'white', badgeName: 'white', slotLabel: null, isCorrect: false },
+      ],
+    });
+
+    await controller.setQuestionState(
+      '507f1f77bcf86cd799439015',
+      {
+        gameId: '507f1f77bcf86cd799439016',
+        state: 'closed',
+      },
+      res as unknown as Response,
+    );
+
+    expect(repository.resetPairReadiness).toHaveBeenCalledWith(
+      '507f1f77bcf86cd799439016',
+    );
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'question.closed',
+        isFinalRound: false,
+      }),
+    );
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'question.result',
+        correctSlotLabel: 'B',
+      }),
+    );
+    expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+      ['green', 'white'],
+      expect.objectContaining({ type: 'question.result' }),
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 
   it('maps repository submitGuess errors to 400', async () => {
@@ -134,6 +640,9 @@ describe('GameFlowController', () => {
       guessId: '507f1f77bcf86cd799439020',
       answerOptionId: '507f1f77bcf86cd799439021',
       slotLabel: 'A',
+      isCorrect: true,
+      cardLabel: 'a',
+      gameTitle: 'Demo Night',
     });
 
     await controller.submitGuess(
@@ -141,7 +650,7 @@ describe('GameFlowController', () => {
         gameId: '507f1f77bcf86cd799439017',
         questionId: '507f1f77bcf86cd799439018',
         pairName: 'white',
-        cardUid: 'CARD-UID-A-001',
+        cardUid: '5B:6F:B8:08',
       },
       res as unknown as Response,
     );
@@ -149,8 +658,249 @@ describe('GameFlowController', () => {
     expect(repository.submitGuess).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
     expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'nfc.tagged', pairName: 'white' }),
+      expect.objectContaining({
+        type: 'nfc.tagged',
+        pairName: 'white',
+        isCorrect: true,
+        cardLabel: 'monkey',
+        gameTitle: 'Demo Night',
+      }),
     );
+    expect(repository.setQuestionState).not.toHaveBeenCalled();
+  });
+
+  it('records the scanning badge as the player for a multi-badge scan', async () => {
+    const res = createResponseMock();
+    repository.submitGuess.mockResolvedValue({
+      guessId: '507f1f77bcf86cd799439020',
+      answerOptionId: '507f1f77bcf86cd799439021',
+      slotLabel: 'B',
+      isCorrect: false,
+      cardLabel: 'b',
+      gameTitle: 'Demo Night',
+    });
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'white',
+        badgeName: 'white-2',
+        cardUid: 'DB:93:B7:08',
+        slotLabel: 'B',
+      },
+      res as unknown as Response,
+    );
+
+    expect(repository.submitGuess).toHaveBeenCalledWith(
+      expect.objectContaining({ pairName: 'white', badgeName: 'white-2' }),
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'nfc.tagged',
+        pairName: 'white',
+        stationName: 'white',
+        badgeName: 'white-2',
+        slotLabel: 'B',
+      }),
+    );
+  });
+
+  it('uses pairName as the player badgeName on nfc.tagged for a Mode 1 scan', async () => {
+    const res = createResponseMock();
+    repository.submitGuess.mockResolvedValue({
+      guessId: '507f1f77bcf86cd799439020',
+      answerOptionId: '507f1f77bcf86cd799439021',
+      slotLabel: 'A',
+      isCorrect: true,
+      cardLabel: 'a',
+      gameTitle: 'Demo Night',
+    });
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'white',
+        cardUid: '5B:6F:B8:08',
+      },
+      res as unknown as Response,
+    );
+
+    const event = badgeStateService.broadcastDashboard.mock.calls
+      .map(([payload]) => payload as Record<string, unknown>)
+      .find((payload) => payload['type'] === 'nfc.tagged');
+    expect(event).toEqual(
+      expect.objectContaining({ pairName: 'white', stationName: 'white', badgeName: 'white' }),
+    );
+  });
+
+  it('rejects an empty badgeName', async () => {
+    const res = createResponseMock();
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'white',
+        badgeName: '',
+        cardUid: '5B:6F:B8:08',
+      },
+      res as unknown as Response,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(repository.submitGuess).not.toHaveBeenCalled();
+  });
+
+  it('auto-closes the question when the last bound pair answers', async () => {
+    const res = createResponseMock();
+    repository.submitGuess.mockResolvedValue({
+      guessId: '507f1f77bcf86cd799439020',
+      answerOptionId: '507f1f77bcf86cd799439021',
+      slotLabel: 'A',
+      isCorrect: true,
+      cardLabel: 'monkey',
+      gameTitle: 'Demo Night',
+    });
+    repository.haveAllJoinedPlayersGuessed.mockImplementation(async () => {
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ isCorrect: true, cardLabel: 'monkey' }),
+      );
+      return true;
+    });
+    repository.getStationNamesByGameId.mockResolvedValue(['white']);
+    repository.getGameDetail.mockResolvedValue({
+      id: '507f1f77bcf86cd799439017',
+      title: 'Demo Night',
+      kind: 'class',
+      leitner: null,
+      exportError: null,
+      exportAttemptedAt: null,
+      state: 'active',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      boundPairs: [],
+      questions: [
+        {
+          id: '507f1f77bcf86cd799439018',
+          text: 'Final round',
+          sequence: 1,
+          mode: 'standard',
+          state: 'closed',
+          guessCount: 1,
+          answerOptions: [],
+        },
+      ],
+    });
+    repository.computeQuestionResult.mockResolvedValue({
+      gameId: '507f1f77bcf86cd799439017',
+      questionId: '507f1f77bcf86cd799439018',
+      correctSlotLabel: 'A',
+      results: [
+        { pairName: 'white', stationName: 'white', badgeName: 'white', slotLabel: 'A', isCorrect: true },
+      ],
+    });
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'white',
+        cardUid: '5B:6F:B8:08',
+      },
+      res as unknown as Response,
+    );
+
+    expect(repository.setQuestionState).toHaveBeenCalledWith({
+      gameId: '507f1f77bcf86cd799439017',
+      questionId: '507f1f77bcf86cd799439018',
+      state: 'closed',
+    });
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'question.closed',
+        isFinalRound: true,
+      }),
+    );
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'question.result' }),
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('counts a badge that answers as joined, so its round can close (its join was never recorded)', async () => {
+    const res = createResponseMock();
+    const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    repository.submitGuess.mockResolvedValue({
+      guessId: '507f1f77bcf86cd799439020',
+      answerOptionId: '507f1f77bcf86cd799439021',
+      slotLabel: 'D',
+      isCorrect: true,
+      cardLabel: 'D',
+      gameTitle: 'Leitner',
+    });
+    repository.markJoinedByGuess.mockResolvedValue(true);
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'power-cable',
+        cardUid: '5B:6F:B8:08',
+      },
+      res as unknown as Response,
+    );
+
+    expect(repository.markJoinedByGuess).toHaveBeenCalledWith('507f1f77bcf86cd799439017', 'power-cable');
+    expect(repository.markJoinedByGuess.mock.invocationCallOrder[0]).toBeLessThan(
+      repository.haveAllJoinedPlayersGuessed.mock.invocationCallOrder[0],
+    );
+    expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'controller.joined', badgeName: 'power-cable' }),
+    );
+    // Not closed here (mock says someone is still to answer): the decision is logged.
+    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('round_waiting'));
+    consoleLog.mockRestore();
+  });
+
+  it('keeps the successful guess response when automatic closing fails', async () => {
+    const res = createResponseMock();
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    repository.submitGuess.mockResolvedValue({
+      guessId: '507f1f77bcf86cd799439020',
+      answerOptionId: '507f1f77bcf86cd799439021',
+      slotLabel: 'A',
+      isCorrect: true,
+      cardLabel: 'monkey',
+      gameTitle: 'Demo Night',
+    });
+    repository.haveAllJoinedPlayersGuessed.mockResolvedValue(true);
+    repository.setQuestionState.mockRejectedValue(new Error('close failed'));
+
+    await controller.submitGuess(
+      {
+        gameId: '507f1f77bcf86cd799439017',
+        questionId: '507f1f77bcf86cd799439018',
+        pairName: 'white',
+        cardUid: '5B:6F:B8:08',
+      },
+      res as unknown as Response,
+    );
+
+    expect(res.status).toHaveBeenCalledTimes(1);
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ isCorrect: true, cardLabel: 'monkey' }),
+    );
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('auto-close failed'),
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
   });
 
   describe('POST /api/games/:gameId/state', () => {
@@ -168,7 +918,7 @@ describe('GameFlowController', () => {
 
       await controller.setGameState(
         '507f1f77bcf86cd799439011',
-        { state: 'draft' },
+        { state: 'bogus' },
         res as unknown as Response,
       );
 
@@ -179,7 +929,7 @@ describe('GameFlowController', () => {
     it('transitions game to lobby and emits game.opened to controllers', async () => {
       const res = createResponseMock();
       repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'lobby' });
-      repository.getBindingsByGameId.mockResolvedValue(['white', 'red']);
+      repository.getStationNamesByGameId.mockResolvedValue(['white', 'red']);
 
       await controller.setGameState(
         '507f1f77bcf86cd799439011',
@@ -204,7 +954,8 @@ describe('GameFlowController', () => {
     it('transitions game to active and emits game.started to controllers', async () => {
       const res = createResponseMock();
       repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'active' });
-      repository.getBindingsByGameId.mockResolvedValue(['white']);
+      repository.getStationNamesByGameId.mockResolvedValue(['white']);
+      repository.openNextQuestionForGame.mockResolvedValue('507f1f77bcf86cd799439015');
 
       await controller.setGameState(
         '507f1f77bcf86cd799439011',
@@ -215,6 +966,397 @@ describe('GameFlowController', () => {
       expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
         ['white'],
         expect.objectContaining({ type: 'game.started' }),
+      );
+      expect(repository.openNextQuestionForGame).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white'],
+        expect.objectContaining({
+          type: 'question.opened',
+          questionId: '507f1f77bcf86cd799439015',
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('counts a Leitner game down into its first round instead of opening it at once', async () => {
+      const leitnerFlow = { onGameState: jest.fn(), countdown: jest.fn(), setAutoEnd: jest.fn() };
+      const flowController = new GameFlowController(
+        repository,
+        badgeStateService as unknown as BadgeStateService,
+        nfcCardService,
+        gameExportService as unknown as GameExportService,
+        leitnerFlow as unknown as LeitnerFlowService,
+      );
+      const leitnerGame = {
+        id: '507f1f77bcf86cd799439011',
+        title: 'Leitner: Player 7F3A · ch. 27',
+        kind: 'leitner-solo' as const,
+        leitner: { playerId: '507f1f77bcf86cd7994390aa', book: 'korean-language-book', chapter: '27', scope: 'chapter' as const },
+        exportError: null,
+        exportAttemptedAt: null,
+        state: 'active' as const,
+        createdAt: new Date().toISOString(),
+        startedAt: null,
+        endedAt: null,
+        questions: [],
+        boundPairs: [],
+      };
+      repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'active' });
+      repository.getStationNamesByGameId.mockResolvedValue(['white']);
+      repository.getGameDetail.mockResolvedValue(leitnerGame);
+      const res = createResponseMock();
+
+      await flowController.setGameState('507f1f77bcf86cd799439011', { state: 'active' }, res as unknown as Response);
+
+      expect(repository.openNextQuestionForGame).not.toHaveBeenCalled();
+      expect(leitnerFlow.onGameState).toHaveBeenCalledWith(leitnerGame, 'active');
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('emits enriched per-pair game.ended when game completes', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'completed',
+      });
+      repository.getStationNamesByGameId.mockResolvedValue(['green', 'white']);
+      repository.getGameScores.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        scores: [
+          { pairName: 'green', stationName: 'green', badgeName: 'green', correct: 3, total: 4 },
+          { pairName: 'white', stationName: 'white', badgeName: 'white', correct: 1, total: 4 },
+        ],
+      });
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'completed' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['green'],
+        expect.objectContaining({
+          type: 'game.ended',
+          pairName: 'green',
+          isWinner: true,
+          rank: 1,
+          score: 3,
+        }),
+      );
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white'],
+        expect.objectContaining({
+          type: 'game.ended',
+          pairName: 'white',
+          isWinner: false,
+          rank: 2,
+          score: 1,
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('emits isWinner false when all scores are zero', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'completed',
+      });
+      repository.getStationNamesByGameId.mockResolvedValue(['power-cable']);
+      repository.getGameScores.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        scores: [
+          {
+            pairName: 'power-cable',
+            stationName: 'power-cable',
+            badgeName: 'power-cable',
+            correct: 0,
+            total: 2,
+          },
+        ],
+      });
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'completed' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['power-cable'],
+        expect.objectContaining({
+          type: 'game.ended',
+          pairName: 'power-cable',
+          isWinner: false,
+          rank: 1,
+          score: 0,
+        }),
+      );
+    });
+
+    describe('Leitner auto-export on completion', () => {
+      const leitnerDetail = {
+        id: '507f1f77bcf86cd799439011',
+        title: 'Leitner: Player 7F3A · ch. 27',
+        kind: 'leitner-solo' as const,
+        leitner: { playerId: '507f1f77bcf86cd7994390aa', book: 'korean-language-book', chapter: '27', scope: 'chapter' as const },
+        exportError: null,
+        exportAttemptedAt: null,
+        state: 'completed' as const,
+        createdAt: new Date().toISOString(),
+        startedAt: null,
+        endedAt: null,
+        questions: [],
+        boundPairs: [],
+      };
+
+      beforeEach(() => {
+        repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'completed' });
+        repository.getStationNamesByGameId.mockResolvedValue([]);
+        repository.recordExportFailure.mockResolvedValue(undefined);
+      });
+
+      it('exports, reports the summary and announces the deletion', async () => {
+        repository.getGameDetail.mockResolvedValue(leitnerDetail);
+        const summary = { score: { correct: 1, total: 1 }, changes: [] };
+        gameExportService.exportGame.mockResolvedValue({ ok: true, statementsSent: 3, deleted: true, summary });
+        const res = createResponseMock();
+
+        await controller.setGameState('507f1f77bcf86cd799439011', { state: 'completed' }, res as unknown as Response);
+
+        expect(gameExportService.exportGame).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+        expect(res.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            state: 'completed',
+            leitnerExport: { exported: true, statementsSent: 3, deleted: true, summary },
+          }),
+        );
+        expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'game.deleted',
+            gameId: '507f1f77bcf86cd799439011',
+            leitnerExport: { exported: true, statementsSent: 3, deleted: true, summary },
+          }),
+        );
+      });
+
+      it('ends and exports the game when the Leitner flow ends it after the final round', async () => {
+        const leitnerFlow = { onGameState: jest.fn(), countdown: jest.fn(), setAutoEnd: jest.fn() };
+        new GameFlowController(
+          repository,
+          badgeStateService as unknown as BadgeStateService,
+          nfcCardService,
+          gameExportService as unknown as GameExportService,
+          leitnerFlow as unknown as LeitnerFlowService,
+        );
+        const autoEnd = leitnerFlow.setAutoEnd.mock.calls[0][0] as (gameId: string) => Promise<void>;
+        repository.getGameDetail.mockResolvedValue(leitnerDetail);
+        gameExportService.exportGame.mockResolvedValue({ ok: true, statementsSent: 3, deleted: true, summary: null });
+
+        await autoEnd('507f1f77bcf86cd799439011');
+
+        expect(repository.setGameState).toHaveBeenCalledWith({ gameId: '507f1f77bcf86cd799439011', state: 'completed' });
+        expect(leitnerFlow.onGameState).toHaveBeenCalledWith(leitnerDetail, 'completed');
+        expect(gameExportService.exportGame).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+      });
+
+      it('still completes the game when the export fails (pending export)', async () => {
+        repository.getGameDetail.mockResolvedValue(leitnerDetail);
+        gameExportService.exportGame.mockRejectedValue(new Error('mongo down'));
+        const res = createResponseMock();
+
+        await controller.setGameState('507f1f77bcf86cd799439011', { state: 'completed' }, res as unknown as Response);
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith(
+          expect.objectContaining({ leitnerExport: expect.objectContaining({ exported: false, status: 500 }) }),
+        );
+        expect(repository.recordExportFailure).toHaveBeenCalled();
+      });
+
+      it('leaves class games to manual export', async () => {
+        const res = createResponseMock();
+        await controller.setGameState('507f1f77bcf86cd799439011', { state: 'completed' }, res as unknown as Response);
+        expect(gameExportService.exportGame).not.toHaveBeenCalled();
+        expect(res.json.mock.calls[0][0]).not.toHaveProperty('leitnerExport');
+      });
+    });
+
+    it('ranks badges of one station as separate players', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'completed',
+      });
+      repository.getStationNamesByGameId.mockResolvedValue(['white']);
+      repository.getGameScores.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        scores: [
+          { pairName: 'white-2', stationName: 'white', badgeName: 'white-2', correct: 2, total: 2 },
+          { pairName: 'white', stationName: 'white', badgeName: 'white', correct: 1, total: 2 },
+        ],
+      });
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'completed' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledTimes(2);
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white'],
+        expect.objectContaining({
+          type: 'game.ended',
+          pairName: 'white',
+          stationName: 'white',
+          badgeName: 'white-2',
+          isWinner: true,
+          rank: 1,
+          score: 2,
+        }),
+      );
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white'],
+        expect.objectContaining({
+          type: 'game.ended',
+          badgeName: 'white',
+          isWinner: false,
+          rank: 2,
+          score: 1,
+        }),
+      );
+    });
+
+    it('sends station-wide events once per station room', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'lobby' });
+      repository.getStationNamesByGameId.mockResolvedValue(['white']);
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'lobby' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledTimes(1);
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['white'],
+        expect.objectContaining({ type: 'game.opened' }),
+      );
+    });
+
+    it('emits game.ready to controllers when draft is opened to ready', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'ready',
+      });
+      repository.getStationNamesByGameId.mockResolvedValue(['green']);
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'ready' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['green'],
+        expect.objectContaining({ type: 'game.ready' }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('emits game.ready to controllers on Play Again', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({
+        gameId: '507f1f77bcf86cd799439011',
+        state: 'ready',
+      });
+      repository.getStationNamesByGameId.mockResolvedValue(['green']);
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'ready' },
+        res as unknown as Response,
+      );
+
+      expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'game.state.changed', state: 'ready' }),
+      );
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['green'],
+        expect.objectContaining({ type: 'game.ready' }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('reads stations before Play Again clears bindings, then reports the clear', async () => {
+      const res = createResponseMock();
+      const order: string[] = [];
+      repository.getStationNamesByGameId.mockImplementation(async () => {
+        order.push('stations');
+        return ['green'];
+      });
+      repository.setGameState.mockImplementation(async () => {
+        order.push('setGameState');
+        return { gameId: '507f1f77bcf86cd799439011', state: 'ready' };
+      });
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'ready' },
+        res as unknown as Response,
+      );
+
+      expect(order).toEqual(['stations', 'setGameState']);
+      expect(badgeStateService.sendToPairNames).toHaveBeenCalledWith(
+        ['green'],
+        expect.objectContaining({ type: 'game.ready' }),
+      );
+      expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'game.bindings.changed',
+          gameId: '507f1f77bcf86cd799439011',
+        }),
+      );
+    });
+
+    it('re-syncs bound stations from their live roster on Open for Joining', async () => {
+      const res = createResponseMock();
+      repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'lobby' });
+      repository.getStationNamesByGameId.mockResolvedValue(['power-cable', 'orange']);
+      badgeStateService.getStationRoster.mockImplementation((name: string) =>
+        name === 'power-cable' ? ['power-cable', 'black'] : null,
+      );
+      repository.syncStationRoster.mockResolvedValue([
+        {
+          gameId: '507f1f77bcf86cd799439011',
+          stationName: 'power-cable',
+          added: ['black'],
+          removed: [],
+          skipped: [],
+        },
+      ]);
+
+      await controller.setGameState(
+        '507f1f77bcf86cd799439011',
+        { state: 'lobby' },
+        res as unknown as Response,
+      );
+
+      expect(repository.syncStationRoster).toHaveBeenCalledTimes(1);
+      expect(repository.syncStationRoster).toHaveBeenCalledWith({
+        stationName: 'power-cable',
+        badgeNames: ['power-cable', 'black'],
+      });
+      expect(badgeStateService.broadcastDashboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'game.bindings.changed',
+          stationName: 'power-cable',
+          added: ['black'],
+        }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
     });
