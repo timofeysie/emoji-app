@@ -72,7 +72,7 @@ staging-2026-11-07a: digest: sha256:7d936c946374ae39008eade50d7f1545b861456c4019
 ```zsh
 sed -i '' "s|^image_uri = \".*\"|image_uri = \"$registry/emoji-app:$tag\"|" \
   infra/terraform/envs/staging/terraform.tfvars
-grep image_uri infra/terraform/envs/staging/terraform.tfvars   # check it
+grep -E 'image_uri|_enabled' infra/terraform/envs/staging/terraform.tfvars   # check the image and the secret flags
 ```
 
 The output from the grep command looks like this:

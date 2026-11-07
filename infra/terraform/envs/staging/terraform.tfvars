@@ -6,7 +6,7 @@ route53_hosted_zone_name = "kogs.link"
 
 # Pinned to the immutable tag created in pre-T0. CI in T8 will switch
 # to digest pinning.
-image_uri = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:staging-2026-11-07a"
+image_uri = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:staging-2026-11-07b"
 
 # Flipped to true after creating emoji-app/staging/openai-api-key in
 # Secrets Manager (see pre-T0 gap #1, resolved before T5).
@@ -16,7 +16,7 @@ openai_secret_enabled = true
 # after creating emoji-app/staging/xapi-lrs in Secrets Manager (see
 # docs/terraform/workflow.md → Staging LRS). Until then the server answers 503
 # for Players → detail, YALLA progress and xAPI export.
-lrs_secret_enabled = false
+lrs_secret_enabled = true
 
 # Cognito values mirror task definition revision 1, which was registered
 # manually before T5. Centralising them in tfvars means a future Cognito

@@ -35,6 +35,7 @@ export const EXT = {
   strength: `${XAPI_BASE}/ext/strength`,
   scorer: `${XAPI_BASE}/ext/scorer`,
   gameId: `${XAPI_BASE}/ext/game-id`,
+  inputChannel: `${XAPI_BASE}/ext/input-channel`,
 } as const;
 
 /** A vocabulary learning object (docs/xAPI/leitner-method.md L16/L18) and one book source of it. */

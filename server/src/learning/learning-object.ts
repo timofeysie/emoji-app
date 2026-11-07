@@ -21,6 +21,11 @@ export const EXT_GAME_KIND = `${XAPI_BASE_IRI}/ext/game-kind`;
 export const EXT_ROLE = `${XAPI_BASE_IRI}/ext/role`;
 export const EXT_STRENGTH = `${XAPI_BASE_IRI}/ext/strength`;
 export const EXT_SCORER = `${XAPI_BASE_IRI}/ext/scorer`;
+/**
+ * How the answer arrived (docs/yalla/implementation-plan.md §6, L23):
+ * `onscreen-choice`, `keyboard`. Missing means `nfc-card` (badge games).
+ */
+export const EXT_INPUT_CHANNEL = `${XAPI_BASE_IRI}/ext/input-channel`;
 
 export const CHAPTER_TYPE = `${XAPI_BASE_IRI}/activity-types/chapter`;
 export const BOOK_TYPE = `${XAPI_BASE_IRI}/activity-types/book`;

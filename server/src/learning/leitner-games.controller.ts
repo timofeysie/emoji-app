@@ -1,30 +1,12 @@
 import { Body, Controller, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
-import {
-  canBuildItem,
-  generateVocabQuizForPicks,
-  toQuestionInput,
-  vocabSkillValues,
-  type VocabSkill,
-  type VocabTerm,
-} from '../games/generators/vocab-choice';
-import { GameDataRepository, type LeitnerGameStatus } from '../persistence/game-data.repository';
+import { toQuestionInput, vocabSkillValues } from '../games/generators/vocab-choice';
+import { GameDataRepository } from '../persistence/game-data.repository';
 import { PlayerRepository } from '../persistence/player.repository';
-import { loadLrsConfigFromEnv, LrsRequestError, type LrsConfig } from '../xapi/lrs-client';
-import {
-  chapterLearningObjects,
-  getBookContent,
-  UnknownBookError,
-  UnknownChapterError,
-  UnregisteredSensesError,
-  type BookContent,
-} from './book-content';
-import { foldTracks, type TrackState } from './leitner';
+import { KOREAN_BOOK } from './learning-object';
+import { LeitnerPlanner, sendPlanError, type LeitnerPlan } from './leitner-planner';
 import { LeitnerSetupService, previewSetup } from './leitner-setup.service';
-import { chapterOfSourceRef, KOREAN_BOOK, parseQualifiedSourceRef } from './learning-object';
-import { planNextGame, seedFrom, type PlanObject } from './planner';
-import { fetchStudentEvidence } from './student-evidence';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 
@@ -59,63 +41,11 @@ const createLeitnerGameSchema = z
     }
   });
 
-/** States in which a Leitner game is being played: planning would race it. */
-const IN_PLAY = new Set(['active', 'paused']);
-
 function getValidationErrors(error: ZodError): Array<{ path: string; message: string }> {
   return error.issues.map((issue) => ({
     path: issue.path.join('.') || 'root',
     message: issue.message,
   }));
-}
-
-/** Each chapter's vocabulary as generator terms, keyed by chapter and by sourceRef. */
-function termsOf(content: BookContent): { byChapter: Map<string, VocabTerm[]>; bySourceRef: Map<string, VocabTerm> } {
-  const byChapter = new Map<string, VocabTerm[]>();
-  const bySourceRef = new Map<string, VocabTerm>();
-  for (const [chapter, vocabulary] of content.chapters) {
-    const terms = vocabulary.entries.map((entry) => ({ id: entry.sourceRef, target: entry.word, native: entry.gloss }));
-    byChapter.set(chapter, terms);
-    for (const term of terms) bySourceRef.set(term.id, term);
-  }
-  return { byChapter, bySourceRef };
-}
-
-/**
- * Review scope (L11, L15): learning objects outside this chapter that the
- * student has evidence for, built from their latest source in this book
- * that is in another chapter. Tracks met only in other books are left out:
- * their distractors would need that book's content.
- */
-function reviewObjects(
-  tracks: readonly TrackState[],
-  content: BookContent,
-  chapter: string,
-  chapterIds: ReadonlySet<string>,
-): PlanObject[] {
-  const objects = new Map<string, PlanObject>();
-  for (const track of tracks) {
-    if (chapterIds.has(track.learningObjectId) || objects.has(track.learningObjectId)) continue;
-    const sourceRef = [...track.sources]
-      .reverse()
-      .map(parseQualifiedSourceRef)
-      .find(
-        (ref) =>
-          ref?.book === content.book &&
-          chapterOfSourceRef(ref.sourceRef) !== chapter &&
-          content.senseBySourceRef.get(ref.sourceRef)?.id === track.learningObjectId,
-      )?.sourceRef;
-    if (sourceRef) {
-      objects.set(track.learningObjectId, { learningObjectId: track.learningObjectId, sourceRef });
-    }
-  }
-  return [...objects.values()];
-}
-
-function pendingExport(games: LeitnerGameStatus[]) {
-  return games
-    .filter((game) => game.state === 'completed')
-    .map((game) => ({ gameId: game.id, endedAt: game.endedAt, error: game.exportError }));
 }
 
 /**
@@ -129,6 +59,7 @@ export class LeitnerGamesController {
   constructor(
     private readonly playerRepository: PlayerRepository,
     private readonly gameDataRepository: GameDataRepository,
+    private readonly planner: LeitnerPlanner,
     private readonly leitnerSetup?: LeitnerSetupService,
   ) {}
 
@@ -141,105 +72,20 @@ export class LeitnerGamesController {
     }
     const input = parsed.data;
 
-    let content: BookContent;
-    let chapterObjects;
+    let planned: LeitnerPlan;
     try {
-      content = getBookContent(input.book);
-      chapterObjects = chapterLearningObjects(content, input.chapter);
+      planned = await this.planner.plan(
+        { ...input, now: input.now ? new Date(input.now) : undefined },
+        () => this.playerRepository.getPlayer(input.playerId),
+      );
     } catch (error) {
-      if (error instanceof UnknownBookError || error instanceof UnknownChapterError) {
-        res.status(404).json({ error: error.message });
-        return;
-      }
-      if (error instanceof UnregisteredSensesError) {
-        res.status(422).json({ error: 'Chapter has unregistered vocabulary senses', sourceRefs: error.sourceRefs });
-        return;
-      }
-      throw error;
-    }
-
-    let config: LrsConfig;
-    try {
-      config = loadLrsConfigFromEnv();
-    } catch (error) {
-      res.status(503).json({ error: error instanceof Error ? error.message : String(error) });
+      sendPlanError(res, error, 'Failed to plan the Leitner game');
       return;
     }
 
     try {
-      const player = await this.playerRepository.getPlayer(input.playerId);
-      if (!player) {
-        res.status(404).json({ error: 'Player not found' });
-        return;
-      }
-
-      // Planning on stale levels would re-ask words just answered.
-      const games = await this.gameDataRepository.listLeitnerGamesForPlayer(player.id);
-      const pending = pendingExport(games);
-      if (pending.length > 0) {
-        res.status(409).json({ error: 'Previous Leitner game not exported yet', pendingExport: pending });
-        return;
-      }
-      const inPlay = games.filter((game) => IN_PLAY.has(game.state));
-      if (inPlay.length > 0) {
-        res.status(409).json({
-          error: 'A Leitner game for this student is being played; end it first',
-          inPlay: inPlay.map((game) => game.id),
-        });
-        return;
-      }
-      // Not started, or cancelled: their plans are stale (cancelling discards guesses).
-      const supersedes = games.map((game) => game.id);
-
-      const { observations } = await fetchStudentEvidence(config, player.externalId, content.language);
-      const tracks = foldTracks(observations);
-      const now = input.now ? new Date(input.now) : new Date();
-      const seed = input.seed ?? seedFrom(`${player.id}:${now.toISOString().slice(0, 10)}`);
-
-      const terms = termsOf(content);
-      const termFor = (object: PlanObject) => {
-        const term = terms.bySourceRef.get(object.sourceRef);
-        const chapter = chapterOfSourceRef(object.sourceRef);
-        const pool = chapter ? terms.byChapter.get(chapter) : undefined;
-        if (!term || !pool) throw new Error(`No vocabulary entry '${object.sourceRef}' in ${content.book}.`);
-        return { term, pool };
-      };
-
-      const chapterIds = new Set(chapterObjects.map((object) => object.id));
-      const { picks, report } = planNextGame({
-        chapterObjects: chapterObjects.map((object) => ({ learningObjectId: object.id, sourceRef: object.sourceRefs[0] })),
-        reviewObjects: input.scope === 'review' ? reviewObjects(tracks, content, input.chapter, chapterIds) : [],
-        aspects: input.aspects,
-        tracks,
-        now,
-        count: input.count,
-        maxNew: input.maxNew,
-        fill: input.fill,
-        canBuild: (object, aspect) => {
-          const { term, pool } = termFor(object);
-          return canBuildItem(aspect as VocabSkill, term, pool);
-        },
-      });
-
-      const items = generateVocabQuizForPicks(
-        picks.map((pick) => {
-          const { term, pool } = termFor(pick);
-          return {
-            skill: pick.aspect as VocabSkill,
-            term,
-            pool,
-            learning: {
-              learningObjectId: pick.learningObjectId,
-              book: content.book,
-              sourceRef: pick.sourceRef,
-              target: term.target,
-              native: term.native,
-            },
-          };
-        }),
-        seed,
-      );
-      const questions = items.map((item, index) => toQuestionInput(item, index + 1));
+      const { player, content, seed, now, picks, report, supersedes } = planned;
+      const questions = planned.items.map((item, index) => toQuestionInput(item, index + 1));
 
       const plan = {
         book: content.book,
@@ -248,10 +94,7 @@ export class LeitnerGamesController {
         aspects: input.aspects,
         seed,
         now: now.toISOString(),
-        picks: picks.map((pick) => {
-          const { term } = termFor(pick);
-          return { ...pick, word: term.target, gloss: term.native, chapter: chapterOfSourceRef(pick.sourceRef) };
-        }),
+        picks,
         report,
         questions: questions.map((question) => ({
           sequence: question.sequence,
@@ -304,11 +147,7 @@ export class LeitnerGamesController {
       const setup = resolvedSetup ? await this.leitnerSetup!.apply(gameId, player, resolvedSetup) : undefined;
       res.status(201).json({ gameId, plan, ...(setup ? { setup } : {}) });
     } catch (error) {
-      if (error instanceof LrsRequestError) {
-        res.status(502).json({ error: 'The LRS request failed', status: error.status });
-        return;
-      }
-      res.status(500).json({ error: 'Failed to plan the Leitner game', message: String(error) });
+      sendPlanError(res, error, 'Failed to plan the Leitner game');
     }
   }
 }

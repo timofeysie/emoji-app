@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useMeStore } from './me.store';
 import { useYallaResource, type Resource } from './yalla-api';
+import { flushOutbox } from './yalla-practice';
 
 /** The aspects with evidence today; listening and speaking come later (§5). */
 export const PRACTISED_ASPECTS = ['reading', 'writing'] as const;
@@ -54,6 +55,7 @@ export type LearnerProgress<T> = Resource<T> & {
 /**
  * Progress for the linked player at `path` (under `/api/yalla`). Not cached:
  * it changes as you practise. Reloads when you link a different player.
+ * Queued practice answers are sent first, so the levels include them.
  */
 export function useLearnerProgress<T>(path: string): LearnerProgress<T> {
   const { me, load } = useMeStore();
@@ -62,7 +64,8 @@ export function useLearnerProgress<T>(path: string): LearnerProgress<T> {
   }, [load]);
 
   const playerId = me?.player?.id ?? null;
-  const resource = useYallaResource<T>(playerId ? path : null, { cache: false, key: playerId });
+  const before = useCallback(() => (playerId ? flushOutbox(playerId) : Promise.resolve()), [playerId]);
+  const resource = useYallaResource<T>(playerId ? path : null, { cache: false, key: playerId, before });
   return { ...resource, linked: me ? playerId !== null : null };
 }
 

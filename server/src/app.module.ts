@@ -20,7 +20,9 @@ import { LeitnerFlowService } from './learning/leitner-flow.service';
 import { LeitnerSetupService } from './learning/leitner-setup.service';
 import { YallaContentController } from './yalla/yalla-content.controller';
 import { YallaProgressController } from './yalla/yalla-progress.controller';
+import { YallaPracticeController } from './yalla/yalla-practice.controller';
 import { LearningProgressService } from './learning/learning-progress.service';
+import { LeitnerPlanner } from './learning/leitner-planner';
 import { MeController } from './me.controller';
 import { LearnerService } from './learner.service';
 import { UserRepository } from './persistence/user.repository';
@@ -39,10 +41,12 @@ import { UserRepository } from './persistence/user.repository';
     LeitnerGamesController,
     YallaContentController,
     YallaProgressController,
+    YallaPracticeController,
     MeController,
   ],
   providers: [
     LearningProgressService,
+    LeitnerPlanner,
     BadgeStateService,
     MongoService,
     GameDataRepository,

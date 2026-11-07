@@ -5,6 +5,7 @@ import { assessedStatement } from '../test/leitner-statements';
 import chapter26 from '../games/content/chapter26Data.json';
 import { firstSense, termsFromChapter } from '../games/generators/vocab-choice';
 import { LeitnerGamesController } from './leitner-games.controller';
+import { LeitnerPlanner } from './leitner-planner';
 
 type ResponseMock = Pick<Response, 'status' | 'json'> & { status: jest.Mock; json: jest.Mock };
 
@@ -31,6 +32,7 @@ describe('LeitnerGamesController', () => {
   const controller = new LeitnerGamesController(
     players as unknown as PlayerRepository,
     games as unknown as GameDataRepository,
+    new LeitnerPlanner(games as unknown as GameDataRepository),
   );
 
   function lrsReturns(statements: unknown[]): jest.Mock {

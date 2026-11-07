@@ -236,6 +236,13 @@ describe('observationsFromStatements', () => {
     expect(observationsFromStatements([assessedStatement({ id: 'a', ...base, gameKind: 'class' })], KOREAN)).toEqual([]);
   });
 
+  it('counts YALLA practice with badge Leitner games (L23)', () => {
+    const statements = ['leitner-solo', 'yalla-solo'].map((gameKind, index) =>
+      assessedStatement({ id: String(index), ...base, gameKind }),
+    );
+    expect(observationsFromStatements(statements, KOREAN)).toHaveLength(2);
+  });
+
   it('ignores indirect observations until the strength policy exists', () => {
     expect(observationsFromStatements([assessedStatement({ id: 'a', ...base, strength: 'indirect' })], KOREAN)).toEqual([]);
   });
