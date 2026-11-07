@@ -854,31 +854,39 @@ the next deploy (with Y4), when the LRS secret goes in as well.
 plan for the same player reflects it. Checked locally against the stub
 LRS (2026-11-07); still to check on staging.
 
-#### Y5: practice, keyboard input and switching
+#### Y5: practice, keyboard input and switching ✅ built 2026-11-07
 
-- [ ] Shared answer checker: writing = NFC + whitespace, equal to the
-  ```
-  `word`; reading = **exact** gloss (trim, whitespace, NFC only).
-  Unit tests with real Hangul IME input and with glosses that contain
-  commas.
-  ```
-- [ ] `keyboard` channel for **writing (default)** and **reading
-  ```
-  (option)**; `fill-in` interactions; `input-channel = keyboard`;
-  `lang="ko"` / `lang="en"` inputs, no autocorrect/autocapitalize;
-  differences shown after a wrong answer.
-  ```
-- [ ] Defaults: writing = keyboard, reading = onscreen-choice. Session
-  ```
-  setup per-aspect picker, in-session `Type` / `Choose` toggle
-  (before answering only), saved preference (`localStorage`, then
-  `User.preferences.yallaFormat`), "Reset to defaults".
-  ```
-- [ ] Mobile pass: the keyboard doesn't cover the prompt; Enter submits.
-- [ ] Playwright: typed practice moves a track's level.
+- [x] Shared answer checker `answer-check.ts` (server `learning/`, client
+  `yalla/`; a spec fails if the two copies differ, since the builds share
+  no source folder): NFC, trim, collapse whitespace (full-width space
+  too); writing = the `word`, reading = the **whole** gloss exactly
+  (`test, exam`), case and punctuation count; empty = "Don't know" =
+  wrong. Tests with NFD (jamo-at-a-time) Hangul and comma glosses, plus a
+  character diff for the feedback.
+- [x] `keyboard` channel for writing and reading: `fill-in` interaction,
+  `correctResponsesPattern` = the expected text, `result.response` = the
+  text as typed, `input-channel = keyboard`. Typed prompts use the full
+  gloss (A–D writing keeps the first sense). Inputs: `lang="ko"` /
+  `lang="en"`, no autocomplete/autocorrect/autocapitalize/spellcheck;
+  Enter while the Korean IME is composing doesn't submit. After a miss,
+  "You typed" / "Answer" show the difference.
+- [x] Defaults writing = keyboard, reading = onscreen-choice. Setup has a
+  Type / A–D picker per skill and "Reset to defaults"; the card has the
+  same picker. Switching to A–D applies at once; switching to Type after
+  the options were shown applies from the next word of that skill (no
+  peeking). The choice is saved on the user (`User.preferences.yallaFormat`,
+  `PUT /api/me/preferences`, returned by `GET /api/me`) and in
+  `localStorage`. Sessions saved by Y4 still resume.
+- [x] Mobile pass (390 px screenshots): prompt and input in the top half,
+  so a phone keyboard doesn't cover them; the input scrolls into view on
+  focus; Enter / "done" submits.
+- [x] Playwright `yalla-practice.spec.ts` → typed session: right (with
+  stray spaces), wrong (diff shown), switched to A–D mid-word, "Don't
+  know"; statements are `keyboard` except the switched one; levels move;
+  the format is saved on the user.
 
 **Done when** you can do a full typed session on your phone (LAN or
-staging).
+staging). Checked at phone width locally; still to try on a real phone.
 
 #### Y6: evidence cache
 

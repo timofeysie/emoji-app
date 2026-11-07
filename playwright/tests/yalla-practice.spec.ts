@@ -9,11 +9,14 @@ import { EXT, type StubStatement } from '../fixtures/stub-lrs';
  */
 const CHAPTER_27 = '/yalla/books/korean-language-book/chapters/27';
 
+
 type Item = {
   itemId: string;
   aspect: 'reading' | 'writing';
   learningObjectId: string;
   sourceRef: string;
+  word: string;
+  gloss: string;
   options: Array<{ slotLabel: string; text: string }>;
   answer: string;
 };
@@ -21,6 +24,7 @@ type Session = { sessionId: string; items: Item[] };
 
 test.afterEach(async ({ request }) => {
   await request.put(`${API_URL}/api/me/player`, { data: { playerId: null } });
+  await request.put(`${API_URL}/api/me/preferences`, { data: { yallaFormat: null } });
 });
 
 test('a practice session moves the pills and the next badge-game plan', async ({ page, request, leitner, stubLrs }) => {
@@ -29,8 +33,10 @@ test('a practice session moves the pills and the next badge-game plan', async ({
 
   await page.goto(`${CHAPTER_27}/exercises`);
   await expect(page.getByTestId('pill-reading')).toContainText(`${CH27_OBJECTS} · ${CH27_OBJECTS} due`);
-  await expect(page.getByTestId('setup-channel-reading')).toContainText('A–D Choose');
-  await page.getByRole('combobox').selectOption('5');
+  // Writing defaults to typing (Y5); this session is all A–D.
+  await expect(page.getByTestId('channel-writing-keyboard')).toHaveAttribute('aria-checked', 'true');
+  await page.getByTestId('channel-writing-onscreen-choice').click();
+  await page.getByTestId('setup-count').selectOption('5');
   const planned = page.waitForResponse((response) => response.url().endsWith('/api/yalla/me/sessions'));
   await page.getByTestId('practice-start').click();
   const session = (await (await planned).json()) as Session;
@@ -121,4 +127,85 @@ test('results are idempotent, and the server decides what is correct', async ({ 
   // Without a linked player there's nothing to record against.
   await request.put(`${API_URL}/api/me/player`, { data: { playerId: null } });
   expect((await post()).status()).toBe(403);
+});
+
+test('typed practice (Y5): writing typed by default, checked exactly, and it moves the levels', async ({
+  page,
+  request,
+  leitner,
+  stubLrs,
+}) => {
+  const student = await leitner.student('Typist');
+  await request.put(`${API_URL}/api/me/player`, { data: { playerId: student.id } });
+
+  await page.goto(`${CHAPTER_27}/exercises`);
+  await page.getByTestId('setup-aspect-reading').uncheck();
+  await page.getByTestId('setup-count').selectOption('5');
+  const planned = page.waitForResponse((response) => response.url().endsWith('/api/yalla/me/sessions'));
+  await page.getByTestId('practice-start').click();
+  const session = (await (await planned).json()) as Session;
+  expect(session.items.every((item) => item.aspect === 'writing')).toBe(true);
+  const [first, second, third, ...rest] = session.items;
+
+  // 1. Right, with stray spaces; Enter checks it and Enter again moves on.
+  await expect(page.getByTestId('practice-prompt')).toHaveText(first.gloss);
+  await expect(page.getByTestId('practice-input')).toHaveAttribute('lang', 'ko');
+  await page.getByTestId('practice-input').fill(`  ${first.word} `);
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('practice-feedback')).toContainText('Correct');
+  await page.keyboard.press('Enter');
+
+  // 2. Wrong: the difference is shown, and it's scored wrong.
+  await expect(page.getByTestId('practice-position')).toHaveText('2 / 5');
+  await page.getByTestId('practice-input').fill(`${second.word}요`);
+  await page.getByTestId('practice-check').click();
+  await expect(page.getByTestId('practice-feedback')).toContainText('Not quite');
+  await expect(page.getByTestId('practice-diff')).toContainText(second.word);
+  await page.getByTestId('practice-next').click();
+
+  // 3. Switch this word to A–D (before answering), then back: it stays A–D, typing resumes on the next.
+  await page.getByTestId('channel-writing-onscreen-choice').click();
+  await expect(page.getByTestId(`option-${third.answer}`)).toBeVisible();
+  await page.getByTestId('channel-writing-keyboard').click();
+  await expect(page.getByTestId('practice-switch-note')).toBeVisible();
+  await page.getByTestId(`option-${third.answer}`).click();
+  await page.getByTestId('practice-next').click();
+
+  // The rest: typed again; the last one is "Don't know".
+  for (const [index, item] of rest.entries()) {
+    await expect(page.getByTestId('practice-input')).toBeVisible();
+    if (index === rest.length - 1) {
+      await page.getByTestId('practice-dont-know').click();
+    } else {
+      await page.getByTestId('practice-input').fill(item.word);
+      await page.getByTestId('practice-check').click();
+    }
+    await page.getByTestId('practice-next').click();
+  }
+
+  await expect(page.getByTestId('practice-score')).toHaveText('3 / 5 correct');
+  await expect(page.getByTestId('practice-outbox')).toContainText('All answers saved');
+
+  // fill-in for typed answers, choice for the switched one.
+  const answered = (await stubLrs.allStatements()).filter(
+    (statement) => statement.context.registration === session.sessionId && statement.verb.id.endsWith('/answered'),
+  );
+  const channels = Object.fromEntries(
+    answered.map((statement) => [statement.object.id.split('/').pop(), statement.context.extensions?.[EXT.inputChannel]]),
+  );
+  expect(channels).toEqual({ '1': 'keyboard', '2': 'keyboard', '3': 'onscreen-choice', '4': 'keyboard', '5': 'keyboard' });
+
+  const progress = await (await request.get(`${API_URL}/api/yalla/me/progress?chapter=27`)).json();
+  const level = (item: Item) =>
+    progress.tracks.find(
+      (track: { learningObjectId: string; aspect: string }) =>
+        track.learningObjectId === item.learningObjectId && track.aspect === item.aspect,
+    );
+  expect(level(first)).toMatchObject({ level: 1, lastResult: 'correct' });
+  expect(level(second)).toMatchObject({ level: 0, lastResult: 'incorrect' });
+  expect(level(rest[rest.length - 1])).toMatchObject({ level: 0, lastResult: 'incorrect' });
+
+  // Switching saved the format on the user: writing is typed again (the last switch).
+  const me = await (await request.get(`${API_URL}/api/me`)).json();
+  expect(me.preferences.yallaFormat).toEqual({ reading: 'onscreen-choice', writing: 'keyboard' });
 });

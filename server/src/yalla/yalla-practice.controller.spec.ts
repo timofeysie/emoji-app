@@ -194,10 +194,55 @@ describe('YallaPracticeController', () => {
     expect(sent).toHaveLength(0);
   });
 
+  /** A typed attempt on a planned item. */
+  function typedOn(item: Json, response: string, extra: Record<string, unknown> = {}) {
+    const attempt: Record<string, unknown> = { ...attemptOn(item), channel: 'keyboard', response, ...extra };
+    delete attempt['options'];
+    return attempt;
+  }
+
+  it('checks typed answers on the server: writing wants the Korean, reading the whole gloss', async () => {
+    const { body: planned } = await session({ chapter: 27, count: 4 });
+    const writing = planned.items.filter((item: Json) => item.aspect === 'writing');
+    const reading = planned.items.filter((item: Json) => item.aspect === 'reading');
+    expect(writing.length).toBeGreaterThanOrEqual(1);
+    expect(reading.length).toBeGreaterThanOrEqual(1);
+
+    const attempts = [
+      // Jamo one at a time (NFD) and stray spaces still match the composed word.
+      typedOn(writing[0], ` ${writing[0].word.normalize('NFD')} `),
+      // The gloss in full is right; the client's "correct" on a wrong answer is ignored.
+      typedOn(reading[0], reading[0].gloss),
+      { ...typedOn(reading[0], 'not it', { correct: true }), attemptId: 'r-wrong' },
+      { ...typedOn(writing[0], ''), attemptId: 'w-dont-know' },
+    ];
+    const { status, body } = await results({ sessionId: SESSION_ID, attempts });
+
+    expect(status).toBe(200);
+    expect(body.results.map((result: Json) => result.correct)).toEqual([true, true, false, false]);
+
+    const [writingAnswered] = sent;
+    expect(writingAnswered.object.definition).toEqual({
+      type: 'http://adlnet.gov/expapi/activities/cmi.interaction',
+      name: { 'en-US': writing[0].gloss },
+      interactionType: 'fill-in',
+      correctResponsesPattern: [writing[0].word],
+    });
+    // The response is kept as typed, for the activity view.
+    expect(writingAnswered.result.response).toBe(` ${writing[0].word.normalize('NFD')} `);
+    expect(sent.filter((_statement, index) => index % 2 === 1).map((assessed) => assessed.context.extensions[EXT_INPUT_CHANNEL])).toEqual([
+      'keyboard',
+      'keyboard',
+      'keyboard',
+      'keyboard',
+    ]);
+  });
+
   it.each([
     ['a time a month ago', { answeredAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString() }, 422],
     ['a time in the future', { answeredAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() }, 422],
-    ['a keyboard answer (Y5)', { channel: 'keyboard' }, 400],
+    ['a keyboard answer with options', { channel: 'keyboard' }, 400],
+    ['a choice answer that is not a slot', { response: 'test' }, 400],
     ['an unknown field', { extra: 1 }, 400],
   ])('rejects an attempt with %s', async (_label, change, expectedStatus) => {
     const { body: planned } = await session({ chapter: 27, count: 1 });

@@ -103,9 +103,11 @@ export type XApiChoice = { id: string; description: { 'en-US': string } };
 export type XApiInteractionDefinition = {
   type: typeof CMI_INTERACTION_TYPE;
   name: { 'en-US': string };
-  interactionType: 'choice';
+  /** `choice` (A–D: badge games, YALLA on screen) or `fill-in` (YALLA typed). */
+  interactionType: 'choice' | 'fill-in';
   correctResponsesPattern: string[];
-  choices: XApiChoice[];
+  /** Choice only. */
+  choices?: XApiChoice[];
 };
 
 export type XApiAssessmentDefinition = {
@@ -441,8 +443,7 @@ export function yallaItemActivityId(sessionId: string, itemId: string): string {
   return `${XAPI_BASE_IRI}/yalla/sessions/${sessionId}/items/${itemId}`;
 }
 
-/** One answer in a YALLA practice session, already re-checked by the server. */
-export type YallaChoiceAttemptInput = {
+type YallaAttemptBase = {
   /** UUID v4 from `POST /api/yalla/me/sessions`; also the registration. */
   sessionId: string;
   /** Unique within the session; with `sessionId`, seeds the statement ids. */
@@ -451,32 +452,66 @@ export type YallaChoiceAttemptInput = {
   itemId: string;
   externalId: string;
   prompt: string;
-  /** In the order shown; `isCorrect` comes from the content, not the client. */
-  answerOptions: AnswerOptionInput[];
-  /** The chosen slot label. */
-  response: string;
-  inputChannel: InputChannel;
   answeredAt: Date | string;
   openedAt?: Date | string | null;
   learning: LearningTag;
 };
 
+/** One answer in a YALLA practice session, already re-checked by the server. */
+export type YallaAttemptInput =
+  | (YallaAttemptBase & {
+      inputChannel: 'onscreen-choice';
+      /** In the order shown; `isCorrect` comes from the content, not the client. */
+      answerOptions: AnswerOptionInput[];
+      /** The chosen slot label. */
+      response: string;
+    })
+  | (YallaAttemptBase & {
+      inputChannel: 'keyboard';
+      /** The text as typed (not normalised), `''` for "Don't know". */
+      response: string;
+      /** The answer it was checked against. */
+      correctResponse: string;
+      /** From `answer-check.ts`, by the server. */
+      success: boolean;
+    });
+
 /**
- * The `answered` and `assessed` statements for one YALLA multiple-choice
- * answer (docs/yalla/implementation-plan.md §6 → Recording results). The
+ * The `answered` and `assessed` statements for one YALLA answer, chosen
+ * (`choice`) or typed (`fill-in`) (docs/yalla/implementation-plan.md §6 → Recording results). The
  * same evidence shape as a badge Leitner game, with `game-kind = yalla-solo`
  * and `input-channel`, so the fold counts it (L23). `ext/game-id` is the
  * session id, so Players → activity lists the session like a game. Ids are
  * UUID v5 of the session and attempt: re-posting an answer is a no-op.
  */
-export function buildYallaChoiceStatements(
-  input: YallaChoiceAttemptInput,
+export function buildYallaAttemptStatements(
+  input: YallaAttemptInput,
 ): [XApiAnsweredStatement, XApiAssessedStatement] {
-  const { sessionId, attemptId, answerOptions } = input;
+  const { sessionId, attemptId } = input;
   const learning = learningContext(input.learning, 'yalla-solo');
-  const correctSlotLabels = answerOptions.filter((option) => option.isCorrect).map((option) => option.slotLabel);
-  if (!answerOptions.some((option) => option.slotLabel === input.response)) {
-    throw new Error(`Attempt '${attemptId}' chose slot '${input.response}', which has no answer option.`);
+  let definition: XApiInteractionDefinition;
+  let success: boolean;
+  if (input.inputChannel === 'onscreen-choice') {
+    const correctSlotLabels = input.answerOptions.filter((option) => option.isCorrect).map((option) => option.slotLabel);
+    if (!input.answerOptions.some((option) => option.slotLabel === input.response)) {
+      throw new Error(`Attempt '${attemptId}' chose slot '${input.response}', which has no answer option.`);
+    }
+    definition = {
+      type: CMI_INTERACTION_TYPE,
+      name: { 'en-US': input.prompt },
+      interactionType: 'choice',
+      correctResponsesPattern: correctSlotLabels,
+      choices: input.answerOptions.map((option) => ({ id: option.slotLabel, description: { 'en-US': option.text } })),
+    };
+    success = correctSlotLabels.includes(input.response);
+  } else {
+    definition = {
+      type: CMI_INTERACTION_TYPE,
+      name: { 'en-US': input.prompt },
+      interactionType: 'fill-in',
+      correctResponsesPattern: [input.correctResponse],
+    };
+    success = input.success;
   }
   const duration = input.openedAt ? isoDuration(toDate(input.openedAt), toDate(input.answeredAt)) : undefined;
 
@@ -487,17 +522,11 @@ export function buildYallaChoiceStatements(
     object: {
       objectType: 'Activity',
       id: yallaItemActivityId(sessionId, input.itemId),
-      definition: {
-        type: CMI_INTERACTION_TYPE,
-        name: { 'en-US': input.prompt },
-        interactionType: 'choice',
-        correctResponsesPattern: correctSlotLabels,
-        choices: answerOptions.map((option) => ({ id: option.slotLabel, description: { 'en-US': option.text } })),
-      },
+      definition,
     },
     result: {
       response: input.response,
-      success: correctSlotLabels.includes(input.response),
+      success,
       ...(duration ? { duration } : {}),
     },
     timestamp: toDate(input.answeredAt).toISOString(),

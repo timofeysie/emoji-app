@@ -3,11 +3,16 @@ import { Types } from 'mongoose';
 import { MongoService } from './mongo.service';
 import { asObjectId } from './models';
 
+/** How the user answers in YALLA, per aspect (docs/yalla/implementation-plan.md §6). */
+export type YallaFormat = { reading: 'onscreen-choice' | 'keyboard'; writing: 'onscreen-choice' | 'keyboard' };
+
 export type UserSummary = {
   id: string;
   displayName: string;
   /** The player this user practises as, or null. */
   playerId: string | null;
+  /** Null = YALLA's defaults. */
+  yallaFormat: YallaFormat | null;
 };
 
 /** Another user already practises as this player. */
@@ -17,11 +22,18 @@ function isDuplicateKeyError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 11000;
 }
 
-function toUserSummary(user: { _id: unknown; displayName: string; playerId?: unknown }): UserSummary {
+function toUserSummary(user: {
+  _id: unknown;
+  displayName: string;
+  playerId?: unknown;
+  preferences?: { yallaFormat?: YallaFormat | null } | null;
+}): UserSummary {
+  const format = user.preferences?.yallaFormat;
   return {
     id: (user._id as Types.ObjectId).toString(),
     displayName: user.displayName,
     playerId: user.playerId ? (user.playerId as Types.ObjectId).toString() : null,
+    yallaFormat: format ? { reading: format.reading, writing: format.writing } : null,
   };
 }
 
@@ -66,5 +78,19 @@ export class UserRepository {
       }
       throw error;
     }
+  }
+
+  /** Saves (or, with `null`, clears) the user's YALLA input format. */
+  async setYallaFormat(userId: string, yallaFormat: YallaFormat | null): Promise<UserSummary> {
+    const { User } = this.mongoService.getModels();
+    const user = await User.findByIdAndUpdate(
+      asObjectId(userId),
+      { $set: { 'preferences.yallaFormat': yallaFormat } },
+      { returnDocument: 'after', runValidators: true },
+    ).lean();
+    if (!user) {
+      throw new Error(`User ${userId} not found`);
+    }
+    return toUserSummary(user);
   }
 }

@@ -6,13 +6,19 @@ import type { AuthedRequest } from '../auth';
 import { AuthGuard } from '../auth.guard';
 import { firstSense, QUIZ_SLOT_LABELS, vocabSkillValues, type VocabSkill } from '../games/generators/vocab-choice';
 import { LearnerService } from '../learner.service';
+import { isTypedCorrect, typedItem } from '../learning/answer-check';
 import { getBookContent, UnknownBookError } from '../learning/book-content';
 import { LrsNotConfiguredError } from '../learning/learning-progress.service';
 import { KOREAN_BOOK } from '../learning/learning-object';
 import { LeitnerPlanner, sendPlanError, termsOf } from '../learning/leitner-planner';
 import { getValidationErrors } from '../learning/progress.controller';
 import { loadLrsConfigFromEnv, LrsConflictError, LrsRequestError, sendStatements } from '../xapi/lrs-client';
-import { buildYallaChoiceStatements, type XApiStatement } from '../xapi/statement-builder';
+import {
+  buildYallaAttemptStatements,
+  type XApiAnsweredStatement,
+  type XApiAssessedStatement,
+  type XApiStatement,
+} from '../xapi/statement-builder';
 
 const BOOK = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const SLOT = z.enum(QUIZ_SLOT_LABELS);
@@ -39,25 +45,39 @@ const sessionSchema = z
 /** A batch the outbox sends: ≤ 20 attempts, so one LRS request (docs/yalla/implementation-plan.md §6). */
 export const MAX_ATTEMPTS_PER_POST = 20;
 
-const attemptSchema = z
-  .object({
-    attemptId: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
-    itemId: z.string().regex(/^\d{1,3}$/),
-    book: BOOK,
-    sourceRef: z.string().regex(/^ch\d+\/vocabulary\/\d+$/),
-    learningObjectId: z.string().min(1).max(300),
-    aspect: z.enum(vocabSkillValues),
-    channel: z.literal('onscreen-choice'),
-    options: z
-      .array(z.object({ slotLabel: SLOT, text: z.string().min(1).max(200) }).strict())
-      .length(QUIZ_SLOT_LABELS.length),
-    response: SLOT,
-    answeredAt: z.string().datetime({ offset: true }),
-    openedAt: z.string().datetime({ offset: true }).optional(),
-    /** The client's own verdict, for its feedback. Ignored: the server re-checks. */
-    correct: z.boolean().optional(),
-  })
-  .strict();
+const attemptBase = {
+  attemptId: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
+  itemId: z.string().regex(/^\d{1,3}$/),
+  book: BOOK,
+  sourceRef: z.string().regex(/^ch\d+\/vocabulary\/\d+$/),
+  learningObjectId: z.string().min(1).max(300),
+  aspect: z.enum(vocabSkillValues),
+  answeredAt: z.string().datetime({ offset: true }),
+  openedAt: z.string().datetime({ offset: true }).optional(),
+  /** The client's own verdict, for its feedback. Ignored: the server re-checks. */
+  correct: z.boolean().optional(),
+};
+
+const attemptSchema = z.discriminatedUnion('channel', [
+  z
+    .object({
+      ...attemptBase,
+      channel: z.literal('onscreen-choice'),
+      options: z
+        .array(z.object({ slotLabel: SLOT, text: z.string().min(1).max(200) }).strict())
+        .length(QUIZ_SLOT_LABELS.length),
+      response: SLOT,
+    })
+    .strict(),
+  z
+    .object({
+      ...attemptBase,
+      channel: z.literal('keyboard'),
+      /** As typed; `''` is "Don't know". */
+      response: z.string().max(200),
+    })
+    .strict(),
+]);
 
 const resultsSchema = z
   .object({
@@ -79,7 +99,7 @@ const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 /** Allowed clock skew for a client's `answeredAt`. */
 const MAX_SKEW_MS = 5 * 60 * 1000;
 
-/** The prompt and correct option text for an item, from the content (what the generator asks). */
+/** A choice item's prompt and correct option text, from the content (what the generator asks). */
 function expected(aspect: VocabSkill, term: { target: string; native: string }): { prompt: string; answer: string } {
   return aspect === 'reading'
     ? { prompt: term.target, answer: firstSense(term.native) }
@@ -96,24 +116,21 @@ class InvalidAttemptError extends Error {
 }
 
 /**
- * Re-checks one attempt against the book content. The client's options are
- * accepted only if exactly one of them is the right answer; `success` is
- * whether the chosen one is it.
+ * Re-checks one attempt against the book content and builds its statements.
+ * Choice: the client's options are accepted only if exactly one of them is
+ * the right answer, and `success` is whether the chosen one is it. Typed:
+ * `answer-check.ts` against the content (the same check the client ran).
  */
-function recheck(attempt: Attempt, now: number) {
+function recheck(
+  attempt: Attempt,
+  now: number,
+  base: { sessionId: string; externalId: string },
+): [XApiAnsweredStatement, XApiAssessedStatement] {
   const content = getBookContent(attempt.book);
   const sense = content.senseBySourceRef.get(attempt.sourceRef);
   const term = termsOf(content).bySourceRef.get(attempt.sourceRef);
   if (!sense || !term || sense.id !== attempt.learningObjectId) {
     throw new InvalidAttemptError(attempt.attemptId, 'learningObjectId does not match sourceRef');
-  }
-  const { prompt, answer } = expected(attempt.aspect, term);
-
-  const slots = new Set(attempt.options.map((option) => option.slotLabel));
-  const texts = new Set(attempt.options.map((option) => option.text));
-  const correctOptions = attempt.options.filter((option) => option.text === answer);
-  if (slots.size !== attempt.options.length || texts.size !== attempt.options.length || correctOptions.length !== 1) {
-    throw new InvalidAttemptError(attempt.attemptId, 'options do not match the content');
   }
 
   const answeredAt = Date.parse(attempt.answeredAt);
@@ -124,9 +141,12 @@ function recheck(attempt: Attempt, now: number) {
     throw new InvalidAttemptError(attempt.attemptId, 'openedAt is after answeredAt');
   }
 
-  return {
-    prompt,
-    answerOptions: attempt.options.map((option) => ({ ...option, isCorrect: option.text === answer })),
+  const common = {
+    ...base,
+    attemptId: attempt.attemptId,
+    itemId: attempt.itemId,
+    answeredAt: attempt.answeredAt,
+    openedAt: attempt.openedAt ?? null,
     learning: {
       learningObjectId: sense.id,
       book: content.book,
@@ -136,6 +156,33 @@ function recheck(attempt: Attempt, now: number) {
       native: term.native,
     },
   };
+
+  if (attempt.channel === 'keyboard') {
+    const { prompt, answer } = typedItem(attempt.aspect, term.target, term.native);
+    return buildYallaAttemptStatements({
+      ...common,
+      inputChannel: 'keyboard',
+      prompt,
+      response: attempt.response,
+      correctResponse: answer,
+      success: isTypedCorrect(attempt.response, answer),
+    });
+  }
+
+  const { prompt, answer } = expected(attempt.aspect, term);
+  const slots = new Set(attempt.options.map((option) => option.slotLabel));
+  const texts = new Set(attempt.options.map((option) => option.text));
+  const correctOptions = attempt.options.filter((option) => option.text === answer);
+  if (slots.size !== attempt.options.length || texts.size !== attempt.options.length || correctOptions.length !== 1) {
+    throw new InvalidAttemptError(attempt.attemptId, 'options do not match the content');
+  }
+  return buildYallaAttemptStatements({
+    ...common,
+    inputChannel: 'onscreen-choice',
+    prompt,
+    answerOptions: attempt.options.map((option) => ({ ...option, isCorrect: option.text === answer })),
+    response: attempt.response,
+  });
 }
 
 /**
@@ -228,20 +275,7 @@ export class YallaPracticeController {
     const results: Array<{ attemptId: string; correct: boolean }> = [];
     try {
       for (const attempt of attempts) {
-        const checked = recheck(attempt, now);
-        const [answered, assessed] = buildYallaChoiceStatements({
-          sessionId,
-          attemptId: attempt.attemptId,
-          itemId: attempt.itemId,
-          externalId: player.externalId,
-          prompt: checked.prompt,
-          answerOptions: checked.answerOptions,
-          response: attempt.response,
-          inputChannel: attempt.channel,
-          answeredAt: attempt.answeredAt,
-          openedAt: attempt.openedAt ?? null,
-          learning: checked.learning,
-        });
+        const [answered, assessed] = recheck(attempt, now, { sessionId, externalId: player.externalId });
         statements.push(answered, assessed);
         results.push({ attemptId: attempt.attemptId, correct: answered.result.success });
       }
