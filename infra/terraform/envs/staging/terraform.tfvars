@@ -12,6 +12,12 @@ image_uri = "100641718971.dkr.ecr.ap-southeast-2.amazonaws.com/emoji-app:staging
 # Secrets Manager (see pre-T0 gap #1, resolved before T5).
 openai_secret_enabled = true
 
+# The xAPI LRS (Veracity `dev` store, shared with local dev). Flip to true
+# after creating emoji-app/staging/xapi-lrs in Secrets Manager (see
+# docs/terraform/workflow.md → Staging LRS). Until then the server answers 503
+# for Players → detail, YALLA progress and xAPI export.
+lrs_secret_enabled = false
+
 # Cognito values mirror task definition revision 1, which was registered
 # manually before T5. Centralising them in tfvars means a future Cognito
 # rotation is a one-line change here, not a console click.

@@ -2,6 +2,7 @@ import type { Response } from 'express';
 import { GameDataRepository } from '../persistence/game-data.repository';
 import { PlayerRepository } from '../persistence/player.repository';
 import { assessedStatement } from '../test/leitner-statements';
+import { LearningProgressService } from './learning-progress.service';
 import { LearningProgressController } from './progress.controller';
 
 type ResponseMock = Pick<Response, 'status' | 'json'> & {
@@ -32,6 +33,7 @@ describe('LearningProgressController', () => {
   const controller = new LearningProgressController(
     repository as unknown as PlayerRepository,
     games as unknown as GameDataRepository,
+    new LearningProgressService(games as unknown as GameDataRepository),
   );
 
   beforeEach(() => {

@@ -53,35 +53,56 @@ export type StudyChapter = ChapterSummary & {
 
 export class YallaRequestError extends Error {
   constructor(public readonly status: number) {
-    super(status === 401 ? 'Please sign in again.' : status === 404 ? 'Not found.' : `Server returned ${status}`);
+    super(
+      status === 401
+        ? 'Please sign in again.'
+        : status === 404
+          ? 'Not found.'
+          : status === 503
+            ? 'The LRS is not configured on this server.'
+            : status === 502
+              ? 'The LRS did not answer.'
+              : `Server returned ${status}`,
+    );
   }
 }
 
-/** Study content doesn't change while the app is open, so each GET is fetched once. */
+/** Study content doesn't change while the app is open, so each content GET is fetched once. */
 const contentCache = new Map<string, Promise<unknown>>();
 
-/** GET a YALLA endpoint with the user's Cognito token. */
-export function fetchYalla<T>(path: string): Promise<T> {
+async function request<T>(path: string): Promise<T> {
+  const res = await authFetch(`/api/yalla${path}`);
+  if (!res.ok) {
+    throw new YallaRequestError(res.status);
+  }
+  return (await res.json()) as T;
+}
+
+/** GET a YALLA endpoint with the user's Cognito token. `cache: false` for per-learner data (progress). */
+export function fetchYalla<T>(path: string, { cache = true }: { cache?: boolean } = {}): Promise<T> {
+  if (!cache) {
+    return request<T>(path);
+  }
   const cached = contentCache.get(path);
   if (cached) {
     return cached as Promise<T>;
   }
-  const request = (async () => {
-    const res = await authFetch(`/api/yalla${path}`);
-    if (!res.ok) {
-      throw new YallaRequestError(res.status);
-    }
-    return (await res.json()) as T;
-  })();
-  contentCache.set(path, request);
-  request.catch(() => contentCache.delete(path));
-  return request;
+  const pending = request<T>(path);
+  contentCache.set(path, pending);
+  pending.catch(() => contentCache.delete(path));
+  return pending;
 }
 
 export type Resource<T> = { data: T | null; loading: boolean; error: string | null };
 
+type ResourceOptions = {
+  cache?: boolean;
+  /** Reload when this changes, too (e.g. the linked player). */
+  key?: string | null;
+};
+
 /** Loads `path` (null = nothing to load yet) and tracks loading and error state. */
-export function useYallaResource<T>(path: string | null): Resource<T> {
+export function useYallaResource<T>(path: string | null, { cache = true, key = null }: ResourceOptions = {}): Resource<T> {
   const [state, setState] = useState<Resource<T>>({ data: null, loading: path !== null, error: null });
 
   useEffect(() => {
@@ -91,7 +112,7 @@ export function useYallaResource<T>(path: string | null): Resource<T> {
     }
     let cancelled = false;
     setState({ data: null, loading: true, error: null });
-    fetchYalla<T>(path).then(
+    fetchYalla<T>(path, { cache }).then(
       (data) => {
         if (!cancelled) setState({ data, loading: false, error: null });
       },
@@ -108,7 +129,7 @@ export function useYallaResource<T>(path: string | null): Resource<T> {
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [path, cache, key]);
 
   return state;
 }

@@ -716,20 +716,49 @@ keeping the token in `sessionStorage`.
 Also check by hand that YALLA and Profile are hidden when signed out, and
 that a reload keeps you signed in (e2e runs with auth off, so it can't).
 
-#### Y3: progress and pills (read-only LRS)
+✅ **Checked on staging 2026-11-07** (image `staging-2026-11-07a`, v1.3.0):
+YALLA and Profile are hidden when signed out, create + link worked with a
+real Cognito login, and the link survives a reload and signing out and back
+in. Merged to `main`. (The first start failed because Atlas had paused the
+free cluster; resuming it fixed that. See `docs/terraform/workflow.md`.)
 
-- [ ] Factor `LearningProgressService` out of `getProgress`;
-      `GET /api/yalla/me/progress` and `/book` (one LRS read for the
-      whole book).
-- [ ] Pills (`TypeBadges` port): not-retired + due per aspect;
-      listening/speaking disabled; "–" without a link. Pill filter on the
-      vocabulary list; level dots per word; `pendingExport` banner.
-- [ ] Book detail shows per-chapter pills.
-- [ ] Specs: the YALLA progress endpoint and the existing player
-      progress endpoint return the same tracks for the same player.
+#### Y3: progress and pills (read-only LRS) ✅ built 2026-11-07
+
+- [x] `LearningProgressService` (`server/src/learning/learning-progress.service.ts`)
+      holds the body of `getProgress`; `/api/players/:id/progress` and
+      `GET /api/yalla/me/progress` both call `forChapter`, so they can't
+      diverge. `GET /api/yalla/me/progress/book` (`forBook`) reads the LRS
+      once and builds chapter-scope progress per chapter. Both add
+      `byAspect` (`{ total, open, due, new, retired }` per aspect; `open` =
+      not retired). YALLA routes take the player from the token
+      (`yalla-progress.controller.ts`, 403 without a link) and reject a
+      `playerId` in the query.
+- [x] Pills (`client/src/app/yalla/AspectPills.tsx`): Reading / Writing
+      show `open · N due`; Listening / Speaking are disabled ("coming
+      later"); "–" without a link (plus the "Link your profile" prompt) or
+      when the LRS can't be read. Chapter header pills link to
+      `vocabulary?aspect=…`, which lists only the words not yet retired for
+      that aspect. Each word shows level dots per aspect (tick when
+      retired, amber letter when a review is due). `pendingExport` banner
+      on the chapter and book pages. Progress isn't cached on the client
+      and reloads when the linked player changes.
+- [x] Book detail shows compact pills per chapter.
+- [x] Specs: `yalla-progress.controller.spec.ts` (YALLA and Players →
+      detail return the same body for the same player; pill counts; one
+      LRS read for the book; 400/403/404/502/503). Playwright
+      `yalla-progress.spec.ts`: no link → "–"; seeded evidence → pills,
+      level dots, the filter, book pills, and the same tracks as
+      `/api/players/:id/progress`.
+- [x] Staging can read the LRS: optional secret `emoji-app/staging/xapi-lrs`
+      (JSON with `XAPI_LRS_ENDPOINT` / `_KEY` / `_SECRET`) wired through
+      `modules/ecs-service` behind `lrs_secret_enabled` (default false).
+      **To do by hand:** create the secret and flip the flag
+      (`docs/terraform/workflow.md` → Staging LRS). Uses the `dev` store,
+      as decided in Phase 0.
 
 **Done when** the pills for your linked player match Players → detail
-for the same player (evidence from existing badge games).
+for the same player (evidence from existing badge games). Checked
+locally against the stub LRS; check on staging once the LRS secret is in.
 
 #### Y4: practice, on-screen multiple choice (first LRS writes)
 

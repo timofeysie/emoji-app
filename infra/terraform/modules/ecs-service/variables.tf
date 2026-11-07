@@ -149,6 +149,17 @@ variable "openai_api_key_secret_arn" {
   default     = null
 }
 
+variable "xapi_lrs_secret_arn" {
+  description = <<-EOT
+    Full ARN of the xAPI LRS secret, or null to run without an LRS (progress
+    and xAPI export then answer 503). The secret is expected to store JSON of
+    the form {"XAPI_LRS_ENDPOINT":"https://…/xapi/","XAPI_LRS_KEY":"…",
+    "XAPI_LRS_SECRET":"…"}; each key becomes the env var of the same name.
+  EOT
+  type        = string
+  default     = null
+}
+
 variable "node_env" {
   description = "Value of the NODE_ENV env var inside the container."
   type        = string

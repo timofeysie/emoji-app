@@ -22,6 +22,12 @@ variable "openai_secret_enabled" {
   default     = false
 }
 
+variable "lrs_secret_enabled" {
+  description = "Whether to wire the xAPI LRS Secrets Manager secret (emoji-app/<env>/xapi-lrs) into the task definition. Set true only after the secret exists."
+  type        = bool
+  default     = false
+}
+
 variable "cognito_user_pool_id" {
   description = "Cognito user pool id for the staging environment."
   type        = string
