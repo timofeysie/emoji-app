@@ -888,19 +888,37 @@ LRS (2026-11-07); still to check on staging.
 **Done when** you can do a full typed session on your phone (LAN or
 staging). Checked at phone width locally; still to try on a real phone.
 
-#### Y6: evidence cache
+#### Y6: evidence cache ✅ built 2026-11-08
 
-- [ ] Per-player cache in `fetchStudentEvidence`: incremental `since`
-  ```
-  reads, rebuild on start / every 24 h / "Recompute levels"; append on
-  posted results; `stored` on `LeitnerObservation`; raise `MAX_PAGES`
-  for rebuilds.
-  ```
-- [ ] Specs as listed in §5 → *Keeping Leitner levels accurate*.
+- [x] Per-player cache inside `fetchStudentEvidence`
+  (`learning/student-evidence.ts`), so YALLA progress, sessions,
+  Players → detail and the badge-game planner all read through it.
+  In memory, keyed by LRS endpoint + `externalId`; one read at a time per
+  player. It keeps the raw `assessed` statements by id (not just
+  observations), so `statementCount` stays right and the language filter
+  and fold run on every read. `lastStored` comes from each statement's
+  `stored`, so `LeitnerObservation` didn't need a `stored` field.
+- [x] Full read on the first read after a server start, after 24 h, and
+  after "Recompute levels" (Profile → `POST /api/yalla/me/recompute`);
+  these drop voided statements. Otherwise one `since = lastStored − 5 s`
+  read, merged by id. If the LRS gives no `stored` times, every read is
+  full (correct, just slower). Rebuilds may page to 1,000 pages
+  (`fetchStatements(…, { maxPages })`); one-off reads keep 100.
+- [x] `POST /api/yalla/me/results` adds the `assessed` statements it just
+  sent, so the next read has them even if the LRS lags.
+- [x] The e2e stub LRS now sets `stored` on ingest (like a real LRS) and
+  logs statement GETs (`/control/requests`).
+- [x] Specs: `student-evidence.spec.ts` (incremental `since`, overlap
+  dedupe, late export with an old `timestamp`, 24 h and Recompute drop a
+  voided statement, sent statements without an LRS read, cache = full read,
+  no `stored` → full reads); Playwright `yalla-evidence-cache.spec.ts`
+  (first view = 1 full read, next = 1 `since` read, late export counted,
+  Recompute = full read with the same tracks, Players → detail agrees).
+- Not done: the `409 { pendingOutbox }` idea from §5. The client already
+  sends its outbox before every progress read and plan.
 
 **Done when** progress views make ~1 LRS request, and results from the
-cache match a full read. History is small today, so Y6 can wait until
-after Y5. Move it earlier if progress views get slow.
+cache match a full read. Both checked locally (2026-11-08).
 
 ### Phase 2 (stage B): installable, offline
 

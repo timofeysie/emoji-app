@@ -9,6 +9,7 @@ import { LearnerService } from '../learner.service';
 import { isTypedCorrect, typedItem } from '../learning/answer-check';
 import { getBookContent, UnknownBookError } from '../learning/book-content';
 import { LrsNotConfiguredError } from '../learning/learning-progress.service';
+import { rememberSentStatements } from '../learning/student-evidence';
 import { KOREAN_BOOK } from '../learning/learning-object';
 import { LeitnerPlanner, sendPlanError, termsOf } from '../learning/leitner-planner';
 import { getValidationErrors } from '../learning/progress.controller';
@@ -299,6 +300,7 @@ export class YallaPracticeController {
         throw new LrsNotConfiguredError(error instanceof Error ? error.message : String(error));
       }
       await sendStatements(config, statements);
+      rememberSentStatements(config, player.externalId, statements);
       res.status(200).json({ sent: statements.length, results });
     } catch (error) {
       if (error instanceof LrsConflictError) {

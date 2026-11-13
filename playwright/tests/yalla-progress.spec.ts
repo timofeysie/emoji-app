@@ -48,7 +48,7 @@ test('the pills, word levels and filter come from the linked player’s evidence
   await page.goto(`${CHAPTER_27}/vocabulary`);
   await expect(page.getByTestId('pill-reading')).toContainText(`${CH27_OBJECTS - 1} · ${CH27_OBJECTS - 2} due`);
   await expect(page.getByTestId('pill-writing')).toContainText(`${CH27_OBJECTS} · ${CH27_OBJECTS} due`);
-  await expect(page.getByTestId('pill-listening')).toContainText('–');
+  await expect(page.getByTestId('pill-listening')).toHaveCount(0);
 
   const testWord = page.getByRole('button', { name: new RegExp(WORDS.test.word) });
   await expect(testWord.getByTestId('level-reading')).toHaveAttribute('data-level', '1');
