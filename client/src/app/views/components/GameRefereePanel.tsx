@@ -35,6 +35,7 @@ import {
   type BadgesSnapshotResponse,
 } from '../badge-stations';
 import type { GameKind, LeitnerExportResult } from '../leitner';
+import { authFetch } from '../../auth/authFetch';
 
 const chipSpring = { type: 'spring' as const, stiffness: 420, damping: 28 };
 
@@ -147,7 +148,7 @@ export function GameRefereePanel({
   const loadKnownPairs = useCallback(async () => {
     setBadgesLoading(true);
     try {
-      const res = await fetch('/api/badges', { credentials: 'same-origin' });
+      const res = await authFetch('/api/badges', { credentials: 'same-origin' });
       if (!res.ok) return;
       const data = (await res.json()) as BadgesSnapshotResponse;
       setKnownPairs(
@@ -204,7 +205,7 @@ export function GameRefereePanel({
 
   const loadCardGroup = async () => {
     try {
-      const res = await fetch(`/api/games/${game.id}/nfc-card-group`, { credentials: 'same-origin' });
+      const res = await authFetch(`/api/games/${game.id}/nfc-card-group`, { credentials: 'same-origin' });
       if (!res.ok) return;
       const data = (await res.json()) as { group: CardGroupInfo };
       setCardGroup(data.group);
@@ -222,7 +223,7 @@ export function GameRefereePanel({
     setAssignError(null);
     try {
       // Single idempotent call: ensures hardcoded Demo Set seed, then attaches.
-      const res = await fetch(`/api/games/${game.id}/nfc-card-groups/demo`, {
+      const res = await authFetch(`/api/games/${game.id}/nfc-card-groups/demo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -252,7 +253,7 @@ export function GameRefereePanel({
     setBindLoading(true);
     setBindError(null);
     try {
-      const res = await fetch(`/api/games/${game.id}/pairs`, {
+      const res = await authFetch(`/api/games/${game.id}/pairs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pairName: target }),
@@ -279,7 +280,7 @@ export function GameRefereePanel({
     setRemoving(stationName);
     setBindError(null);
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `/api/games/${game.id}/stations/${encodeURIComponent(stationName)}`,
         { method: 'DELETE', credentials: 'same-origin' },
       );
@@ -301,7 +302,7 @@ export function GameRefereePanel({
     setLifecycleLoading(targetState);
     setLifecycleError(null);
     try {
-      const res = await fetch(`/api/games/${game.id}/state`, {
+      const res = await authFetch(`/api/games/${game.id}/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ state: targetState }),

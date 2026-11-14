@@ -32,6 +32,7 @@ import {
   PairGuessChart,
   type GuessChartData,
 } from './components/PairGuessChart';
+import { authFetch } from '../auth/authFetch';
 
 const focusSpring = { type: 'spring' as const, stiffness: 280, damping: 26 };
 const questionFocusSpring = {
@@ -40,7 +41,6 @@ const questionFocusSpring = {
   damping: 24,
 };
 
-const DEMO_CREATOR_ID = '000000000000000000000001';
 const SLOT_LABELS = ['A', 'B', 'C', 'D', 'E'] as const;
 type SlotLabel = (typeof SLOT_LABELS)[number];
 type QuestionMode = 'standard' | 'cut-throat' | 'mixed';
@@ -224,12 +224,11 @@ function AddQuestionDialog({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch('/api/questions', {
+      const res = await authFetch('/api/questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           gameId,
-          createdByUserId: DEMO_CREATOR_ID,
           text: questionText.trim(),
           sequence: nextSequence,
           mode,
@@ -581,7 +580,7 @@ export function GameDetailView() {
     if (!gameId) return;
     setGuessChartLoading(true);
     try {
-      const res = await fetch(`/api/games/${gameId}/guess-chart`, {
+      const res = await authFetch(`/api/games/${gameId}/guess-chart`, {
         credentials: 'same-origin',
       });
       if (!res.ok) return;
@@ -602,7 +601,7 @@ export function GameDetailView() {
     }
     setFetchError(null);
     try {
-      const res = await fetch(`/api/games/${gameId}`, { credentials: 'same-origin' });
+      const res = await authFetch(`/api/games/${gameId}`, { credentials: 'same-origin' });
       if (res.status === 404) {
         if (lastGameRef.current?.id === gameId) {
           setGone(true);
@@ -629,7 +628,7 @@ export function GameDetailView() {
   const refreshQuestions = useCallback(async () => {
     if (!gameId || !game) return;
     try {
-      const res = await fetch(`/api/games/${gameId}/questions`, { credentials: 'same-origin' });
+      const res = await authFetch(`/api/games/${gameId}/questions`, { credentials: 'same-origin' });
       if (!res.ok) return;
       const data = (await res.json()) as { questions: Question[] };
       setGame((prev) => (prev ? { ...prev, questions: data.questions } : prev));
@@ -641,7 +640,7 @@ export function GameDetailView() {
   const toggleQuestionState = useCallback(
     async (questionId: string, newState: 'open' | 'closed') => {
       if (!gameId) return;
-      const res = await fetch(`/api/questions/${questionId}/state`, {
+      const res = await authFetch(`/api/questions/${questionId}/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gameId, state: newState }),
@@ -688,7 +687,7 @@ export function GameDetailView() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`/api/games/${gameId}/state`, {
+        const res = await authFetch(`/api/games/${gameId}/state`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ state: 'ready' }),

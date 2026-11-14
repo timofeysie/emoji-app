@@ -2,6 +2,12 @@ import type { Response } from 'express';
 import { PlayersController } from './players.controller';
 import { PlayerNotFoundError, PlayerRepository } from './persistence/player.repository';
 
+// The real guard loads `auth.ts` (ESM-only `jose`); handlers are called directly here.
+jest.mock('./referee.guard', () => ({
+  RefereeGuard: class {},
+  refereeUserIdOf: (req: { refereeUserId?: string }) => req.refereeUserId,
+}));
+
 type ResponseMock = Pick<Response, 'status' | 'json'> & {
   status: jest.Mock;
   json: jest.Mock;

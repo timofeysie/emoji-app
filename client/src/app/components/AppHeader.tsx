@@ -3,9 +3,9 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, MessageSquare, X } from 'lucide-react';
 import { AuthBar } from '../auth/AuthBar';
 import { useAuthStore } from '../auth/auth.store';
+import { isSignedIn } from '../auth/sign-in-access';
 import { Button } from '../shared/button';
 import { cn } from '../shared/utils';
-import { canUseYalla } from '../yalla/yalla-access';
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -14,13 +14,14 @@ import {
   navigationMenuTriggerStyle,
 } from '../shared/navigation-menu';
 
+/** `signedIn`: hidden from guests. Profile holds "Practise as", so it's signed-in only too. */
 const NAV_LINKS = [
-  { to: '/yalla', label: 'YALLA' },
-  { to: '/games', label: 'Games' },
-  { to: '/players', label: 'Players' },
-  { to: '/badges', label: 'Badges' },
-  { to: '/lights', label: 'Lights' },
-  { to: '/profile', label: 'Profile' },
+  { to: '/yalla', label: 'YALLA', signedIn: true },
+  { to: '/games', label: 'Games', signedIn: true },
+  { to: '/players', label: 'Players', signedIn: true },
+  { to: '/badges', label: 'Badges', signedIn: true },
+  { to: '/lights', label: 'Lights', signedIn: false },
+  { to: '/profile', label: 'Profile', signedIn: true },
 ] as const;
 
 function viewTitleForPathname(pathname: string): string {
@@ -49,12 +50,8 @@ export function AppHeader({ chatOpen, onToggleChat }: AppHeaderProps) {
   const location = useLocation();
   const accessToken = useAuthStore((s) => s.accessToken);
   const viewTitle = viewTitleForPathname(location.pathname);
-  const visibleNavLinks = NAV_LINKS.filter((link) => {
-    // Profile holds "Practise as", so local dev (auth off) needs it too.
-    if (link.to === '/profile') return canUseYalla(accessToken);
-    if (link.to === '/yalla') return canUseYalla(accessToken);
-    return true;
-  });
+  const signedIn = isSignedIn(accessToken);
+  const visibleNavLinks = NAV_LINKS.filter((link) => signedIn || !link.signedIn);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -120,17 +117,19 @@ export function AppHeader({ chatOpen, onToggleChat }: AppHeaderProps) {
             <div className="hidden lg:block">
               <AuthBar />
             </div>
-            <Button
-              type="button"
-              variant={chatOpen ? 'secondary' : 'ghost'}
-              size="icon"
-              aria-pressed={chatOpen}
-              aria-label={chatOpen ? 'Hide chat' : 'Show chat'}
-              title={chatOpen ? 'Hide chat' : 'Show chat'}
-              onClick={onToggleChat}
-            >
-              <MessageSquare aria-hidden />
-            </Button>
+            {signedIn && (
+              <Button
+                type="button"
+                variant={chatOpen ? 'secondary' : 'ghost'}
+                size="icon"
+                aria-pressed={chatOpen}
+                aria-label={chatOpen ? 'Hide chat' : 'Show chat'}
+                title={chatOpen ? 'Hide chat' : 'Show chat'}
+                onClick={onToggleChat}
+              >
+                <MessageSquare aria-hidden />
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"

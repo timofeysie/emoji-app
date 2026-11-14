@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { HashbrownProvider } from '@hashbrownai/react';
-import { Route, Routes } from 'react-router-dom';
+import { Outlet, Route, Routes } from 'react-router-dom';
 import { AuthCallback } from './auth/AuthCallback';
 import { authFetchMiddleware } from './auth/authFetchMiddleware';
+import { RequireSignIn, useIsSignedIn } from './auth/sign-in-access';
 import { AppHeader } from './components/AppHeader';
 import { StoreInitializer } from './components/StoreInitializer';
 import { RichChatPanel } from './shared/RichChatPanel';
@@ -24,8 +25,10 @@ import { yallaRoutes } from './yalla/yalla-routes';
 const chatUrl = import.meta.env.VITE_CHAT_URL ?? '/api/chat';
 
 function MainShell() {
-  // Collapsed by default; the header's chat button opens it.
-  const [chatOpen, setChatOpen] = useState(false);
+  // Collapsed by default; the header's chat button opens it. Guests get no chat.
+  const signedIn = useIsSignedIn();
+  const [chatToggled, setChatToggled] = useState(false);
+  const chatOpen = signedIn && chatToggled;
 
   return (
     <HashbrownProvider
@@ -40,15 +43,25 @@ function MainShell() {
         )}
       >
         <div className={cn('flex min-h-0 flex-col overflow-hidden', chatOpen && 'lg:col-span-4')}>
-          <AppHeader chatOpen={chatOpen} onToggleChat={() => setChatOpen((open) => !open)} />
+          <AppHeader chatOpen={chatOpen} onToggleChat={() => setChatToggled((open) => !open)} />
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <Routes>
-              <Route path="/games" element={<GamesView />} />
+              {/* Student mode: players never sign in (security.md D1). */}
               <Route path="/games/:gameId/play" element={<GamePlayView />} />
-              <Route path="/games/:gameId" element={<GameDetailView />} />
-              <Route path="/players" element={<PlayersView />} />
-              <Route path="/players/:playerId" element={<PlayerDetailView />} />
-              <Route path="/badges" element={<BadgesView />} />
+              {/* Referee views: signed-in users only. */}
+              <Route
+                element={
+                  <RequireSignIn>
+                    <Outlet />
+                  </RequireSignIn>
+                }
+              >
+                <Route path="/games" element={<GamesView />} />
+                <Route path="/games/:gameId" element={<GameDetailView />} />
+                <Route path="/players" element={<PlayersView />} />
+                <Route path="/players/:playerId" element={<PlayerDetailView />} />
+                <Route path="/badges" element={<BadgesView />} />
+              </Route>
               <Route path="/lights" element={<LightsView />} />
               <Route path="/scenes" element={<ScenesView />} />
               <Route
@@ -61,15 +74,18 @@ function MainShell() {
             </Routes>
           </div>
         </div>
-        {/* Hidden rather than unmounted, so the conversation survives a collapse. */}
-        <div
-          className={cn(
-            'min-h-0 flex-col border-t p-2 lg:col-span-3 lg:h-full lg:border-l lg:border-t-0',
-            chatOpen ? 'flex' : 'hidden',
-          )}
-        >
-          <RichChatPanel />
-        </div>
+        {/* Hidden rather than unmounted, so the conversation survives a collapse.
+            Not rendered for guests: POST /api/chat needs a login. */}
+        {signedIn && (
+          <div
+            className={cn(
+              'min-h-0 flex-col border-t p-2 lg:col-span-3 lg:h-full lg:border-l lg:border-t-0',
+              chatOpen ? 'flex' : 'hidden',
+            )}
+          >
+            <RichChatPanel />
+          </div>
+        )}
       </div>
       <Toaster />
     </HashbrownProvider>

@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Logger, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Logger, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { RefereeGuard } from './referee.guard';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { GameDataRepository } from './persistence/game-data.repository';
@@ -56,6 +57,7 @@ export class PairBindingsController {
   }
 
   @Post('games/:gameId/pairs')
+  @UseGuards(RefereeGuard)
   async bindPair(
     @Param('gameId') gameId: string,
     @Body() body: unknown,
@@ -138,6 +140,7 @@ export class PairBindingsController {
 
   /** Referee removes a station: unbind all its players; their guesses stay. */
   @Delete('games/:gameId/stations/:stationName')
+  @UseGuards(RefereeGuard)
   async unbindStation(
     @Param('gameId') gameId: string,
     @Param('stationName') stationName: string,

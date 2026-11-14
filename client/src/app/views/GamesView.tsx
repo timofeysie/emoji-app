@@ -18,9 +18,9 @@ import { cn } from '../shared/utils';
 import { getWsUrl } from '../shared/ws-url';
 import { NewLeitnerGameDialog } from './components/NewLeitnerGameDialog';
 import type { GameKind } from './leitner';
+import { authFetch } from '../auth/authFetch';
 
 /** Placeholder creator ID used when no auth is wired. Must be a 24-char hex ObjectId. */
-const DEMO_CREATOR_ID = '000000000000000000000001';
 
 type GameState =
   | 'draft'
@@ -80,7 +80,6 @@ const STATE_CHIPS_DEFAULT = 'bg-muted text-muted-foreground';
 function NewGameDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
-  const [creatorId, setCreatorId] = useState(DEMO_CREATOR_ID);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,10 +91,10 @@ function NewGameDialog({ onCreated }: { onCreated: () => void }) {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch('/api/games', {
+      const res = await authFetch('/api/games', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), createdByUserId: creatorId.trim() }),
+        body: JSON.stringify({ title: title.trim() }),
         credentials: 'same-origin',
       });
       if (!res.ok) {
@@ -151,20 +150,6 @@ function NewGameDialog({ onCreated }: { onCreated: () => void }) {
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="creator-id">Creator ID</Label>
-            <Input
-              id="creator-id"
-              placeholder="24-char hex ObjectId"
-              value={creatorId}
-              onChange={(e) => setCreatorId(e.target.value)}
-              className="font-mono text-xs"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Demo placeholder — change when auth is wired.
-            </p>
-          </div>
-
           {error && (
             <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
@@ -198,7 +183,7 @@ export function GamesView() {
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch('/api/games', { credentials: 'same-origin' });
+      const res = await authFetch('/api/games', { credentials: 'same-origin' });
       if (!res.ok) {
         setFetchError(`Server returned ${res.status}`);
         return;
