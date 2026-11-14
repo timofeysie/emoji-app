@@ -27,10 +27,20 @@ locals {
     valueFrom = "${var.openai_api_key_secret_arn}:OPENAI_API_KEY::"
   }
 
-  container_secrets = local.openai_secret == null ? [local.mongodb_secret] : [
-    local.mongodb_secret,
-    local.openai_secret,
+  # The LRS secret holds all three xAPI settings in one JSON object (YALLA Y3:
+  # Players → detail and YALLA progress read the LRS from the server).
+  xapi_lrs_secrets = var.xapi_lrs_secret_arn == null ? [] : [
+    for key in ["XAPI_LRS_ENDPOINT", "XAPI_LRS_KEY", "XAPI_LRS_SECRET"] : {
+      name      = key
+      valueFrom = "${var.xapi_lrs_secret_arn}:${key}::"
+    }
   ]
+
+  container_secrets = concat(
+    [local.mongodb_secret],
+    local.openai_secret == null ? [] : [local.openai_secret],
+    local.xapi_lrs_secrets,
+  )
 
   container_definitions = [
     {

@@ -26,26 +26,32 @@ Related:
 ## The request, restated
 
 1. A **solo** study and practice feature that uses the same book, chapter and
+
    learning-object data as the emoji badge games
-   (`server/src/games/content/`, indexed by `server/src/learning/book-content.ts`).
+    (`server/src/games/content/`, indexed by `server/src/learning/book-content.ts`).
 2. **No web sockets.**
 3. **Keyboard input** as well as multiple choice, chosen per aspect by
+
    the learner. Writing (type the Korean) defaults to keyboard; reading
-   (type the English exactly) defaults to multiple choice. Multiple choice
-   uses on-screen A–D in place of the badge games' NFC cards. How a learner
-   answers is a **game format** option, so other inputs (sensors, …) can
-   be added later ([§6](#game-formats-and-input-channels)).
+    (type the English exactly) defaults to multiple choice. Multiple choice
+    uses on-screen A–D in place of the badge games' NFC cards. How a learner
+    answers is a **game format** option, so other inputs (sensors, …) can
+    be added later ([§6](#game-formats-and-input-channels)).
 4. The **same Leitner behaviour** as the emoji-app Leitner games.
 5. A **YALLA** link in the header. It and the `/yalla` routes are only
+
    visible when the user is **signed in with Cognito, or the app is
-   running locally** with auth disabled.
+    running locally** with auth disabled.
 6. Its own **left sidebar** with the same options as `language-learning-app`.
 7. **Books → book detail → chapter detail** with dialog, vocabulary and
+
    pattern sections (plus exercises).
 8. The signed-in user is **linked to an LRS identity**, the same identity a
+
    Leitner game uses for its student. The **reading / writing / speaking /
-   listening pills** come from that identity's LRS evidence.
+    listening pills** come from that identity's LRS evidence.
 9. Usable on the **web and on mobile**, and **cheap**: staging is normally
+
    destroyed and only applied to test.
 
 ## Short answer
@@ -54,24 +60,27 @@ Related:
 parts on the server:
 
 - **Leitner levels are already derived from the LRS**, not stored.
-  `fetchStudentEvidence()` reads one student's `assessed` statements and
-  `foldTracks()` turns them into a level and due date per
-  `(learning object, aspect)`. This "track" model (`leitner.ts`) is a pure
-  function of the statements.
+`fetchStudentEvidence()` reads one student's `assessed` statements and
+`foldTracks()` turns them into a level and due date per
+`(learning object, aspect)`. This "track" model (`leitner.ts`) is a pure
+function of the statements.
 - **Progress per chapter already exists**: `GET /api/players/:id/progress`
-  returns every track in a chapter with `status`, `level` and `due`.
+returns every track in a chapter with `status`, `level` and `due`.
 - **Book content is already indexed** against the learning-object registry
-  (`ko-senses.json`).
+(`ko-senses.json`).
 
 So YALLA is mostly client work, plus:
 
-1. **Link a Cognito user to a `Player`** (that player's `externalId` is the
+1. **Link a Cognito user to a** `Player` (that player's `externalId` is the
+
    LRS actor), so the server knows *whose* evidence to read and write.
-2. **A few `/api/yalla/*` endpoints** that use the signed-in user's linked
+2. **A few** `/api/yalla/`* **endpoints** that use the signed-in user's linked
+
    player: chapter content, my progress, post my practice results.
-3. **Practice answers sent as `assessed` statements** with a new
+3. **Practice answers sent as** `assessed` **statements** with a new
+
    `game-kind`, which the Leitner fold counts. Then YALLA practice and badge
-   games move the **same** Leitner tracks.
+    games move the **same** Leitner tracks.
 
 For hosting, follow **stage A now, B later, maybe C**
 (see [Hosting](#hosting-options-when-staging-is-destroyed)).
@@ -91,13 +100,13 @@ For hosting, follow **stage A now, B later, maybe C**
 Client:
 
 - `AppHeader.tsx` already hides `/profile` when there's no `accessToken`.
-  Add `{ to: '/yalla', label: 'YALLA' }` to `NAV_LINKS` and filter it with
-  the same rule, extended to `accessToken || authDisabledClient`. Put that
-  rule in one helper, e.g. `canUseYalla()` in `auth/`, so the header and
-  the route guard can't disagree.
+Add `{ to: '/yalla', label: 'YALLA' }` to `NAV_LINKS` and filter it with
+the same rule, extended to `accessToken || authDisabledClient`. Put that
+rule in one helper, e.g. `canUseYalla()` in `auth/`, so the header and
+the route guard can't disagree.
 - Add `viewTitleForPathname` entries (`/yalla` → `YALLA`).
 - Wrap the YALLA routes in a `<RequireYalla>` guard that uses the same
-  helper.
+helper.
 
 Server:
 
@@ -142,14 +151,14 @@ Same options as `language-learning-app/src/components/pages/ChapterPage.tsx`:
 | Pattern | `LayoutTemplate` | `…/patterns` |
 | Exercises | `Dumbbell` | `…/exercises` |
 
-- **Desktop (≥ `lg`)**: a vertical left sidebar with icon + label, inside the
-  emoji-app's content column. Hide the chat panel on `/yalla/*` by default,
-  or leave it closed, to give YALLA the room.
+- **Desktop (≥** `lg`**)**: a vertical left sidebar with icon + label, inside the
+emoji-app's content column. Hide the chat panel on `/yalla/*` by default,
+or leave it closed, to give YALLA the room.
 - **Mobile**: an icon-only tab bar, as `language-learning-app` has. Put it at
-  the **bottom** rather than the top so it's reachable with a thumb and not
-  hidden by the on-screen keyboard during typed practice.
+the **bottom** rather than the top so it's reachable with a thumb and not
+hidden by the on-screen keyboard during typed practice.
 - On `/yalla` and the book detail page (no chapter yet), the sidebar shows
-  only Home plus a chapter list.
+only Home plus a chapter list.
 
 Build with the emoji-app's Radix + Tailwind components (`client/src/app/shared/`),
 not MUI.
@@ -207,10 +216,9 @@ objects (`leitner-method.md`: grammar is its own kind, `ko/pattern/…`).
 | `User` (`models.ts`) | Someone who logs in (Cognito) | `authProviderId` (Cognito `sub`) | No |
 | `Player` (`models.ts`) | A student the referee plays with. "Never logs in; no email" (security.md D4) | `externalId`, a random UUID | **Yes**: the xAPI actor is `{ account: { homePage: XAPI_HOMEPAGE, name: externalId } }` |
 
-A Leitner game is created **for a `Player`** (`POST /api/leitner-games
-{ playerId }`), and its statements use that player's `externalId`.
+A Leitner game is created **for a** `Player` (`POST /api/leitner-games { playerId }`), and its statements use that player's `externalId`.
 `fetchStudentEvidence(config, player.externalId, language)` reads them back.
-There is **no link from a `User` to a `Player`**. The client also sends a
+There is **no link from a** `User` **to a** `Player`. The client also sends a
 hard-coded `DEMO_CREATOR_ID` as `createdByUserId`, and nothing creates a
 `User` row from a Cognito sign-in.
 
@@ -218,54 +226,59 @@ hard-coded `DEMO_CREATOR_ID` as `createdByUserId`, and nothing creates a
 
 The same `Player` must be both the **student in badge games** and the
 **learner in YALLA**, so that both modes read and write one set of Leitner
-tracks. So **link a `User` to an existing `Player`**. Don't give the user a
+tracks. So **link a** `User` **to an existing** `Player`. Don't give the user a
 second LRS identity.
 
-1. **`User` upsert on sign-in.** `GET /api/me` (behind `requireAuth`)
+1. `User` **upsert on sign-in.** `GET /api/me` (behind `requireAuth`)
+
    finds or creates the `User` by `authProviderId = sub`
-   (`displayName` from the token's `username`). In local dev the fixed
-   `local-dev` sub gets a local `User`.
+    (`displayName` from the token's `username`). In local dev the fixed
+    `local-dev` sub gets a local `User`.
 2. **Link field.** Add `User.playerId: ObjectId | null` (ref `Player`,
+
    unique when set). The link points from user to player, so `Player`
-   doesn't change and stays a no-login record (D4).
+    doesn't change and stays a no-login record (D4).
 3. **Linking UI**, on the existing **Profile** page (`UserProfileView.tsx`):
+
    *"Practise as: [pick a player ▾] / [Create a new player]"*.
    - Picking an existing player sets `User.playerId`
-     (`PUT /api/me/player { playerId }`). Their history from badge games
-     then appears in YALLA straight away, because it's the same
-     `externalId`.
+   (`PUT /api/me/player { playerId }`). Their history from badge games
+   then appears in YALLA straight away, because it's the same
+   `externalId`.
    - "Create" makes a `Player` (`firstName` = a nickname the user enters,
-     new UUID `externalId`) and links it.
+   new UUID `externalId`) and links it.
    - Unlinking sets it back to `null`. LRS history stays with the player.
    - **Decided (D14, 2026-10-30):** for the prototype, users link
-     themselves to **any** player. Later, only a referee/admin can link, or
-     a player gets a one-time link code. Record this in `security.md`
-     alongside D2–D4.
-   - **User ids stay stable across `terraform destroy`/`apply`.** The
-     Cognito user pool is **not managed by Terraform**:
-     `infra/terraform/AWS-ARCHITECTURE.md` lists Cognito and MongoDB
-     Atlas as "Not managed here", and `envs/staging` only passes in the
-     existing pool id (`cognito_user_pool_id` in `terraform.tfvars`) as task
-     env. There are no `aws_cognito_*` resources. So the Cognito `sub`,
-     the `User.authProviderId` rows and the `User.playerId` links in Atlas
-     all survive a destroy. Don't delete or recreate the pool by hand, and
-     don't bring it under Terraform in the destroyable `envs/staging`
-     state. If it's ever imported, put it in a separate, never-destroyed
-     state with `prevent_destroy`.
+   themselves to **any** player. Later, only a referee/admin can link, or
+   a player gets a one-time link code. Record this in `security.md`
+   alongside D2–D4.
+   - **User ids stay stable across** `terraform destroy`**/**`apply`**.** The
+   Cognito user pool is **not managed by Terraform**:
+   `infra/terraform/AWS-ARCHITECTURE.md` lists Cognito and MongoDB
+   Atlas as "Not managed here", and `envs/staging` only passes in the
+   existing pool id (`cognito_user_pool_id` in `terraform.tfvars`) as task
+   env. There are no `aws_cognito_*` resources. So the Cognito `sub`,
+   the `User.authProviderId` rows and the `User.playerId` links in Atlas
+   all survive a destroy. Don't delete or recreate the pool by hand, and
+   don't bring it under Terraform in the destroyable `envs/staging`
+   state. If it's ever imported, put it in a separate, never-destroyed
+   state with `prevent_destroy`.
    - **Local dev identity.** With `DISABLE_AUTH`, the server uses the fixed
-     `local-dev` sub, which is a different `User` from your staging login.
-     Link it to the same player, or run locally with real Cognito
-     (`VITE_COGNITO_*` set and `http://localhost:5200/auth/callback` in the
-     app client's callback URLs) so the `sub` is the same as on staging.
-     This only matters if local and staging share an Atlas database.
+   `local-dev` sub, which is a different `User` from your staging login.
+   Link it to the same player, or run locally with real Cognito
+   (`VITE_COGNITO_*` set and `http://localhost:5200/auth/callback` in the
+   app client's callback URLs) so the `sub` is the same as on staging.
+   This only matters if local and staging share an Atlas database.
 4. **YALLA without a link.** The pages still work for **study** (dialog,
+
    vocabulary, patterns), but the pills show "–" and Exercises shows
-   *"Link your profile to a player to track progress"* with a link to the
-   Profile page.
-5. **Server-side use.** Every `/api/yalla/me/*` handler does
+    *"Link your profile to a player to track progress"* with a link to the
+    Profile page.
+5. **Server-side use.** Every `/api/yalla/me/`* handler does
+
    `sub → User → playerId → Player.externalId`. One helper
-   (`resolveLearner(req)`) returns `{ user, player }`, or 403
-   `{ error: 'No linked player' }`.
+    (`resolveLearner(req)`) returns `{ user, player }`, or 403
+    `{ error: 'No linked player' }`.
 
 `GET /api/me` returns `{ user: { id, displayName }, player: { id, label } | null }`.
 The client keeps it in a small `useMeStore` (or adds it to `auth.store.ts`),
@@ -356,14 +369,14 @@ using wrong levels.
 
 What can still make levels wrong or slow, and the plan for each:
 
-| Risk | Effect | Plan |
-| --- | --- | --- |
-| **Read cost grows with history.** Every progress view and every session plan re-reads **all** of a learner's `assessed` statements. At ~100 answers/day that's ~70 pages after a year: seconds of latency, and ~70 of Veracity's 10k API calls/day per view. | Slow, then rate-limited | **Per-player evidence cache with incremental reads** (below). |
-| **YALLA outbox not flushed yet** | Plans and pills miss the latest answers | Client flushes the outbox **before** requesting progress or a new session. The server also returns `409 { pendingOutbox }`-style guidance if a plan request carries `outboxPending: n > 0`, the same way `pendingExport` works for badge games. |
-| **Badge game not exported yet** | Same | Already handled: `pendingExport` → 409 for planning, banner for progress. |
-| **Voided statements** | A voided answer still counts | The incremental read uses a `verb=assessed` filter, so it doesn't see `voided` statements. Do a **full rebuild** when the cache is created (server start, which includes every `apply`), at most every 24 h, and on demand ("Recompute levels" on the Profile page). Voiding is rare (manual data fixes), so this is enough. |
-| **`MAX_PAGES` cap** | Read throws past 50k statements | With the cache, only a full rebuild pages through everything. Raise `MAX_PAGES` (e.g. 1,000) or drop it for rebuilds, keeping it as a guard for one-off reads. At 100/day, 50k is ~16 months away. |
-| **Different LRS stores** | Local dev and staging show different levels | Levels are per LRS store (`XAPI_LRS_ENDPOINT`). For one history, point local and staging at the **same** store (e.g. `dev` for now). `LRS.md` keeps `pilot` separate on purpose. |
+| Risk                                                                                                                                                                                                                                                         | Effect                                      | Plan                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Read cost grows with history.** Every progress view and every session plan re-reads **all** of a learner's `assessed` statements. At ~100 answers/day that's ~70 pages after a year: seconds of latency, and ~70 of Veracity's 10k API calls/day per view. | Slow, then rate-limited                     | **Per-player evidence cache with incremental reads** (below).                                                                                                                                                                                                                                                                |
+| **YALLA outbox not flushed yet**                                                                                                                                                                                                                             | Plans and pills miss the latest answers     | Client flushes the outbox **before** requesting progress or a new session. The server also returns `409 { pendingOutbox }`-style guidance if a plan request carries `outboxPending: n > 0`, the same way `pendingExport` works for badge games.                                                                              |
+| **Badge game not exported yet**                                                                                                                                                                                                                              | Same                                        | Already handled: `pendingExport` → 409 for planning, banner for progress.                                                                                                                                                                                                                                                    |
+| **Voided statements**                                                                                                                                                                                                                                        | A voided answer still counts                | The incremental read uses a `verb=assessed` filter, so it doesn't see `voided` statements. Do a **full rebuild** when the cache is created (server start, which includes every `apply`), at most every 24 h, and on demand ("Recompute levels" on the Profile page). Voiding is rare (manual data fixes), so this is enough. |
+| `MAX_PAGES` **cap**                                                                                                                                                                                                                                          | Read throws past 50k statements             | With the cache, only a full rebuild pages through everything. Raise `MAX_PAGES` (e.g. 1,000) or drop it for rebuilds, keeping it as a guard for one-off reads. At 100/day, 50k is ~16 months away.                                                                                                                           |
+| **Different LRS stores**                                                                                                                                                                                                                                     | Local dev and staging show different levels | Levels are per LRS store (`XAPI_LRS_ENDPOINT`). For one history, point local and staging at the **same** store (e.g. `dev` for now). `LRS.md` keeps `pilot` separate on purpose.                                                                                                                                             |
 
 **The evidence cache.** It holds a copy of LRS data and can always be
 rebuilt, so it doesn't break the "levels are derived, not stored" rule
@@ -382,18 +395,18 @@ POST /api/yalla/me/results succeeded:
   append the observations just sent (the server built them) → the next read sees them without an LRS call
 ```
 
-- `since` filters on the LRS **`stored`** time, not `timestamp`. That's
-  correct here: a badge game exported days after it was played still has
-  a new `stored` time, so it's picked up. Track `lastStored` from each
-  statement's `stored` field, so `LeitnerObservation` needs `stored` added
-  next to `timestamp`.
+- `since` filters on the LRS `stored` time, not `timestamp`. That's
+correct here: a badge game exported days after it was played still has
+a new `stored` time, so it's picked up. Track `lastStored` from each
+statement's `stored` field, so `LeitnerObservation` needs `stored` added
+next to `timestamp`.
 - **In memory** is enough for the prototype. Every `apply` starts a fresh
-  task, which means a full rebuild on the first read: one slow read per
-  deploy. If that gets annoying, persist the cache in a Mongo collection
-  (`leitnerEvidenceCache`, safe to delete at any time).
+task, which means a full rebuild on the first read: one slow read per
+deploy. If that gets annoying, persist the cache in a Mongo collection
+(`leitnerEvidenceCache`, safe to delete at any time).
 - The badge-game planner (`POST /api/leitner-games`) and
-  `GET /api/players/:id/progress` should use the same cache through
-  `fetchStudentEvidence`, so all three readers agree.
+`GET /api/players/:id/progress` should use the same cache through
+`fetchStudentEvidence`, so all three readers agree.
 
 Tests: incremental merge dedupes the overlap. A badge-game export with an
 old `timestamp` but new `stored` is picked up. A rebuild drops a voided
@@ -456,46 +469,49 @@ sensor station sending `choice`, or a speech recogniser sending `fill-in`.
 
 **YALLA's formats (v1)**
 
-| Aspect | Prompt | Input options | **Default** | Typed answer is checked against |
-| --- | --- | --- | --- | --- |
-| **writing** | English gloss | `keyboard` (type the Korean) **or** `onscreen-choice` (A–D Korean spellings, as in badge Leitner games) | **`keyboard`** | the learning object's Korean `word` |
-| **reading** | Korean word | `onscreen-choice` (A–D meanings, as in badge Leitner games) **or** `keyboard` (type the English) | **`onscreen-choice`** | the learning object's English answer (the gloss), **exactly** |
+| Aspect      | Prompt        | Input options                                                                                           | **Default**       | Typed answer is checked against                               |
+| ----------- | ------------- | ------------------------------------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------- |
+| **writing** | English gloss | `keyboard` (type the Korean) **or** `onscreen-choice` (A–D Korean spellings, as in badge Leitner games) | `keyboard`        | the learning object's Korean `word`                           |
+| **reading** | Korean word   | `onscreen-choice` (A–D meanings, as in badge Leitner games) **or** `keyboard` (type the English)        | `onscreen-choice` | the learning object's English answer (the gloss), **exactly** |
 
 - **Choosing and switching:**
   - The **session setup** screen shows the input per aspect, preset to the
-    learner's defaults.
+  learner's defaults.
   - The **practice card** has a toggle (`⌨ Type` / `A–D Choose`) that
-    switches input for the current item and the rest of the session.
+  switches input for the current item and the rest of the session.
   - Toggling is allowed **before** answering an item, not after seeing
-    the options, so it can't be used to peek.
+  the options, so it can't be used to peek.
 - **Saved preferences:** the learner's choice is saved as their format
-  (`localStorage` in Phase 1; `User.preferences.yallaFormat` when Y2's
-  `User` exists, so it follows them across devices). "Reset to defaults"
-  restores writing = keyboard, reading = choice.
+(`localStorage` in Phase 1; `User.preferences.yallaFormat` when Y2's
+`User` exists, so it follows them across devices). "Reset to defaults"
+restores writing = keyboard, reading = choice.
 - **Keyboard shortcuts for choice:** `A`/`B`/`C`/`D` (and `1`–`4`) select
-  an option; `Enter` submits typed answers. These are for the web app;
-  on mobile, the options are large tap targets.
+an option; `Enter` submits typed answers. These are for the web app;
+on mobile, the options are large tap targets.
 
 **Checking typed answers.** This is a shared module, so the client gives
 instant feedback and the server re-checks.
 
 - **writing** (Korean): Unicode **NFC**, then trim and collapse inner
-  whitespace. Otherwise the text must equal the learning object's `word`.
-  Accept-lists (`acceptedAnswers` in the sense registry) can be added
-  later for real variants.
+whitespace. Otherwise the text must equal the learning object's `word`.
+Accept-lists (`acceptedAnswers` in the sense registry) can be added
+later for real variants.
 - **reading** (English): **exact** match to the learning object's English
-  answer, as you specified. Only invisible differences are ignored: trim,
-  collapse whitespace, NFC. Case and punctuation inside the answer must
-  match. Glosses such as `test, exam` must then be typed in full, so this
-  is strict on purpose. If it turns out too strict, an accepted-answers
-  list can be added per sense without changing the format.
+answer, as you specified. Only invisible differences are ignored: trim,
+collapse whitespace, NFC. Case inside the answer must match. Glosses
+such as `test, exam` must then be typed in full, so this is strict on
+purpose. If it turns out too strict, an accepted-answers
+list can be added per sense without changing the format.
+- **Punctuation and symbols** (brackets, commas, `!`, `~`, …) are ignored
+for scoring in both, so `돈을 모으다` counts for `(돈을) 모으다`. The
+feedback still shows the character diff, marked as accepted.
 - **"Don't know / reveal"** counts as **incorrect** in both.
 - **Inputs:** `autocapitalize="off" autocorrect="off" spellcheck="false"`;
-  `lang="ko"` for writing so mobile keyboards switch to Korean, and
-  `lang="en"` for reading.
+`lang="ko"` for writing so mobile keyboards switch to Korean, and
+`lang="en"` for reading.
 - **Feedback:** after a wrong typed answer, show the expected answer with
-  the differences highlighted, so an "almost" is easy to see. It's still
-  scored as wrong.
+the differences highlighted, so an "almost" is easy to see. It's still
+scored as wrong.
 
 **Evidence weight.** Both channels give `direct` evidence of equal weight
 in v1 (open question 2). The statements record the channel, so the fold
@@ -515,17 +531,17 @@ if it has an LO IRI object, `ext/aspect`, `ext/source-ref`,
 
 So, per answer, YALLA sends (via `statement-builder.ts`):
 
-- an **`answered`** statement: question detail, `result.response` = the raw
-  typed text or the chosen slot (`A`–`D`), `interactionType` `fill-in`
-  (keyboard) or `choice` (on-screen A–D), with `choices` and
-  `correctResponsesPattern` as the badge games send them;
-- an **`assessed`** statement: object = the learning-object IRI, the same
-  extensions as the badge games, with **`ext/game-kind = 'yalla-solo'`**
-  and a new **`ext/input-channel = 'keyboard' | 'onscreen-choice'`**.
-  Badge-game statements should start sending `ext/input-channel = 'nfc-card'`
-  too, so every answer records how it was given. Older statements without
-  it read as `nfc-card`.
-- one **`completed`** statement per session (optional, for LRS dashboards).
+- an `answered` statement: question detail, `result.response` = the raw
+typed text or the chosen slot (`A`–`D`), `interactionType` `fill-in`
+(keyboard) or `choice` (on-screen A–D), with `choices` and
+`correctResponsesPattern` as the badge games send them;
+- an `assessed` statement: object = the learning-object IRI, the same
+extensions as the badge games, with `ext/game-kind = 'yalla-solo'`
+and a new `ext/input-channel = 'keyboard' | 'onscreen-choice'`.
+Badge-game statements should start sending `ext/input-channel = 'nfc-card'`
+too, so every answer records how it was given. Older statements without
+it read as `nfc-card`.
+- one `completed` statement per session (optional, for LRS dashboards).
 
 Actor = the linked `Player.externalId` (`buildActor`). Registration =
 `sessionId`. Statement IDs = UUID v5 of `{sessionId}:{attemptId}:answered|assessed`,
@@ -552,14 +568,14 @@ the LRS **synchronously** in that request (a batch of ≤ 20 attempts), so
 ### What changes from revision 1
 
 - ~~Leitner state in IndexedDB, rules moved into a shared package~~: the
-  server already derives Leitner state from the LRS. The client doesn't keep
-  its own copy (except as an offline cache in stage B), and the rules stay
-  in `server/src/learning/leitner.ts`.
-- ~~`object.id = {base}/learning-objects/{loId}`~~: use the existing
-  learning-object IRI, `{base}/lo/{language}/{kind}/{enc(word)}/{sense}`
-  (`learning-object.ts`).
+server already derives Leitner state from the LRS. The client doesn't keep
+its own copy (except as an offline cache in stage B), and the rules stay
+in `server/src/learning/leitner.ts`.
+- `object.id = {base}/learning-objects/{loId}`: use the existing
+learning-object IRI, `{base}/lo/{language}/{kind}/{enc(word)}/{sense}`
+(`learning-object.ts`).
 - Open question 1 (shared Leitner state between games and practice) is
-  answered by L23 above: shared, through the LRS.
+answered by L23 above: shared, through the LRS.
 
 ---
 
@@ -591,22 +607,22 @@ Unchanged from revision 1, briefly:
 | --- | --- | --- | --- |
 | **A.** Practise only when staging is up, or locally (phone on the LAN via Vite `--host`, or Tailscale) | No | Same as today | **Now** |
 | **B.** Offline-first PWA: cached app shell, chapter content and last-known tracks, plus the outbox | Partly: practise cached content, sync on next `apply` | Same as today | Later |
-| **C.** Persistent tier kept out of the destroyable stack: S3 + CloudFront client, Cognito, Lambda for the `/api/yalla/me/*` routes, SSM secret | Yes | ~$0–2 | Maybe |
+| **C.** Persistent tier kept out of the destroyable stack: S3 + CloudFront client, Cognito, Lambda for the `/api/yalla/me/`* routes, SSM secret | Yes | ~$0–2 | Maybe |
 
 Revision 2 notes for B and C:
 
 - **B:** with Leitner state on the server, offline practice can't plan
-  new sessions. Plan **ahead while online**: cache one or two sessions per
-  chapter, plus the last progress response, and answer them offline. A
-  cached session goes stale once its words are answered elsewhere. That's
-  acceptable: the next plan corrects it.
+new sessions. Plan **ahead while online**: cache one or two sessions per
+chapter, plus the last progress response, and answer them offline. A
+cached session goes stale once its words are answered elsewhere. That's
+acceptable: the next plan corrects it.
 - **C:** the Lambda needs the same pieces as the Express routes:
-  user ↔ player link (Mongo), content and the LRS. If Atlas is an
-  always-on M0, the Lambda can reuse the same repository code. If not, the
-  user ↔ player link is a few rows: move them to DynamoDB (on-demand,
-  effectively free). Cognito and Atlas are already outside Terraform
-  (see §4), so they need no move. Only the client hosting and the Lambda
-  would be new persistent pieces.
+user ↔ player link (Mongo), content and the LRS. If Atlas is an
+always-on M0, the Lambda can reuse the same repository code. If not, the
+user ↔ player link is a few rows: move them to DynamoDB (on-demand,
+effectively free). Cognito and Atlas are already outside Terraform
+(see §4), so they need no move. Only the client hosting and the Lambda
+would be new persistent pieces.
 
 ---
 
@@ -615,23 +631,35 @@ Revision 2 notes for B and C:
 ### Phase 0: decisions and checks
 
 - [x] **L23**: count `yalla-solo` in `countedGameKinds`. **Yes**
-      (2026-10-30). Recorded in `leitner-method.md`. (L20–L22 were
-      already taken, so revision 3's "L20" is now L23.)
+  ```
+  (2026-10-30). Recorded in `leitner-method.md`. (L20–L22 were
+  already taken, so revision 3's "L20" is now L23.)
+  ```
 - [x] **D14** (security.md): users link themselves to any player for
-      the prototype. **Yes** (2026-10-30). Recorded in `security.md`,
-      worded so it doesn't contradict D1 ("players never log in"): the
-      person who logs in is a `User` practising *as* a player. It has to be
-      revisited before children use YALLA.
+  ```
+  the prototype. **Yes** (2026-10-30). Recorded in `security.md`,
+  worded so it doesn't contradict D1 ("players never log in"): the
+  person who logs in is a `User` practising *as* a player. It has to be
+  revisited before children use YALLA.
+  ```
 - [x] Does `terraform destroy` delete the Cognito user pool? **No.** The
-      pool isn't managed by Terraform (§4), so `sub`s stay stable.
+  ```
+  pool isn't managed by Terraform (§4), so `sub`s stay stable.
+  ```
 - [x] Does `fetchStatements` follow LRS `more` links past 500? **Yes**,
-      up to 50k statements, then it throws. Accuracy and speed plan:
-      [§5 → Keeping Leitner levels accurate](#keeping-leitner-levels-accurate-as-history-grows).
+  ```
+  up to 50k statements, then it throws. Accuracy and speed plan:
+  [§5 → Keeping Leitner levels accurate](#keeping-leitner-levels-accurate-as-history-grows).
+  ```
 - [x] Is Atlas destroyed with the stack? **No.** It's outside Terraform, so
-      the `User` ↔ `Player` links survive. (Whether it's an always-on M0
-      only matters for stage C.)
+  ```
+  the `User` ↔ `Player` links survive. (Whether it's an always-on M0
+  only matters for stage C.)
+  ```
 - [x] Which LRS store do local dev and staging share? **The same store
-      (`dev`) for now** (2026-10-30), so there is one Leitner history.
+  ```
+  (`dev`) for now** (2026-10-30), so there is one Leitner history.
+  ```
 
 ### Phase 1 (stage A): YALLA in the emoji-app, as milestones
 
@@ -646,35 +674,45 @@ reads get slow.
 | Y1 | Shell and study pages | No | browse books, chapters, dialog, vocabulary, patterns |
 | Y2 | Identity | No | link your login to a player on the Profile page |
 | Y3 | Progress and pills | Read | see your badge-game levels as pills |
-| Y4 | Practice: on-screen multiple choice | Read + write | practise reading and writing with A–D, and see pills (and the next badge game) change |
+| Y4 | Practice: on-screen multiple choice | Read + write | practice reading and writing with A–D, and see pills (and the next badge game) change |
 | Y5 | Practice: keyboard input and switching | Read + write | type Korean (writing default) or English (reading option), and switch between typing and A–D |
 | Y6 | Evidence cache | Read | same as before, but fast with long histories |
 
 #### Y1: shell and study pages (no identity, no LRS) ✅ built 2026-10-30
 
 - [x] `requireAuth` attaches `req.auth` (`sub`); fixed `local-dev` identity
-      when `DISABLE_AUTH`. All `/api/yalla/*` routes use it, through the new
-      Nest `AuthGuard` (`server/src/auth.guard.ts`; both share
-      `authenticate()` in `auth.ts`).
+  ```
+  when `DISABLE_AUTH`. All `/api/yalla/*` routes use it, through the new
+  Nest `AuthGuard` (`server/src/auth.guard.ts`; both share
+  `authenticate()` in `auth.ts`).
+  ```
 - [x] Book catalogue (`server/src/learning/book-catalogue.ts`, which
-      `book-content.ts` now uses too, so there's one chapter list) +
-      `GET /api/yalla/books`, `GET /api/yalla/books/:book`,
-      `GET /api/yalla/books/:book/chapters/:chapter` (full chapter JSON +
-      LO ids on vocabulary) in `server/src/yalla/`.
+  ```
+  `book-content.ts` now uses too, so there's one chapter list) +
+  `GET /api/yalla/books`, `GET /api/yalla/books/:book`,
+  `GET /api/yalla/books/:book/chapters/:chapter` (full chapter JSON +
+  LO ids on vocabulary) in `server/src/yalla/`.
+  ```
 - [x] `canUseYalla()`; YALLA header link (desktop nav + mobile menu);
-      `<RequireYalla>` guard; view titles.
+  ```
+  `<RequireYalla>` guard; view titles.
+  ```
 - [x] YALLA layout: left sidebar (desktop), bottom tab bar (mobile).
 - [x] Books → book detail → chapter → dialog / vocabulary / patterns,
-      ported from `language-learning-app` to Radix/Tailwind
-      (`client/src/app/yalla/`). Exercises is a placeholder. Pills are not
-      shown yet.
+  ```
+  ported from `language-learning-app` to Radix/Tailwind
+  (`client/src/app/yalla/`). Exercises is a placeholder. Pills are not
+  shown yet.
+  ```
 - [x] Specs: 401 without a token, wrong app client, `DISABLE_AUTH`
-      ignored in production (`auth.guard.spec.ts`); content and controller
-      specs (`server/src/yalla/*.spec.ts`). Playwright
-      (`playwright/tests/yalla.ui.spec.ts`): header link, all five
-      chapters × four sections, tap to reveal, API. The signed-out
-      redirect isn't covered by e2e, because e2e always runs with auth
-      disabled. Check it by hand on staging after Y2.
+  ```
+  ignored in production (`auth.guard.spec.ts`); content and controller
+  specs (`server/src/yalla/*.spec.ts`). Playwright
+  (`playwright/tests/yalla.ui.spec.ts`): header link, all five
+  chapters × four sections, tap to reveal, API. The signed-out
+  redirect isn't covered by e2e, because e2e always runs with auth
+  disabled. Check it by hand on staging after Y2.
+  ```
 
 **Done when** you can study every chapter on desktop and phone, and
 YALLA is invisible when signed out.
@@ -687,116 +725,219 @@ keeping the token in `sessionStorage`.
 #### Y2: identity (user ↔ player) ✅ built 2026-10-30
 
 - [x] `User` upsert from `sub` (`server/src/persistence/user.repository.ts`);
-      `GET /api/me`; `User.playerId` (unique per player, partial index
-      `uniq_user_per_player`); `PUT /api/me/player` (link `{ playerId }`,
-      unlink `{ playerId: null }`, create `{ create: { firstName } }`;
-      400 / 404 / 409) in `server/src/me.controller.ts`;
-      `LearnerService.resolveLearner(req)` (403 `No linked player`) in
-      `server/src/learner.service.ts`. `/api/me` never returns the
-      `externalId`.
+  ```
+  `GET /api/me`; `User.playerId` (unique per player, partial index
+  `uniq_user_per_player`); `PUT /api/me/player` (link `{ playerId }`,
+  unlink `{ playerId: null }`, create `{ create: { firstName } }`;
+  400 / 404 / 409) in `server/src/me.controller.ts`;
+  `LearnerService.resolveLearner(req)` (403 `No linked player`) in
+  `server/src/learner.service.ts`. `/api/me` never returns the
+  `externalId`.
+  ```
 - [x] Profile page: "Practise as" card (pick, create, unlink). The Profile
-      link now also shows in local dev (auth off), where you're the
-      `local-dev` user. YALLA home shows "Practising as …" or "Link your
-      profile to a player".
+  ```
+  link now also shows in local dev (auth off), where you're the
+  `local-dev` user. YALLA home shows "Practising as …" or "Link your
+  profile to a player".
+  ```
 - [x] D14 recorded in `security.md` (done in Phase 0).
 - [x] Specs: learner always from the token, never the body (extra body
-      keys are rejected); 409 when another user has the player; dangling
-      link reads as unlinked (`learner.service.spec.ts`,
-      `me.controller.spec.ts`, `user.repository.spec.ts`). Playwright
-      `yalla-identity.spec.ts`: create + link, link existing + reload, API
-      validation.
+  ```
+  keys are rejected); 409 when another user has the player; dangling
+  link reads as unlinked (`learner.service.spec.ts`,
+  `me.controller.spec.ts`, `user.repository.spec.ts`). Playwright
+  `yalla-identity.spec.ts`: create + link, link existing + reload, API
+  validation.
+  ```
 - [x] Reload fix: the access token is kept in `sessionStorage` for the tab
-      (dropped once expired), so reloading `/yalla` or `/profile` no
-      longer signs you out (`client/src/app/auth/auth.store.ts`).
+  ```
+  (dropped once expired), so reloading `/yalla` or `/profile` no
+  longer signs you out (`client/src/app/auth/auth.store.ts`).
+  ```
 - [ ] *(Optional, not done)* replace `DEMO_CREATOR_ID` with the signed-in
-      user's id. Games still record the demo referee as creator.
+  ```
+  user's id. Games still record the demo referee as creator.
+  ```
 
 **Done when** the link survives signing out and back in. First
 `terraform apply`: check this with your real Cognito login on staging.
 Also check by hand that YALLA and Profile are hidden when signed out, and
 that a reload keeps you signed in (e2e runs with auth off, so it can't).
 
-#### Y3: progress and pills (read-only LRS)
+✅ **Checked on staging 2026-11-07** (image `staging-2026-11-07a`, v1.3.0):
+YALLA and Profile are hidden when signed out, create + link worked with a
+real Cognito login, and the link survives a reload and signing out and back
+in. Merged to `main`. (The first start failed because Atlas had paused the
+free cluster; resuming it fixed that. See `docs/terraform/workflow.md`.)
 
-- [ ] Factor `LearningProgressService` out of `getProgress`;
-      `GET /api/yalla/me/progress` and `/book` (one LRS read for the
-      whole book).
-- [ ] Pills (`TypeBadges` port): not-retired + due per aspect;
-      listening/speaking disabled; "–" without a link. Pill filter on the
-      vocabulary list; level dots per word; `pendingExport` banner.
-- [ ] Book detail shows per-chapter pills.
-- [ ] Specs: the YALLA progress endpoint and the existing player
-      progress endpoint return the same tracks for the same player.
+#### Y3: progress and pills (read-only LRS) ✅ built 2026-11-07
+
+- [x] `LearningProgressService` (`server/src/learning/learning-progress.service.ts`)
+  ```
+  holds the body of `getProgress`; `/api/players/:id/progress` and
+  `GET /api/yalla/me/progress` both call `forChapter`, so they can't
+  diverge. `GET /api/yalla/me/progress/book` (`forBook`) reads the LRS
+  once and builds chapter-scope progress per chapter. Both add
+  `byAspect` (`{ total, open, due, new, retired }` per aspect; `open` =
+  not retired). YALLA routes take the player from the token
+  (`yalla-progress.controller.ts`, 403 without a link) and reject a
+  `playerId` in the query.
+  ```
+- [x] Pills (`client/src/app/yalla/AspectPills.tsx`): Reading / Writing
+  ```
+  show `open · N due`; Listening / Speaking are disabled ("coming
+  later"); "–" without a link (plus the "Link your profile" prompt) or
+  when the LRS can't be read. Chapter header pills link to
+  `vocabulary?aspect=…`, which lists only the words not yet retired for
+  that aspect. Each word shows level dots per aspect (tick when
+  retired, amber letter when a review is due). `pendingExport` banner
+  on the chapter and book pages. Progress isn't cached on the client
+  and reloads when the linked player changes.
+  ```
+- [x] Book detail shows compact pills per chapter.
+- [x] Specs: `yalla-progress.controller.spec.ts` (YALLA and Players →
+  ```
+  detail return the same body for the same player; pill counts; one
+  LRS read for the book; 400/403/404/502/503). Playwright
+  `yalla-progress.spec.ts`: no link → "–"; seeded evidence → pills,
+  level dots, the filter, book pills, and the same tracks as
+  `/api/players/:id/progress`.
+  ```
+- [x] Staging can read the LRS: optional secret `emoji-app/staging/xapi-lrs`
+  ```
+  (JSON with `XAPI_LRS_ENDPOINT` / `_KEY` / `_SECRET`) wired through
+  `modules/ecs-service` behind `lrs_secret_enabled` (default false).
+  **To do by hand:** create the secret and flip the flag
+  (`docs/terraform/workflow.md` → Staging LRS). Uses the `dev` store,
+  as decided in Phase 0.
+  ```
 
 **Done when** the pills for your linked player match Players → detail
-for the same player (evidence from existing badge games).
+for the same player (evidence from existing badge games). Checked
+locally against the stub LRS (2026-11-07). The staging check is put off to
+the next deploy (with Y4), when the LRS secret goes in as well.
 
-#### Y4: practice, on-screen multiple choice (first LRS writes)
+#### Y4: practice, on-screen multiple choice (first LRS writes) ✅ built 2026-11-07
 
-- [ ] Add `yalla-solo` to
-      `countedGameKinds`.
-- [ ] Factor `LeitnerPlanner.plan` out of `createLeitnerGame`;
-      `POST /api/yalla/me/sessions`.
-- [ ] `POST /api/yalla/me/results`: server re-checks answers; `answered`
-      + `assessed` (+ `completed`) with `game-kind = yalla-solo`,
-      `input-channel = onscreen-choice`; UUID v5 statement ids. Add
-      `input-channel = nfc-card` to badge-game statements.
-- [ ] Client: session setup (chapter/review, aspects), practice card with
-      A–D options for **both** reading and writing (same slot labels as
-      the badge games; tap, click or press A–D/1–4), summary; outbox
-      (localStorage); flush before progress reads and plans.
-- [ ] Game format model in place (`{ reading: channel, writing: channel }`),
-      but only `onscreen-choice` is offered. Writing's `keyboard` default
-      takes effect in Y5.
-- [ ] Specs: idempotent statement ids (re-post = no duplicates), the fold
-      counts `yalla-solo`, a tampered `correct` flag is ignored.
+- [x] `yalla-solo` added to `countedGameKinds` (`leitner.ts`).
+- [x] `LeitnerPlanner.plan` (`learning/leitner-planner.ts`) factored out of
+  `createLeitnerGame`; badge games and `POST /api/yalla/me/sessions` share
+  it, including the 409s (pending export, game in play). Sessions get a
+  random seed and a UUID v4 `sessionId`; nothing is stored in Mongo, and
+  YALLA never deletes the student's unplayed badge games.
+- [x] `POST /api/yalla/me/results` (≤ 20 attempts): the server rebuilds the
+  prompt and the right answer from the content, accepts the options only
+  if exactly one of them is right, and ignores the client's `correct`.
+  `answered` + `assessed` with `game-kind = yalla-solo`,
+  `input-channel = onscreen-choice`, `game-id` = registration = sessionId
+  (so Players → activity lists sessions), UUID v5 ids from
+  `sessionId:attemptId`. Sent to the LRS before the 200.
+  **Changed from the plan:** badge-game statements don't get
+  `input-channel = nfc-card`. Adding a field changes already-exported
+  statements, so re-exporting a class game would hit the LRS's 409.
+  Missing still reads as `nfc-card`. The optional `completed` statement
+  is left out for now.
+- [x] Client (`sections/ExercisesSection.tsx`, `yalla-practice.ts`): setup
+  (scope, aspects, 5/10/20 questions), A–D card (tap, click, A–D or
+  1–4; Enter for Next), summary. Session saved in `localStorage` (a
+  refresh carries on); outbox in `localStorage`, flushed after each
+  answer, before planning and before every progress read; the pills
+  reload after the summary saves.
+- [x] Game format model (`{ reading, writing }`, defaults writing =
+  keyboard, reading = choice), but only `onscreen-choice` is offered, so
+  writing falls back to A–D until Y5.
+- [x] Specs: `yalla-practice.controller.spec.ts` (plan, 409/403,
+  evidence the fold counts, idempotent re-post, tampered flag and
+  options, time limits, 502/503); `leitner.spec.ts` counts `yalla-solo`;
+  Playwright `yalla-practice.spec.ts` (a 5-question session moves the
+  pills, the LRS gets 10 statements, the next badge plan has the missed
+  word as overdue and no right answer as new; re-post and tampering).
 
 **Done when** answering in YALLA moves your pills, and the next badge-game
-plan for the same player reflects it. Check this on staging too.
+plan for the same player reflects it. Checked locally against the stub
+LRS (2026-11-07); still to check on staging.
 
-#### Y5: practice, keyboard input and switching
+#### Y5: practice, keyboard input and switching ✅ built 2026-11-07
 
-- [ ] Shared answer checker: writing = NFC + whitespace, equal to the
-      `word`; reading = **exact** gloss (trim, whitespace, NFC only).
-      Unit tests with real Hangul IME input and with glosses that contain
-      commas.
-- [ ] `keyboard` channel for **writing (default)** and **reading
-      (option)**; `fill-in` interactions; `input-channel = keyboard`;
-      `lang="ko"` / `lang="en"` inputs, no autocorrect/autocapitalize;
-      differences shown after a wrong answer.
-- [ ] Defaults: writing = keyboard, reading = onscreen-choice. Session
-      setup per-aspect picker, in-session `Type` / `Choose` toggle
-      (before answering only), saved preference (`localStorage`, then
-      `User.preferences.yallaFormat`), "Reset to defaults".
-- [ ] Mobile pass: the keyboard doesn't cover the prompt; Enter submits.
-- [ ] Playwright: typed practice moves a track's level.
+- [x] Shared answer checker `answer-check.ts` (server `learning/`, client
+  `yalla/`; a spec fails if the two copies differ, since the builds share
+  no source folder): NFC, trim, collapse whitespace (full-width space
+  too); writing = the `word`, reading = the **whole** gloss exactly
+  (`test, exam`), case and punctuation count; empty = "Don't know" =
+  wrong. Tests with NFD (jamo-at-a-time) Hangul and comma glosses, plus a
+  character diff for the feedback.
+- [x] `keyboard` channel for writing and reading: `fill-in` interaction,
+  `correctResponsesPattern` = the expected text, `result.response` = the
+  text as typed, `input-channel = keyboard`. Typed prompts use the full
+  gloss (A–D writing keeps the first sense). Inputs: `lang="ko"` /
+  `lang="en"`, no autocomplete/autocorrect/autocapitalize/spellcheck;
+  Enter while the Korean IME is composing doesn't submit. After a miss,
+  "You typed" / "Answer" show the difference.
+- [x] Defaults writing = keyboard, reading = onscreen-choice. Setup has a
+  Type / A–D picker per skill and "Reset to defaults"; the card has the
+  same picker. Switching to A–D applies at once; switching to Type after
+  the options were shown applies from the next word of that skill (no
+  peeking). The choice is saved on the user (`User.preferences.yallaFormat`,
+  `PUT /api/me/preferences`, returned by `GET /api/me`) and in
+  `localStorage`. Sessions saved by Y4 still resume.
+- [x] Mobile pass (390 px screenshots): prompt and input in the top half,
+  so a phone keyboard doesn't cover them; the input scrolls into view on
+  focus; Enter / "done" submits.
+- [x] Playwright `yalla-practice.spec.ts` → typed session: right (with
+  stray spaces), wrong (diff shown), switched to A–D mid-word, "Don't
+  know"; statements are `keyboard` except the switched one; levels move;
+  the format is saved on the user.
 
 **Done when** you can do a full typed session on your phone (LAN or
-staging).
+staging). Checked at phone width locally; still to try on a real phone.
 
-#### Y6: evidence cache
+#### Y6: evidence cache ✅ built 2026-11-08
 
-- [ ] Per-player cache in `fetchStudentEvidence`: incremental `since`
-      reads, rebuild on start / every 24 h / "Recompute levels"; append on
-      posted results; `stored` on `LeitnerObservation`; raise `MAX_PAGES`
-      for rebuilds.
-- [ ] Specs as listed in §5 → *Keeping Leitner levels accurate*.
+- [x] Per-player cache inside `fetchStudentEvidence`
+  (`learning/student-evidence.ts`), so YALLA progress, sessions,
+  Players → detail and the badge-game planner all read through it.
+  In memory, keyed by LRS endpoint + `externalId`; one read at a time per
+  player. It keeps the raw `assessed` statements by id (not just
+  observations), so `statementCount` stays right and the language filter
+  and fold run on every read. `lastStored` comes from each statement's
+  `stored`, so `LeitnerObservation` didn't need a `stored` field.
+- [x] Full read on the first read after a server start, after 24 h, and
+  after "Recompute levels" (Profile → `POST /api/yalla/me/recompute`);
+  these drop voided statements. Otherwise one `since = lastStored − 5 s`
+  read, merged by id. If the LRS gives no `stored` times, every read is
+  full (correct, just slower). Rebuilds may page to 1,000 pages
+  (`fetchStatements(…, { maxPages })`); one-off reads keep 100.
+- [x] `POST /api/yalla/me/results` adds the `assessed` statements it just
+  sent, so the next read has them even if the LRS lags.
+- [x] The e2e stub LRS now sets `stored` on ingest (like a real LRS) and
+  logs statement GETs (`/control/requests`).
+- [x] Specs: `student-evidence.spec.ts` (incremental `since`, overlap
+  dedupe, late export with an old `timestamp`, 24 h and Recompute drop a
+  voided statement, sent statements without an LRS read, cache = full read,
+  no `stored` → full reads); Playwright `yalla-evidence-cache.spec.ts`
+  (first view = 1 full read, next = 1 `since` read, late export counted,
+  Recompute = full read with the same tracks, Players → detail agrees).
+- Not done: the `409 { pendingOutbox }` idea from §5. The client already
+  sends its outbox before every progress read and plan.
 
 **Done when** progress views make ~1 LRS request, and results from the
-cache match a full read. History is small today, so Y6 can wait until
-after Y5. Move it earlier if progress views get slow.
+cache match a full read. Both checked locally (2026-11-08).
 
 ### Phase 2 (stage B): installable, offline
 
 - [ ] `vite-plugin-pwa`; cache app shell, chapter content, last progress
-      and pre-planned sessions.
+  ```
+  and pre-planned sessions.
+  ```
 - [ ] Offline practice with an expired token; sign in again only to sync.
 - [ ] "N answers waiting to sync" indicator.
 
 ### Phase 3 (stage C, only if needed): always available
 
 - [ ] Split Terraform into `persistent/` and `staging/`; Cognito,
-      S3 + CloudFront, Lambda for `/api/yalla/me/*`, SSM secret.
+  ```
+  S3 + CloudFront, Lambda for `/api/yalla/me/*`, SSM secret.
+  ```
 - [ ] User ↔ player links in an always-on store (M0 or DynamoDB).
 
 ---
@@ -804,19 +945,24 @@ after Y5. Move it earlier if progress views get slow.
 ## Open questions
 
 1. ~~Should typed reading be offered?~~ **Decided (2026-10-30):** yes, as
+
    an option. Reading defaults to multiple choice, and a typed answer
-   must match the English answer exactly. Still open: is exact matching
-   too strict for glosses like `test, exam`? Revisit after using Y5.
+    must match the English answer exactly. Still open: is exact matching
+    too strict for glosses like `test, exam`? Revisit after using Y5.
 2. Should typed answers count as **stronger evidence** than multiple choice
+
    (e.g. a correct typed answer skips a level)? v1 says no.
 3. Should a user be able to link to a player that a **referee** also uses in
+
    badge games? That's the point of sharing tracks, but it means the user
-   sees that player's history. That's fine for a pilot of one, but not for a
-   class.
+    sees that player's history. That's fine for a pilot of one, but not for a
+    class.
 4. Do dialog lines and pattern sentences need learning objects (and pills)
+
    soon, or is vocabulary enough for the pilot?
 5. ~~Game formats beyond YALLA~~ **Decided (2026-10-30):** yes, as a
+
    future improvement after Phase 1. Badge games become a format
-   (`nfc-card`), and one "create a game" flow picks the input per aspect.
-   See [`future-game-formats.md`](./future-game-formats.md). It's on the
-   roadmap in `../server/milestones.md` → *Feature roadmap: learning*.
+    (`nfc-card`), and one "create a game" flow picks the input per aspect.
+    See [`future-game-formats.md`](./future-game-formats.md). It's on the
+    roadmap in `../server/milestones.md` → *Feature roadmap: learning*.

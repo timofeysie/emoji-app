@@ -10,7 +10,7 @@ const PLAYER = {
   externalId: '7f3a2c1e-0000-4000-8000-000000000000',
   label: 'Player 7F3A',
 };
-const USER = { id: '507f1f77bcf86cd7994390cc', displayName: 'timo', playerId: PLAYER.id };
+const USER = { id: '507f1f77bcf86cd7994390cc', displayName: 'timo', playerId: PLAYER.id, yallaFormat: null };
 
 function request(auth?: { sub: string; username: string }): AuthedRequest {
   return { auth } as AuthedRequest;
@@ -60,6 +60,7 @@ describe('LearnerService', () => {
     expect(me).toEqual({
       user: { id: USER.id, displayName: 'timo' },
       player: { id: PLAYER.id, firstName: 'Timo', label: 'Player 7F3A' },
+      preferences: { yallaFormat: null },
     });
   });
 

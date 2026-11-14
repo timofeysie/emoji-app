@@ -26,7 +26,10 @@ export type LeitnerConfig = {
   graceHours: number;
   /** L3: `demote` drops one level; `reset` goes back to 0. */
   onIncorrect: 'demote' | 'reset';
-  /** `ext/game-kind` values whose answers count (class games don't, v1). */
+  /**
+   * `ext/game-kind` values whose answers count (class games don't, v1).
+   * YALLA practice shares the badge games' schedule (L23).
+   */
   countedGameKinds: readonly string[];
 };
 
@@ -34,7 +37,7 @@ export const DEFAULT_LEITNER_CONFIG: LeitnerConfig = {
   intervalDays: { 1: 1, 2: 3, 3: 7 },
   graceHours: 4,
   onIncorrect: 'demote',
-  countedGameKinds: ['leitner-solo'],
+  countedGameKinds: ['leitner-solo', 'yalla-solo'],
 };
 
 /** One observation on one track, taken from an `assessed` statement. */

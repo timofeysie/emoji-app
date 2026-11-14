@@ -74,6 +74,7 @@ module "iam_ecs" {
   managed_secret_names = [
     "mongodb-uri",
     "openai-api-key",
+    "xapi-lrs",
   ]
 }
 
@@ -87,6 +88,11 @@ data "aws_secretsmanager_secret" "mongodb_uri" {
 data "aws_secretsmanager_secret" "openai_api_key" {
   count = var.openai_secret_enabled ? 1 : 0
   name  = "emoji-app/${var.environment}/openai-api-key"
+}
+
+data "aws_secretsmanager_secret" "xapi_lrs" {
+  count = var.lrs_secret_enabled ? 1 : 0
+  name  = "emoji-app/${var.environment}/xapi-lrs"
 }
 
 module "ecs_service" {
@@ -105,6 +111,7 @@ module "ecs_service" {
 
   mongodb_uri_secret_arn    = data.aws_secretsmanager_secret.mongodb_uri.arn
   openai_api_key_secret_arn = var.openai_secret_enabled ? data.aws_secretsmanager_secret.openai_api_key[0].arn : null
+  xapi_lrs_secret_arn       = var.lrs_secret_enabled ? data.aws_secretsmanager_secret.xapi_lrs[0].arn : null
 
   cognito_user_pool_id  = var.cognito_user_pool_id
   cognito_app_client_id = var.cognito_app_client_id

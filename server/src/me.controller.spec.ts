@@ -16,19 +16,19 @@ function createResponseMock(): ResponseMock {
   return response;
 }
 
-const USER = { id: '507f1f77bcf86cd7994390cc', displayName: 'timo', playerId: null };
+const USER = { id: '507f1f77bcf86cd7994390cc', displayName: 'timo', playerId: null, yallaFormat: null };
 const PLAYER = {
   id: '507f1f77bcf86cd7994390aa',
   firstName: 'Timo',
   externalId: '7f3a2c1e-0000-4000-8000-000000000000',
   label: 'Player 7F3A',
 };
-const ME = { user: { id: USER.id, displayName: 'timo' }, player: null };
+const ME = { user: { id: USER.id, displayName: 'timo' }, player: null, preferences: { yallaFormat: null } };
 const req = { auth: { sub: 'sub-1', username: 'timo' } } as AuthedRequest;
 
 describe('MeController', () => {
   const learner = { me: jest.fn() };
-  const users = { setPlayer: jest.fn() };
+  const users = { setPlayer: jest.fn(), setYallaFormat: jest.fn() };
   const players = { getPlayer: jest.fn(), createPlayer: jest.fn() };
   const controller = new MeController(
     learner as unknown as LearnerService,
@@ -108,5 +108,28 @@ describe('MeController', () => {
     await controller.setPlayer(req, { playerId: PLAYER.id }, res as unknown as Response);
 
     expect(res.status).toHaveBeenCalledWith(409);
+  });
+
+  it('saves the YALLA format for the signed-in user, or resets it with null', async () => {
+    const format = { reading: 'keyboard', writing: 'keyboard' };
+    const res = createResponseMock();
+    await controller.setPreferences(req, { yallaFormat: format }, res as unknown as Response);
+    expect(users.setYallaFormat).toHaveBeenCalledWith(USER.id, format);
+    expect(res.status).toHaveBeenCalledWith(200);
+
+    await controller.setPreferences(req, { yallaFormat: null }, createResponseMock() as unknown as Response);
+    expect(users.setYallaFormat).toHaveBeenLastCalledWith(USER.id, null);
+  });
+
+  it.each([
+    ['an unknown channel', { yallaFormat: { reading: 'voice', writing: 'keyboard' } }],
+    ['a missing aspect', { yallaFormat: { reading: 'keyboard' } }],
+    ['an unknown field', { yallaFormat: null, theme: 'dark' }],
+  ])('rejects preferences with %s', async (_label, body) => {
+    users.setYallaFormat.mockClear();
+    const res = createResponseMock();
+    await controller.setPreferences(req, body, res as unknown as Response);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(users.setYallaFormat).not.toHaveBeenCalled();
   });
 });

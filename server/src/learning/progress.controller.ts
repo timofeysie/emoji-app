@@ -4,22 +4,17 @@ import { z, ZodError } from 'zod';
 import { PlayerRepository } from '../persistence/player.repository';
 import { GameDataRepository } from '../persistence/game-data.repository';
 import { loadLrsConfigFromEnv, LrsRequestError, type LrsConfig } from '../xapi/lrs-client';
-import {
-  chapterLearningObjects,
-  getBookContent,
-  UnknownBookError,
-  UnknownChapterError,
-  UnregisteredSensesError,
-} from './book-content';
-import { buildProgress, DEFAULT_LEITNER_CONFIG, foldTracks } from './leitner';
-import { fetchStudentEvidence, fetchStudentStatements } from './student-evidence';
+import { getBookContent, UnknownBookError } from './book-content';
+import { LearningProgressService, sendProgressError } from './learning-progress.service';
+import { fetchStudentStatements } from './student-evidence';
 import { summarizePlayerActivity } from './player-activity';
 import { KOREAN_BOOK } from './learning-object';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 const slugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 
-const progressQuerySchema = z
+/** Shared with YALLA's `/api/yalla/me/progress` (same query, learner from the token). */
+export const progressQuerySchema = z
   .object({
     book: slugSchema.default(KOREAN_BOOK),
     chapter: z.string().regex(/^\d+$/, 'must be a chapter number'),
@@ -41,7 +36,7 @@ const activityQuerySchema = z
   })
   .strict();
 
-function getValidationErrors(error: ZodError): Array<{ path: string; message: string }> {
+export function getValidationErrors(error: ZodError): Array<{ path: string; message: string }> {
   return error.issues.map((issue) => ({
     path: issue.path.join('.') || 'root',
     message: issue.message,
@@ -59,6 +54,7 @@ export class LearningProgressController {
   constructor(
     private readonly playerRepository: PlayerRepository,
     private readonly gameDataRepository: GameDataRepository,
+    private readonly progressService: LearningProgressService,
   ) {}
 
   /** The chapters a Leitner game can be planned from (the referee's chapter picker). */
@@ -101,80 +97,22 @@ export class LearningProgressController {
     }
     const { book, chapter, scope, aspects, now: nowParam } = queryResult.data;
 
-    let objects;
-    let content;
-    try {
-      content = getBookContent(book);
-      objects = chapterLearningObjects(content, chapter);
-    } catch (error) {
-      if (error instanceof UnknownBookError || error instanceof UnknownChapterError) {
-        res.status(404).json({ error: error.message });
-        return;
-      }
-      if (error instanceof UnregisteredSensesError) {
-        res.status(422).json({ error: error.message, sourceRefs: error.sourceRefs });
-        return;
-      }
-      throw error;
-    }
-
-    let config: LrsConfig;
-    try {
-      config = loadLrsConfigFromEnv();
-    } catch (error) {
-      res.status(503).json({ error: error instanceof Error ? error.message : String(error) });
-      return;
-    }
-
     try {
       const player = await this.playerRepository.getPlayer(playerId);
       if (!player) {
         res.status(404).json({ error: 'Player not found' });
         return;
       }
-
-      const { statements, observations } = await fetchStudentEvidence(config, player.externalId, content.language);
-      const pendingExport = (await this.gameDataRepository.listLeitnerGamesForPlayer(playerId))
-        .filter((game) => game.state === 'completed')
-        .map((game) => ({ gameId: game.id, endedAt: game.endedAt, error: game.exportError }));
-      const now = nowParam ? new Date(nowParam) : new Date();
-      const { tracks, summary } = buildProgress({
-        chapterObjectIds: objects.map((object) => object.id),
-        aspects,
-        tracks: foldTracks(observations, DEFAULT_LEITNER_CONFIG),
-        scope,
-        now,
-      });
-
-      const glossById = new Map(objects.map((object) => [object.id, object.gloss]));
-      res.status(200).json({
-        player: { id: player.id, label: player.label },
+      const progress = await this.progressService.forChapter(player, {
         book,
         chapter,
         scope,
         aspects,
-        asOf: now.toISOString(),
-        statementCount: statements.length,
-        observationCount: observations.length,
-        // Completed Leitner games whose evidence isn't in the LRS yet: levels may be stale.
-        pendingExport,
-        summary,
-        tracks: tracks.map((track) => {
-          const sense = content.senseById.get(track.learningObjectId);
-          return {
-            ...track,
-            kind: sense?.kind ?? null,
-            word: sense?.word ?? null,
-            gloss: glossById.get(track.learningObjectId) ?? sense?.gloss ?? null,
-          };
-        }),
+        now: nowParam ? new Date(nowParam) : new Date(),
       });
+      res.status(200).json({ player: { id: player.id, label: player.label }, ...progress });
     } catch (error) {
-      if (error instanceof LrsRequestError) {
-        res.status(502).json({ error: 'The LRS request failed', status: error.status });
-        return;
-      }
-      res.status(500).json({ error: 'Failed to load progress', message: String(error) });
+      sendProgressError(res, error);
     }
   }
 

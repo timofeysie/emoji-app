@@ -23,9 +23,14 @@ Staging: <https://emoji-staging.kogs.link>
 cd ~/repos/timo/lumpy-space/emoji-app       # repo root
 open -a Docker                               # Docker Desktop must be running
 aws sts get-caller-identity                  # are AWS credentials still valid?
+dig +short SRV _mongodb._tcp.emojicluster.r87poqo.mongodb.net   # is Atlas awake?
 ```
 
 If `aws sts` fails, log in again (`aws sso login` or refresh your keys).
+
+If `dig` prints nothing, Atlas has paused the free cluster after a quiet
+spell. Open cloud.mongodb.com → **EmojiCluster** → **Resume**, and wait until
+it shows active. Otherwise the server can't start (see Gotchas).
 
 ## 1. Build and push an image
 
@@ -67,7 +72,7 @@ staging-2026-11-07a: digest: sha256:7d936c946374ae39008eade50d7f1545b861456c4019
 ```zsh
 sed -i '' "s|^image_uri = \".*\"|image_uri = \"$registry/emoji-app:$tag\"|" \
   infra/terraform/envs/staging/terraform.tfvars
-grep image_uri infra/terraform/envs/staging/terraform.tfvars   # check it
+grep -E 'image_uri|_enabled' infra/terraform/envs/staging/terraform.tfvars   # check the image and the secret flags
 ```
 
 The output from the grep command looks like this:
@@ -131,6 +136,29 @@ Open a PR `develop → main` on GitHub. The **Terraform (staging)** workflow pos
 plan comment, which should show **no changes** because you already applied. Merge it.
 CI then runs `terraform apply`, which also does nothing.
 
+## Staging LRS (one-off)
+
+Staging reads the LRS (Players → detail, YALLA progress, xAPI export) from
+one Secrets Manager secret, `emoji-app/staging/xapi-lrs`. Staging and local
+dev share the Veracity `dev` store, so build the secret from your `.env`
+(nothing is printed):
+
+```zsh
+source <(grep '^XAPI_LRS_' .env)
+aws secretsmanager create-secret --region ap-southeast-2 \
+  --name emoji-app/staging/xapi-lrs \
+  --secret-string "$(jq -n --arg e "$XAPI_LRS_ENDPOINT" --arg k "$XAPI_LRS_KEY" --arg s "$XAPI_LRS_SECRET" \
+    '{XAPI_LRS_ENDPOINT:$e, XAPI_LRS_KEY:$k, XAPI_LRS_SECRET:$s}')" \
+  --query Name
+```
+
+Then set `lrs_secret_enabled = true` in
+`infra/terraform/envs/staging/terraform.tfvars` and apply (step 3). The plan
+shows a new task definition with three more `secrets` entries.
+
+To change the values later, use `put-secret-value` with the same
+`--secret-string`, then restart the service (see Gotchas).
+
 ## Save money when you're done
 
 ```zsh
@@ -153,4 +181,6 @@ user ids and data survive a destroy.
 | `apply` says no changes but the old code is live | `image_uri` wasn't updated (step 2). |
 | Sign-in redirects fail | Cognito app client callback must include `https://emoji-staging.kogs.link/auth/callback` (see `docs/auth.md`). |
 | `terraform init` complains about the backend | Credentials expired. Run `aws sts get-caller-identity` and log in again. |
-| LRS features (player progress, Leitner export) fail on staging | The task definition doesn't set `XAPI_LRS_ENDPOINT`, `XAPI_LRS_KEY` or `XAPI_LRS_SECRET` yet. Y2 doesn't need them; YALLA Y3 will. |
+| LRS features (pills, player progress, Leitner export) say "The LRS is not configured" | `lrs_secret_enabled` is false or the secret is missing. See **Staging LRS** above. |
+| 503 from the site for minutes; ECS events say `tasks failed to start`; log shows `querySrv ENOTFOUND _mongodb._tcp.emojicluster…` | Atlas paused the free cluster. Resume it in Atlas, then restart: `aws ecs update-service --cluster emoji-staging-cluster --service emoji-staging-service --force-new-deployment --region ap-southeast-2`. |
+| Need to see why a task stopped | `aws logs tail /ecs/emoji-staging-task --since 30m --region ap-southeast-2` |
