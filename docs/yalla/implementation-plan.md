@@ -498,10 +498,13 @@ Accept-lists (`acceptedAnswers` in the sense registry) can be added
 later for real variants.
 - **reading** (English): **exact** match to the learning object's English
 answer, as you specified. Only invisible differences are ignored: trim,
-collapse whitespace, NFC. Case and punctuation inside the answer must
-match. Glosses such as `test, exam` must then be typed in full, so this
-is strict on purpose. If it turns out too strict, an accepted-answers
+collapse whitespace, NFC. Case inside the answer must match. Glosses
+such as `test, exam` must then be typed in full, so this is strict on
+purpose. If it turns out too strict, an accepted-answers
 list can be added per sense without changing the format.
+- **Punctuation and symbols** (brackets, commas, `!`, `~`, …) are ignored
+for scoring in both, so `돈을 모으다` counts for `(돈을) 모으다`. The
+feedback still shows the character diff, marked as accepted.
 - **"Don't know / reveal"** counts as **incorrect** in both.
 - **Inputs:** `autocapitalize="off" autocorrect="off" spellcheck="false"`;
 `lang="ko"` for writing so mobile keyboards switch to Korean, and

@@ -13,7 +13,8 @@ export type TypedAspect = 'reading' | 'writing';
 /**
  * Only invisible differences are ignored: Unicode NFC (so jamo typed one
  * at a time match the composed syllable), outer whitespace, and runs of
- * inner whitespace. Case and punctuation still count.
+ * inner whitespace. Case and punctuation still count here; see
+ * `isTypedCorrect` for what scoring forgives.
  */
 export function normalizeTyped(text: string): string {
   return text.normalize('NFC').trim().replace(/\s+/gu, ' ');
@@ -28,17 +29,35 @@ export function typedItem(aspect: TypedAspect, word: string, gloss: string): { p
   return aspect === 'writing' ? { prompt: gloss, answer: word } : { prompt: word, answer: gloss };
 }
 
-/** An empty answer ("Don't know") is wrong. */
+/**
+ * What scoring compares: `normalizeTyped` with punctuation and symbols
+ * (brackets, commas, full stops, `~`, …) dropped, so `돈을 모으다` scores
+ * for `(돈을) 모으다`. Letters, spaces between words, and case still count.
+ */
+export function normalizeForScoring(text: string): string {
+  return normalizeTyped(text.normalize('NFC').replace(/[\p{P}\p{S}]/gu, ''));
+}
+
+/**
+ * Right, ignoring punctuation and symbols (see `normalizeForScoring`).
+ * An empty answer ("Don't know") is wrong.
+ */
 export function isTypedCorrect(typed: string, answer: string): boolean {
-  const given = normalizeTyped(typed);
-  return given.length > 0 && given === normalizeTyped(answer);
+  const given = normalizeForScoring(typed);
+  return given.length > 0 && given === normalizeForScoring(answer);
+}
+
+/** Typed exactly as the answer, punctuation and all (only invisible differences ignored). */
+export function isTypedExact(typed: string, answer: string): boolean {
+  return normalizeTyped(typed) === normalizeTyped(answer);
 }
 
 export type DiffPart = { text: string; kind: 'same' | 'missing' | 'extra' };
 
 /**
- * Where a wrong answer differs from the right one, character by character
- * (longest common subsequence), for the feedback after a miss: `missing`
+ * Where a typed answer differs from the right one, character by character
+ * (longest common subsequence), for the feedback after a miss or a
+ * punctuation-only difference: `missing`
  * is in the answer but wasn't typed, `extra` was typed but isn't in it.
  */
 export function diffTyped(typed: string, answer: string): DiffPart[] {

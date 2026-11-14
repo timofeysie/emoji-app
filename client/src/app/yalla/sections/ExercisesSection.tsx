@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Fo
 import { Link } from 'react-router-dom';
 import { Button } from '../../shared/button';
 import { cn } from '../../shared/utils';
-import { diffTyped, isTypedCorrect, typedItem } from '../answer-check';
+import { diffTyped, isTypedCorrect, isTypedExact, typedItem } from '../answer-check';
 import { aspectLabel } from '../AspectPills';
 import { useMeStore } from '../me.store';
 import { PractisingAs } from '../PractisingAs';
@@ -490,14 +490,21 @@ function PracticeCard({
 
       {answer && (
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="practice-feedback">
-          <p className={cn('flex items-center gap-1 text-sm font-medium', answer.correct ? 'text-emerald-700' : 'text-destructive')}>
-            {answer.correct ? <Check className="h-4 w-4" aria-hidden /> : <X className="h-4 w-4" aria-hidden />}
-            {answer.correct ? 'Correct' : 'Not quite'}
-            <span className="font-normal text-muted-foreground">
-              {' '}
-              · <span lang={lang}>{item.word}</span> = {item.gloss}
-            </span>
-          </p>
+          {answer.response.trim() === '' ? (
+            // "Don't know": still scored wrong, but there was no attempt to call "not quite".
+            <p className="text-sm text-muted-foreground">
+              <span lang={lang}>{item.word}</span> = {item.gloss}
+            </p>
+          ) : (
+            <p className={cn('flex items-center gap-1 text-sm font-medium', answer.correct ? 'text-emerald-700' : 'text-destructive')}>
+              {answer.correct ? <Check className="h-4 w-4" aria-hidden /> : <X className="h-4 w-4" aria-hidden />}
+              {answer.correct ? 'Correct' : 'Not quite'}
+              <span className="font-normal text-muted-foreground">
+                {' '}
+                · <span lang={lang}>{item.word}</span> = {item.gloss}
+              </span>
+            </p>
+          )}
           <Button onClick={next} data-testid="practice-next" autoFocus>
             {last ? 'See results' : 'Next'}
           </Button>
@@ -507,7 +514,7 @@ function PracticeCard({
   );
 }
 
-/** Type the answer; Enter (not mid-composition) checks it. After a miss, shows where it differs. */
+/** Type the answer; Enter (not mid-composition) checks it. After a miss (or a punctuation-only difference), shows where it differs. */
 function TypedAnswer({
   aspect,
   prompt,
@@ -545,7 +552,9 @@ function TypedAnswer({
         {prompt}
       </p>
       {answered ? (
-        !answered.correct && <TypedDiff typed={answered.response} expected={expected} lang={answerLang} />
+        !isTypedExact(answered.response, expected) && (
+          <TypedDiff typed={answered.response} expected={expected} lang={answerLang} accepted={answered.correct} />
+        )
       ) : (
         <>
           <input
@@ -583,10 +592,26 @@ function TypedAnswer({
   );
 }
 
-function TypedDiff({ typed, expected, lang }: { typed: string; expected: string; lang: string }) {
+function TypedDiff({
+  typed,
+  expected,
+  lang,
+  accepted,
+}: {
+  typed: string;
+  expected: string;
+  lang: string;
+  /** Scored correct though the punctuation differs. */
+  accepted: boolean;
+}) {
   const parts = diffTyped(typed, expected);
   return (
     <div className="flex flex-col gap-1 rounded-md border bg-muted/40 px-3 py-2 text-sm" data-testid="practice-diff">
+      {accepted && (
+        <p className="text-xs text-muted-foreground" data-testid="practice-diff-accepted">
+          Counted as correct: only punctuation differs.
+        </p>
+      )}
       {typed.trim() && (
         <p>
           <span className="text-muted-foreground">You typed: </span>
