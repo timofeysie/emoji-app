@@ -3,7 +3,12 @@ import { Link } from 'react-router-dom';
 import { cn } from '../shared/utils';
 import type { AspectCounts, Level, PendingExport, ProgressTrack } from './yalla-progress';
 
-type AspectInfo = { aspect: string; label: string; icon: LucideIcon; enabled: boolean };
+type AspectInfo = {
+  aspect: string;
+  label: string;
+  icon: LucideIcon;
+  enabled: boolean;
+};
 
 /** The four language-learning-app pills, in their old order. Listening and speaking have no evidence yet. */
 export const ASPECTS: readonly AspectInfo[] = [
@@ -27,22 +32,31 @@ type AspectPillsProps = {
   /** The pill shown as selected. */
   selected?: string | null;
   compact?: boolean;
+  /** Only these aspects get a pill (e.g. the ones a running practice session covers). Default: every enabled one. */
+  aspects?: readonly string[] | null;
 };
 
 /**
  * Reading / writing / listening / speaking pills (docs/yalla/implementation-plan.md §5):
  * words still to learn (not retired) and how many of them are due now.
  */
-export function AspectPills({ counts, emptyReason, hrefFor, selected = null, compact = false }: AspectPillsProps) {
+export function AspectPills({
+  counts,
+  emptyReason,
+  hrefFor,
+  selected = null,
+  compact = false,
+  aspects = null,
+}: AspectPillsProps) {
+  // Aspects that are not practised yet (listening, speaking) get no pill at all.
+  const shown = ASPECTS.filter(({ aspect, enabled }) => enabled && (!aspects || aspects.includes(aspect)));
   return (
     <ul className="flex flex-wrap gap-2" aria-label="Progress by skill">
-      {ASPECTS.map(({ aspect, label, icon: Icon, enabled }) => {
-        const count = enabled ? counts?.[aspect] : undefined;
-        const title = !enabled
-          ? `${label}: coming later`
-          : count
-            ? `${label}: ${count.open} of ${count.total} words still to learn, ${count.due} due now`
-            : `${label}: ${emptyReason ?? 'no progress yet'}`;
+      {shown.map(({ aspect, label, icon: Icon }) => {
+        const count = counts?.[aspect];
+        const title = count
+          ? `${label}: ${count.open} of ${count.total} words still to learn, ${count.due} due now`
+          : `${label}: ${emptyReason ?? 'no progress yet'}`;
         const body = (
           <>
             <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -59,17 +73,16 @@ export function AspectPills({ counts, emptyReason, hrefFor, selected = null, com
         );
         const className = cn(
           'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs',
-          !enabled && 'cursor-not-allowed opacity-50',
           selected === aspect && 'border-primary bg-primary/10 text-primary',
         );
         return (
           <li key={aspect} data-testid={`pill-${aspect}`}>
-            {enabled && count && hrefFor ? (
+            {count && hrefFor ? (
               <Link to={hrefFor(aspect)} title={title} className={cn(className, 'hover:bg-accent')}>
                 {body}
               </Link>
             ) : (
-              <span title={title} aria-disabled={!enabled || undefined} className={className}>
+              <span title={title} className={className}>
                 {body}
               </span>
             )}
@@ -98,7 +111,9 @@ export function LevelDots({ track }: { track: ProgressTrack }) {
       data-level={track.status === 'retired' ? 'retired' : track.level}
     >
       {/* Amber marks a review that's due; new words are always due, so they stay plain. */}
-      <span className={cn('font-semibold', track.status === 'active' && track.due && 'text-amber-600')}>{label[0]}</span>
+      <span className={cn('font-semibold', track.status === 'active' && track.due && 'text-amber-600')}>
+        {label[0]}
+      </span>
       {track.status === 'retired' ? (
         <Check className="h-3 w-3 text-emerald-600" aria-hidden />
       ) : (

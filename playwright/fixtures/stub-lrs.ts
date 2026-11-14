@@ -127,6 +127,16 @@ export class StubLrs {
     if (!response.ok()) throw new Error(`Seeding the stub LRS failed: ${response.status()}`);
   }
 
+  /** Statement GETs since `clearRequestLog`, as query strings (`?agent=…&since=…`). */
+  async statementReads(): Promise<URLSearchParams[]> {
+    const body = (await (await this.request.get(`${STUB_LRS_URL}/control/requests`)).json()) as { gets: string[] };
+    return body.gets.map((search) => new URLSearchParams(search));
+  }
+
+  async clearRequestLog(): Promise<void> {
+    await this.request.delete(`${STUB_LRS_URL}/control/requests`);
+  }
+
   async allStatements(): Promise<StubStatement[]> {
     const response = await this.request.get(`${STUB_LRS_URL}/xapi/statements`);
     const body = (await response.json()) as { statements: StubStatement[] };

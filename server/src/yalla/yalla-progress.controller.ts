@@ -1,10 +1,12 @@
-import { Controller, Get, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import type { AuthedRequest } from '../auth';
 import { AuthGuard } from '../auth.guard';
 import { LearnerService } from '../learner.service';
 import { LearningProgressService, sendProgressError } from '../learning/learning-progress.service';
 import { getValidationErrors, progressQuerySchema } from '../learning/progress.controller';
+import { invalidateStudentEvidence } from '../learning/student-evidence';
+import { loadLrsConfigFromEnv } from '../xapi/lrs-client';
 
 const bookQuerySchema = progressQuerySchema.omit({ chapter: true, scope: true });
 
@@ -54,5 +56,21 @@ export class YallaProgressController {
     } catch (error) {
       sendProgressError(res, error);
     }
+  }
+
+  /**
+   * "Recompute levels" (Profile): the next progress read or plan rebuilds
+   * the linked player's history from the LRS, dropping voided statements.
+   */
+  @Post('recompute')
+  async recompute(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
+    const { player } = await this.learnerService.resolveLearner(req);
+    try {
+      invalidateStudentEvidence(loadLrsConfigFromEnv(), player.externalId);
+    } catch (error) {
+      res.status(503).json({ error: error instanceof Error ? error.message : String(error) });
+      return;
+    }
+    res.status(204).end();
   }
 }

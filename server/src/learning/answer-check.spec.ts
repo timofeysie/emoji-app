@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { diffTyped, isTypedCorrect, normalizeTyped, typedItem } from './answer-check';
+import { diffTyped, isTypedCorrect, isTypedExact, normalizeTyped, typedItem } from './answer-check';
 
 describe('answer-check', () => {
   it('matches Hangul typed as separate jamo (NFD, as some IMEs send it) to the composed word', () => {
@@ -20,11 +20,31 @@ describe('answer-check', () => {
     expect(isTypedCorrect('보여주다', '보여 주다')).toBe(false);
   });
 
-  it('reading needs the whole gloss exactly, commas, case and all', () => {
+  it('reading needs the whole gloss, case and word spacing included', () => {
     expect(isTypedCorrect('test, exam', 'test, exam')).toBe(true);
     expect(isTypedCorrect('test', 'test, exam')).toBe(false);
     expect(isTypedCorrect('test,exam', 'test, exam')).toBe(false);
     expect(isTypedCorrect('Test, exam', 'test, exam')).toBe(false);
+  });
+
+  it('scores answers that differ only in brackets and other punctuation as correct', () => {
+    expect(isTypedCorrect('돈을 모으다', '(돈을) 모으다')).toBe(true);
+    expect(isTypedCorrect('to save up money', 'to save up (money)')).toBe(true);
+    expect(isTypedCorrect('test exam', 'test, exam')).toBe(true);
+    expect(isTypedCorrect('안녕하세요', '안녕하세요!')).toBe(true);
+    expect(isTypedCorrect('모으다', '(돈을) 모으다')).toBe(false);
+    expect(isTypedCorrect('()', '(돈을) 모으다')).toBe(false);
+  });
+
+  it('tells an exact answer from one accepted despite punctuation', () => {
+    expect(isTypedExact(' 보여   주다', '보여 주다')).toBe(true);
+    expect(isTypedExact('돈을 모으다', '(돈을) 모으다')).toBe(false);
+    expect(diffTyped('돈을 모으다', '(돈을) 모으다')).toEqual([
+      { text: '(', kind: 'missing' },
+      { text: '돈을', kind: 'same' },
+      { text: ')', kind: 'missing' },
+      { text: ' 모으다', kind: 'same' },
+    ]);
   });
 
   it('counts an empty answer ("Don\'t know") as wrong', () => {

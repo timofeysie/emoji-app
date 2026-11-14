@@ -3,11 +3,11 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Fo
 import { Link } from 'react-router-dom';
 import { Button } from '../../shared/button';
 import { cn } from '../../shared/utils';
-import { diffTyped, isTypedCorrect, typedItem } from '../answer-check';
+import { diffTyped, isTypedCorrect, isTypedExact, typedItem } from '../answer-check';
 import { aspectLabel } from '../AspectPills';
 import { useMeStore } from '../me.store';
 import { PractisingAs } from '../PractisingAs';
-import { useChapterProgress, useStudyChapter } from '../YallaChapterView';
+import { useChapterPillAspects, useChapterProgress, useStudyChapter } from '../YallaChapterView';
 import { chapterPath, YallaRequestError } from '../yalla-api';
 import {
   DEFAULT_FORMAT,
@@ -35,8 +35,8 @@ const ASPECTS: readonly PracticeAspect[] = ['reading', 'writing'];
 const KEY_TO_SLOT: Record<string, SlotLabel> = { a: 'A', b: 'B', c: 'C', d: 'D', '1': 'A', '2': 'B', '3': 'C', '4': 'D' };
 
 const CHANNELS: ReadonlyArray<{ channel: InputChannel; label: string; icon: typeof Keyboard }> = [
-  { channel: 'keyboard', label: 'Type', icon: Keyboard },
-  { channel: 'onscreen-choice', label: 'A–D Choose', icon: ListChecks },
+  { channel: 'keyboard', label: 'Input', icon: Keyboard },
+  { channel: 'onscreen-choice', label: 'Multiple choice', icon: ListChecks },
 ];
 
 /**
@@ -72,6 +72,8 @@ export function ExercisesSection() {
   const playerId = useMeStore((state) => state.me?.player?.id ?? null);
   const [saved, setSaved] = useState<SavedSession | null>(null);
   const [format, setFormat] = useFormat();
+  // During a session (and its summary) the header shows only the skills being tested.
+  useChapterPillAspects(saved?.session.aspects ?? null);
 
   useEffect(() => {
     setSaved(playerId ? loadSavedSession(playerId, chapter.book, chapter.chapter) : null);
@@ -185,7 +187,7 @@ function SessionSetup({
   onFormat: (format: GameFormat | null) => void;
   onStart: (saved: SavedSession) => void;
 }) {
-  const [scope, setScope] = useState<'chapter' | 'review'>('chapter');
+  const [scope, setScope] = useState<'chapter' | 'review'>('review');
   const [aspects, setAspects] = useState<PracticeAspect[]>([...ASPECTS]);
   const [count, setCount] = useState<number>(10);
   const [busy, setBusy] = useState(false);
@@ -223,8 +225,6 @@ function SessionSetup({
 
   return (
     <section aria-label="Exercises" className="flex flex-col gap-4 rounded-lg border p-4" data-testid="practice-setup">
-      <h2 className="text-lg font-semibold">Practise this chapter</h2>
-
       <fieldset className="flex flex-col gap-1">
         <legend className="mb-1 text-sm font-medium">Words</legend>
         {(
@@ -267,7 +267,7 @@ function SessionSetup({
             onClick={() => onFormat(null)}
             data-testid="format-reset"
           >
-            Reset to defaults (type Writing, choose Reading)
+            Reset to defaults (Input for Writing, Multiple choice for Reading)
           </button>
         )}
       </fieldset>
@@ -435,10 +435,12 @@ function PracticeCard({
 
       {channel === 'onscreen-choice' ? (
         <>
-          <p className="text-center text-sm text-muted-foreground">
-            {item.aspect === 'reading' ? 'What does this mean?' : 'Which is the right spelling?'}
-          </p>
-          <p lang={promptLang} className="text-center text-3xl font-semibold" data-testid="practice-prompt">
+          <p
+            lang={promptLang}
+            title={item.aspect === 'reading' ? 'What does this mean?' : 'Which is the right spelling?'}
+            className="cursor-help text-center text-3xl font-semibold"
+            data-testid="practice-prompt"
+          >
             {item.prompt}
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -488,14 +490,21 @@ function PracticeCard({
 
       {answer && (
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="practice-feedback">
-          <p className={cn('flex items-center gap-1 text-sm font-medium', answer.correct ? 'text-emerald-700' : 'text-destructive')}>
-            {answer.correct ? <Check className="h-4 w-4" aria-hidden /> : <X className="h-4 w-4" aria-hidden />}
-            {answer.correct ? 'Correct' : 'Not quite'}
-            <span className="font-normal text-muted-foreground">
-              {' '}
-              · <span lang={lang}>{item.word}</span> = {item.gloss}
-            </span>
-          </p>
+          {answer.response.trim() === '' ? (
+            // "Don't know": still scored wrong, but there was no attempt to call "not quite".
+            <p className="text-sm text-muted-foreground">
+              <span lang={lang}>{item.word}</span> = {item.gloss}
+            </p>
+          ) : (
+            <p className={cn('flex items-center gap-1 text-sm font-medium', answer.correct ? 'text-emerald-700' : 'text-destructive')}>
+              {answer.correct ? <Check className="h-4 w-4" aria-hidden /> : <X className="h-4 w-4" aria-hidden />}
+              {answer.correct ? 'Correct' : 'Not quite'}
+              <span className="font-normal text-muted-foreground">
+                {' '}
+                · <span lang={lang}>{item.word}</span> = {item.gloss}
+              </span>
+            </p>
+          )}
           <Button onClick={next} data-testid="practice-next" autoFocus>
             {last ? 'See results' : 'Next'}
           </Button>
@@ -505,7 +514,7 @@ function PracticeCard({
   );
 }
 
-/** Type the answer; Enter (not mid-composition) checks it. After a miss, shows where it differs. */
+/** Type the answer; Enter (not mid-composition) checks it. After a miss (or a punctuation-only difference), shows where it differs. */
 function TypedAnswer({
   aspect,
   prompt,
@@ -534,14 +543,18 @@ function TypedAnswer({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
-      <p className="text-center text-sm text-muted-foreground">
-        {aspect === 'reading' ? 'Type the meaning, exactly as the book gives it' : 'Type it in Korean'}
-      </p>
-      <p lang={promptLang} className="text-center text-3xl font-semibold" data-testid="practice-prompt">
+      <p
+        lang={promptLang}
+        title={aspect === 'reading' ? 'Type the meaning, exactly as the book gives it' : 'Type it in Korean'}
+        className="cursor-help text-center text-3xl font-semibold"
+        data-testid="practice-prompt"
+      >
         {prompt}
       </p>
       {answered ? (
-        !answered.correct && <TypedDiff typed={answered.response} expected={expected} lang={answerLang} />
+        !isTypedExact(answered.response, expected) && (
+          <TypedDiff typed={answered.response} expected={expected} lang={answerLang} accepted={answered.correct} />
+        )
       ) : (
         <>
           <input
@@ -579,10 +592,26 @@ function TypedAnswer({
   );
 }
 
-function TypedDiff({ typed, expected, lang }: { typed: string; expected: string; lang: string }) {
+function TypedDiff({
+  typed,
+  expected,
+  lang,
+  accepted,
+}: {
+  typed: string;
+  expected: string;
+  lang: string;
+  /** Scored correct though the punctuation differs. */
+  accepted: boolean;
+}) {
   const parts = diffTyped(typed, expected);
   return (
     <div className="flex flex-col gap-1 rounded-md border bg-muted/40 px-3 py-2 text-sm" data-testid="practice-diff">
+      {accepted && (
+        <p className="text-xs text-muted-foreground" data-testid="practice-diff-accepted">
+          Counted as correct: only punctuation differs.
+        </p>
+      )}
       {typed.trim() && (
         <p>
           <span className="text-muted-foreground">You typed: </span>
@@ -666,11 +695,24 @@ function SessionSummary({
               ) : (
                 <X className="h-4 w-4 shrink-0 text-destructive" aria-label="wrong" />
               )}
-              <span lang={lang}>{item.word}</span>
-              <span className="text-muted-foreground">
-                {item.gloss} · {aspectLabel(item.aspect)}
-                {given?.channel === 'keyboard' && ' · typed'}
-              </span>
+              {/* Prompt first, then the answer: writing asks the meaning and wants the word. */}
+              {item.aspect === 'writing' ? (
+                <>
+                  <span>{item.gloss}</span>
+                  <span className="text-muted-foreground">
+                    <span lang={lang}>{item.word}</span>
+                    {given?.channel === 'keyboard' && ' · typed'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span lang={lang}>{item.word}</span>
+                  <span className="text-muted-foreground">
+                    {item.gloss}
+                    {given?.channel === 'keyboard' && ' · typed'}
+                  </span>
+                </>
+              )}
             </li>
           );
         })}
