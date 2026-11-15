@@ -15,6 +15,13 @@ const setPlayerSchema = z.union([
   z.object({ create: z.object({ firstName: z.string().trim().min(1).max(40) }).strict() }).strict(),
 ]);
 
+const channelSchema = z.enum(['onscreen-choice', 'keyboard']);
+
+/** `null` resets to the defaults. */
+const setPreferencesSchema = z
+  .object({ yallaFormat: z.object({ reading: channelSchema, writing: channelSchema }).strict().nullable() })
+  .strict();
+
 function getValidationErrors(error: ZodError): Array<{ path: string; message: string }> {
   return error.issues.map((issue) => ({ path: issue.path.join('.') || 'root', message: issue.message }));
 }
@@ -68,6 +75,20 @@ export class MeController {
       }
       throw error;
     }
+    const { me } = await this.learnerService.me(req);
+    res.status(200).json(me);
+  }
+
+  /** The user's YALLA input format, so it follows them across devices. */
+  @Put('preferences')
+  async setPreferences(@Req() req: AuthedRequest, @Body() body: unknown, @Res() res: Response): Promise<void> {
+    const parsed = setPreferencesSchema.safeParse(body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: getValidationErrors(parsed.error) });
+      return;
+    }
+    const { user } = await this.learnerService.me(req);
+    await this.userRepository.setYallaFormat(user.id, parsed.data.yallaFormat);
     const { me } = await this.learnerService.me(req);
     res.status(200).json(me);
   }

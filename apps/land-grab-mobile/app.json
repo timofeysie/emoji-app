@@ -5,12 +5,18 @@
     "version": "0.1.0",
     "orientation": "landscape",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
     "platforms": [
       "ios",
       "android"
     ],
     "android": {
-      "package": "com.emojiapp.landgrab"
+      "package": "com.emojiapp.landgrab",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
+        "backgroundColor": "#26A599"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.emojiapp.landgrab"

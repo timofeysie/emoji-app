@@ -18,8 +18,23 @@ import { createServer } from 'http';
 const port = Number(process.env.STUB_LRS_PORT ?? 3101);
 const maxPage = Number(process.env.STUB_LRS_MAX_PAGE ?? 500);
 
-/** statementId -> the exact statement object last accepted under that id. */
+/**
+ * statementId -> { statement, stored }: the exact statement accepted under
+ * that id, and when it was first stored. Like a real LRS, `stored` is set on
+ * ingest and returned on GET (Y6's incremental `since` reads depend on it);
+ * a re-POST of the same content keeps the first `stored`.
+ */
 const statementsById = new Map();
+
+/** Strictly increasing, so `since` can't miss two statements stored in the same millisecond. */
+let lastStoredMs = 0;
+function nextStored() {
+  lastStoredMs = Math.max(Date.now(), lastStoredMs + 1);
+  return new Date(lastStoredMs).toISOString();
+}
+
+/** Query strings of statement GETs, so tests can count LRS reads (`/control/requests`). */
+let getLog = [];
 
 /** `{ post?: { status, body }, get?: { status, body } }`: injected failures, until cleared. */
 let failures = {};
@@ -51,13 +66,15 @@ function filterStatements(params) {
   const activity = params.get('activity');
   const related = params.get('related_activities') === 'true';
   const since = params.get('since');
-  return [...statementsById.values()].filter(
-    (statement) =>
-      (!agent || matchesAgent(statement, agent)) &&
-      (!verb || statement.verb?.id === verb) &&
-      (!activity || activityIds(statement, related).includes(activity)) &&
-      (!since || Date.parse(statement.stored ?? statement.timestamp) > Date.parse(since)),
-  );
+  return [...statementsById.values()]
+    .filter(
+      ({ statement, stored }) =>
+        (!agent || matchesAgent(statement, agent)) &&
+        (!verb || statement.verb?.id === verb) &&
+        (!activity || activityIds(statement, related).includes(activity)) &&
+        (!since || Date.parse(stored) > Date.parse(since)),
+    )
+    .map(({ statement, stored }) => ({ ...statement, stored }));
 }
 
 function readJsonBody(req) {
@@ -103,6 +120,21 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (url.pathname === '/control/requests' && req.method === 'GET') {
+    send(res, 200, { gets: getLog });
+    return;
+  }
+
+  if (url.pathname === '/control/requests' && req.method === 'DELETE') {
+    getLog = [];
+    send(res, 200, { ok: true });
+    return;
+  }
+
+  if (url.pathname === '/xapi/statements' && req.method === 'GET') {
+    getLog.push(url.search);
+  }
+
   if (url.pathname === '/xapi/statements' && req.method === 'POST' && failures.post) {
     send(res, failures.post.status, failures.post.body);
     return;
@@ -127,7 +159,7 @@ const server = createServer(async (req, res) => {
     }
 
     for (const statement of batch) {
-      const existing = statementsById.get(statement.id);
+      const existing = statementsById.get(statement.id)?.statement;
       if (existing && JSON.stringify(existing) !== JSON.stringify(statement)) {
         send(res, 409, {
           error: `Statement '${statement.id}' already exists with different content.`,
@@ -136,7 +168,9 @@ const server = createServer(async (req, res) => {
       }
     }
     for (const statement of batch) {
-      statementsById.set(statement.id, statement);
+      if (!statementsById.has(statement.id)) {
+        statementsById.set(statement.id, { statement, stored: nextStored() });
+      }
     }
     send(
       res,

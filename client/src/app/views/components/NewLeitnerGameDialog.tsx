@@ -39,9 +39,8 @@ import {
   type Progress,
   type ProgressTrack,
 } from '../leitner';
+import { authFetch } from '../../auth/authFetch';
 
-/** Placeholder creator ID used when no auth is wired. Must be a 24-char hex ObjectId. */
-const DEMO_CREATOR_ID = '000000000000000000000001';
 const DEFAULT_CHAPTER = '27';
 
 type Chapter = { chapter: string; entryCount: number };
@@ -75,8 +74,8 @@ export function NewLeitnerGameDialog() {
   const loadOptions = useCallback(async () => {
     try {
       const [playersRes, chaptersRes] = await Promise.all([
-        fetch('/api/players', { credentials: 'same-origin' }),
-        fetch(`/api/books/${LEITNER_BOOK}/chapters`, { credentials: 'same-origin' }),
+        authFetch('/api/players', { credentials: 'same-origin' }),
+        authFetch(`/api/books/${LEITNER_BOOK}/chapters`, { credentials: 'same-origin' }),
       ]);
       if (playersRes.ok) {
         setPlayers(((await playersRes.json()) as { players: Player[] }).players);
@@ -167,13 +166,13 @@ export function NewLeitnerGameDialog() {
     try {
       const query = new URLSearchParams({ book: LEITNER_BOOK, chapter, scope, aspects: aspects.join(',') });
       const [planRes, progressRes] = await Promise.all([
-        fetch('/api/leitner-games', {
+        authFetch('/api/leitner-games', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request({ dryRun: true })),
           credentials: 'same-origin',
         }),
-        fetch(`/api/players/${playerId}/progress?${query}`, { credentials: 'same-origin' }),
+        authFetch(`/api/players/${playerId}/progress?${query}`, { credentials: 'same-origin' }),
       ]);
       if (!planRes.ok) {
         handleRefusal(planRes.status, await errorBody(planRes));
@@ -200,10 +199,10 @@ export function NewLeitnerGameDialog() {
     try {
       // After a preview, its seed and now: the server re-plans to the same game.
       const replay = preview ? { seed: preview.plan.seed, now: preview.plan.now } : {};
-      const res = await fetch('/api/leitner-games', {
+      const res = await authFetch('/api/leitner-games', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request({ createdByUserId: DEMO_CREATOR_ID, ...replay })),
+        body: JSON.stringify(request(replay)),
         credentials: 'same-origin',
       });
       if (!res.ok) {

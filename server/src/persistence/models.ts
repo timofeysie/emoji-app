@@ -36,6 +36,17 @@ const userSchema = new Schema(
      * `externalId` is their LRS actor. The player still never logs in.
      */
     playerId: { type: objectId, ref: 'Player', default: null },
+    preferences: {
+      /** YALLA input per aspect (docs/yalla/implementation-plan.md §6); unset = defaults. */
+      yallaFormat: {
+        type: {
+          reading: { type: String, enum: ['onscreen-choice', 'keyboard'], required: true },
+          writing: { type: String, enum: ['onscreen-choice', 'keyboard'], required: true },
+        },
+        default: null,
+        _id: false,
+      },
+    },
   },
   { timestamps: true, collection: 'users' },
 );

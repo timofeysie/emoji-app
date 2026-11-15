@@ -88,6 +88,7 @@ export async function sendStatements(
   return { sent: statements.length };
 }
 
+/** Guard for one-off reads; a cache rebuild passes a higher `maxPages`. */
 const MAX_PAGES = 100;
 
 export type StatementQuery = {
@@ -108,7 +109,11 @@ export type StatementQuery = {
  * from the LRS). Voided statements are excluded by the LRS. A `more` link
  * on another origin is refused, so credentials only go to the configured LRS.
  */
-export async function fetchStatements(config: LrsConfig, query: StatementQuery): Promise<unknown[]> {
+export async function fetchStatements(
+  config: LrsConfig,
+  query: StatementQuery,
+  { maxPages = MAX_PAGES }: { maxPages?: number } = {},
+): Promise<unknown[]> {
   const endpoint = config.endpoint.endsWith('/') ? config.endpoint.slice(0, -1) : config.endpoint;
   const authHeader = `Basic ${Buffer.from(`${config.key}:${config.secret}`).toString('base64')}`;
   const origin = new URL(endpoint).origin;
@@ -124,8 +129,8 @@ export async function fetchStatements(config: LrsConfig, query: StatementQuery):
   const statements: unknown[] = [];
   let url: string | null = `${endpoint}/statements?${params.toString()}`;
   for (let page = 0; url; page++) {
-    if (page >= MAX_PAGES) {
-      throw new LrsRequestError(0, `Stopped after ${MAX_PAGES} pages of statements.`);
+    if (page >= maxPages) {
+      throw new LrsRequestError(0, `Stopped after ${maxPages} pages of statements.`);
     }
     const response = await fetch(url, {
       method: 'GET',

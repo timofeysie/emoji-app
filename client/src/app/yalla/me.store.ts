@@ -6,7 +6,12 @@ import { useAuthStore } from '../auth/auth.store';
 export type Me = {
   user: { id: string; displayName: string };
   player: { id: string; firstName: string; label: string } | null;
+  /** Null format = YALLA's defaults. */
+  preferences: { yallaFormat: YallaFormat | null };
 };
+
+/** How the user answers per aspect (docs/yalla/implementation-plan.md §6). */
+export type YallaFormat = { reading: 'onscreen-choice' | 'keyboard'; writing: 'onscreen-choice' | 'keyboard' };
 
 /** Body of `PUT /api/me/player`. */
 export type SetPlayerRequest = { playerId: string | null } | { create: { firstName: string } };
@@ -19,6 +24,8 @@ type MeState = {
   load: (force?: boolean) => Promise<void>;
   /** Links, unlinks or creates-and-links; returns an error message or null. */
   setPlayer: (request: SetPlayerRequest) => Promise<string | null>;
+  /** Saves (null: resets) the YALLA format; returns an error message or null. */
+  setYallaFormat: (format: YallaFormat | null) => Promise<string | null>;
   clear: () => void;
 };
 
@@ -57,6 +64,20 @@ export const useMeStore = create<MeState>((set, get) => ({
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
+      });
+      if (!res.ok) return await errorMessage(res);
+      set({ me: (await res.json()) as Me, error: null });
+      return null;
+    } catch {
+      return 'Could not reach server.';
+    }
+  },
+  setYallaFormat: async (yallaFormat) => {
+    try {
+      const res = await authFetch('/api/me/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ yallaFormat }),
       });
       if (!res.ok) return await errorMessage(res);
       set({ me: (await res.json()) as Me, error: null });

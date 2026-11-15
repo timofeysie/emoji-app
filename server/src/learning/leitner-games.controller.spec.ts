@@ -5,6 +5,14 @@ import { assessedStatement } from '../test/leitner-statements';
 import chapter26 from '../games/content/chapter26Data.json';
 import { firstSense, termsFromChapter } from '../games/generators/vocab-choice';
 import { LeitnerGamesController } from './leitner-games.controller';
+import { LeitnerPlanner } from './leitner-planner';
+import type { RefereeRequest } from '../referee.guard';
+
+// The real guard loads `auth.ts` (ESM-only `jose`); handlers are called directly here.
+jest.mock('../referee.guard', () => ({
+  RefereeGuard: class {},
+  refereeUserIdOf: (req: { refereeUserId?: string }) => req.refereeUserId,
+}));
 
 type ResponseMock = Pick<Response, 'status' | 'json'> & { status: jest.Mock; json: jest.Mock };
 
@@ -31,6 +39,7 @@ describe('LeitnerGamesController', () => {
   const controller = new LeitnerGamesController(
     players as unknown as PlayerRepository,
     games as unknown as GameDataRepository,
+    new LeitnerPlanner(games as unknown as GameDataRepository),
   );
 
   function lrsReturns(statements: unknown[]): jest.Mock {
@@ -42,7 +51,8 @@ describe('LeitnerGamesController', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- JSON bodies, checked by the assertions
   async function post(body: Record<string, unknown>): Promise<{ status: number; body: any }> {
     const res = createResponseMock();
-    await controller.createLeitnerGame(body, res as unknown as Response);
+    // What RefereeGuard leaves on the request: the creator comes from the token.
+    await controller.createLeitnerGame(body, res as unknown as Response, { refereeUserId: CREATOR_ID } as RefereeRequest);
     return { status: res.status.mock.calls[0][0], body: res.json.mock.calls[0][0] };
   }
 
@@ -90,12 +100,13 @@ describe('LeitnerGamesController', () => {
     games.listLeitnerGamesForPlayer.mockResolvedValue([
       { id: 'old-draft', state: 'draft', endedAt: null, guessCount: 0, exportError: null },
     ]);
-    const { status, body } = await post({ playerId: PLAYER_ID, chapter: '27', createdByUserId: CREATOR_ID, now: NOW, seed: 5 });
+    const { status, body } = await post({ playerId: PLAYER_ID, chapter: '27', now: NOW, seed: 5 });
 
     expect(status).toBe(201);
     expect(body.gameId).toBe('6650f00000000000000000f0');
     expect(games.deleteGame).toHaveBeenCalledWith('old-draft');
     const created = games.createLeitnerGame.mock.calls[0][0];
+    expect(created.createdByUserId).toBe(CREATOR_ID);
     expect(created.title).toBe('Leitner: Player 7F3A · ch. 27');
     expect(created.title).not.toContain('Mia');
     expect(created.leitner).toMatchObject({ playerId: PLAYER_ID, book: 'korean-language-book', chapter: '27', scope: 'chapter', seed: 5 });
@@ -171,14 +182,13 @@ describe('LeitnerGamesController', () => {
     expect(dry.status).toBe(200);
     expect(dry.body.plan.picks).toEqual([]);
 
-    const created = await post({ playerId: PLAYER_ID, chapter: 27, maxNew: 0, fill: false, createdByUserId: CREATOR_ID });
+    const created = await post({ playerId: PLAYER_ID, chapter: 27, maxNew: 0, fill: false });
     expect(created.status).toBe(422);
     expect(games.createLeitnerGame).not.toHaveBeenCalled();
   });
 
   it.each([
     ['an aspect the generator cannot build', { aspects: ['listening'], dryRun: true }],
-    ['a create without createdByUserId', {}],
     ['an unknown field', { dryRun: true, extra: 1 }],
   ])('rejects %s', async (_label, change) => {
     expect((await post({ playerId: PLAYER_ID, chapter: 27, ...change })).status).toBe(400);

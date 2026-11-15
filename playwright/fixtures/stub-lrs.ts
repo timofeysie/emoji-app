@@ -35,6 +35,7 @@ export const EXT = {
   strength: `${XAPI_BASE}/ext/strength`,
   scorer: `${XAPI_BASE}/ext/scorer`,
   gameId: `${XAPI_BASE}/ext/game-id`,
+  inputChannel: `${XAPI_BASE}/ext/input-channel`,
 } as const;
 
 /** A vocabulary learning object (docs/xAPI/leitner-method.md L16/L18) and one book source of it. */
@@ -124,6 +125,16 @@ export class StubLrs {
       data: observations.map((observation) => assessedStatement(externalId, observation)),
     });
     if (!response.ok()) throw new Error(`Seeding the stub LRS failed: ${response.status()}`);
+  }
+
+  /** Statement GETs since `clearRequestLog`, as query strings (`?agent=…&since=…`). */
+  async statementReads(): Promise<URLSearchParams[]> {
+    const body = (await (await this.request.get(`${STUB_LRS_URL}/control/requests`)).json()) as { gets: string[] };
+    return body.gets.map((search) => new URLSearchParams(search));
+  }
+
+  async clearRequestLog(): Promise<void> {
+    await this.request.delete(`${STUB_LRS_URL}/control/requests`);
   }
 
   async allStatements(): Promise<StubStatement[]> {

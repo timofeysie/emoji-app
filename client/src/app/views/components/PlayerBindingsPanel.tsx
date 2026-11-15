@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../shared/select';
+import { authFetch } from '../../auth/authFetch';
 
 /** Referee-made player record: no email, no surname (security.md D4). */
 type Player = {
@@ -79,8 +80,8 @@ export function PlayerBindingsPanel({
     setExportResult(null);
     try {
       const [playersRes, bindingsRes] = await Promise.all([
-        fetch('/api/players', { credentials: 'same-origin' }),
-        fetch(`/api/games/${gameId}/player-bindings`, { credentials: 'same-origin' }),
+        authFetch('/api/players', { credentials: 'same-origin' }),
+        authFetch(`/api/games/${gameId}/player-bindings`, { credentials: 'same-origin' }),
       ]);
       if (playersRes.ok) {
         setPlayers(((await playersRes.json()) as { players: Player[] }).players);
@@ -111,7 +112,7 @@ export function PlayerBindingsPanel({
     setBusyBadge(badgeName);
     setError(null);
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `/api/games/${gameId}/player-bindings/${encodeURIComponent(badgeName)}`,
         {
           method: 'PUT',
@@ -136,7 +137,7 @@ export function PlayerBindingsPanel({
     setBusyBadge(badgeName);
     setError(null);
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `/api/games/${gameId}/player-bindings/${encodeURIComponent(badgeName)}`,
         { method: 'DELETE', credentials: 'same-origin' },
       );
@@ -156,7 +157,7 @@ export function PlayerBindingsPanel({
     setExporting(true);
     setExportResult(null);
     try {
-      const res = await fetch(`/api/games/${gameId}/xapi-export`, {
+      const res = await authFetch(`/api/games/${gameId}/xapi-export`, {
         method: 'POST',
         credentials: 'same-origin',
       });
@@ -179,7 +180,7 @@ export function PlayerBindingsPanel({
     setCreating(true);
     setError(null);
     try {
-      const res = await fetch('/api/players', {
+      const res = await authFetch('/api/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ firstName }),

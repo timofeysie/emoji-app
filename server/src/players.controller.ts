@@ -1,7 +1,8 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { LeitnerBindingError, PlayerNotFoundError, PlayerRepository } from './persistence/player.repository';
+import { RefereeGuard } from './referee.guard';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 
@@ -28,7 +29,7 @@ function getValidationErrors(error: ZodError): Array<{ path: string; message: st
 
 /**
  * Referee-managed players and badge → player bindings (xAPI export Step 1a).
- * Referee-only once Step 0 auth lands; until then the prototype guardrails apply.
+ * Writes need a signed-in referee (RefereeGuard); reads stay open until Step 0.
  */
 @Controller('api')
 export class PlayersController {
@@ -64,6 +65,7 @@ export class PlayersController {
   }
 
   @Post('players')
+  @UseGuards(RefereeGuard)
   async createPlayer(@Body() body: unknown, @Res() res: Response): Promise<void> {
     const payload = createPlayerSchema.safeParse(body);
     if (!payload.success) {
@@ -94,6 +96,7 @@ export class PlayersController {
   }
 
   @Put('games/:gameId/player-bindings/:badgeName')
+  @UseGuards(RefereeGuard)
   async bindPlayer(
     @Param('gameId') gameId: string,
     @Param('badgeName') badgeName: string,
@@ -126,6 +129,7 @@ export class PlayersController {
   }
 
   @Delete('games/:gameId/player-bindings/:badgeName')
+  @UseGuards(RefereeGuard)
   async unbindPlayer(
     @Param('gameId') gameId: string,
     @Param('badgeName') badgeName: string,

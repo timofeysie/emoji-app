@@ -22,6 +22,7 @@ export function PractiseAsCard() {
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [recompute, setRecompute] = useState<'idle' | 'busy' | 'done' | string>('idle');
 
   useEffect(() => {
     void load();
@@ -56,6 +57,17 @@ export function PractiseAsCard() {
   }
 
   const linked = me?.player ?? null;
+
+  /** The server reads the player's whole history from the LRS again on the next progress view. */
+  async function recomputeLevels(): Promise<void> {
+    setRecompute('busy');
+    try {
+      const res = await authFetch('/api/yalla/me/recompute', { method: 'POST' });
+      setRecompute(res.ok ? 'done' : `Server returned ${res.status}`);
+    } catch {
+      setRecompute('Could not reach server.');
+    }
+  }
 
   return (
     <Card>
@@ -156,6 +168,34 @@ export function PractiseAsCard() {
               </Button>
             </div>
           </form>
+        )}
+
+        {linked && (
+          <div className="grid gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={recompute === 'busy'}
+                onClick={() => void recomputeLevels()}
+                data-testid="recompute-levels"
+              >
+                {recompute === 'busy' && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+                Recompute levels
+              </Button>
+              <span className="text-xs text-muted-foreground" data-testid="recompute-status">
+                {recompute === 'done'
+                  ? 'Done. The next page you open reads your full history from the LRS.'
+                  : recompute !== 'idle' && recompute !== 'busy'
+                    ? recompute
+                    : null}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Levels are rebuilt from the LRS every day anyway. Use this after an answer was corrected or removed there.
+            </p>
+          </div>
         )}
 
         {saveError && (

@@ -18,9 +18,10 @@ import { cn } from '../shared/utils';
 import { getWsUrl } from '../shared/ws-url';
 import { NewLeitnerGameDialog } from './components/NewLeitnerGameDialog';
 import type { GameKind } from './leitner';
+import { authFetch } from '../auth/authFetch';
+import { useIsSignedIn } from '../auth/sign-in-access';
 
 /** Placeholder creator ID used when no auth is wired. Must be a 24-char hex ObjectId. */
-const DEMO_CREATOR_ID = '000000000000000000000001';
 
 type GameState =
   | 'draft'
@@ -80,7 +81,6 @@ const STATE_CHIPS_DEFAULT = 'bg-muted text-muted-foreground';
 function NewGameDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
-  const [creatorId, setCreatorId] = useState(DEMO_CREATOR_ID);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,10 +92,10 @@ function NewGameDialog({ onCreated }: { onCreated: () => void }) {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch('/api/games', {
+      const res = await authFetch('/api/games', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), createdByUserId: creatorId.trim() }),
+        body: JSON.stringify({ title: title.trim() }),
         credentials: 'same-origin',
       });
       if (!res.ok) {
@@ -151,20 +151,6 @@ function NewGameDialog({ onCreated }: { onCreated: () => void }) {
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="creator-id">Creator ID</Label>
-            <Input
-              id="creator-id"
-              placeholder="24-char hex ObjectId"
-              value={creatorId}
-              onChange={(e) => setCreatorId(e.target.value)}
-              className="font-mono text-xs"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Demo placeholder — change when auth is wired.
-            </p>
-          </div>
-
           {error && (
             <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
@@ -188,8 +174,10 @@ function NewGameDialog({ onCreated }: { onCreated: () => void }) {
   );
 }
 
+/** Guests get a read-only list: Play (student mode) only, no create or edit. */
 export function GamesView() {
   const navigate = useNavigate();
+  const signedIn = useIsSignedIn();
   const [games, setGames] = useState<GameSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -198,7 +186,7 @@ export function GamesView() {
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch('/api/games', { credentials: 'same-origin' });
+      const res = await authFetch('/api/games', { credentials: 'same-origin' });
       if (!res.ok) {
         setFetchError(`Server returned ${res.status}`);
         return;
@@ -240,10 +228,12 @@ export function GamesView() {
         <p className="text-sm text-muted-foreground">
           {loading ? 'Loading…' : `${games.length} game${games.length === 1 ? '' : 's'}`}
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <NewLeitnerGameDialog />
-          <NewGameDialog onCreated={() => void loadGames()} />
-        </div>
+        {signedIn && (
+          <div className="flex flex-wrap items-center gap-2">
+            <NewLeitnerGameDialog />
+            <NewGameDialog onCreated={() => void loadGames()} />
+          </div>
+        )}
       </div>
 
       {loading && (
@@ -262,7 +252,13 @@ export function GamesView() {
       {!loading && !fetchError && games.length === 0 && (
         <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
           <Gamepad2 className="mx-auto mb-2 h-8 w-8 opacity-40" aria-hidden />
-          No games yet. Click <strong>New Game</strong> to create one.
+          {signedIn ? (
+            <>
+              No games yet. Click <strong>New Game</strong> to create one.
+            </>
+          ) : (
+            'No games yet.'
+          )}
         </div>
       )}
 
@@ -311,16 +307,18 @@ export function GamesView() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Edit ${game.title}`}
-                    title={`Edit ${game.title}`}
-                    onClick={() => navigate(`/games/${game.id}`)}
-                  >
-                    <Pencil aria-hidden />
-                  </Button>
+                  {signedIn && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Edit ${game.title}`}
+                      title={`Edit ${game.title}`}
+                      onClick={() => navigate(`/games/${game.id}`)}
+                    >
+                      <Pencil aria-hidden />
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="ghost"

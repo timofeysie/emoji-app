@@ -1,12 +1,14 @@
 import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { AuthClaims, AuthedRequest } from './auth';
 import { PlayerRepository, type PlayerSummary } from './persistence/player.repository';
-import { UserRepository, type UserSummary } from './persistence/user.repository';
+import { UserRepository, type UserSummary, type YallaFormat } from './persistence/user.repository';
 
 /** What `/api/me` returns: the signed-in user and the player they practise as. */
 export type Me = {
   user: { id: string; displayName: string };
   player: Pick<PlayerSummary, 'id' | 'firstName' | 'label'> | null;
+  /** Null = YALLA's defaults (writing typed, reading A–D). */
+  preferences: { yallaFormat: YallaFormat | null };
 };
 
 export type Learner = { user: UserSummary; player: PlayerSummary };
@@ -39,6 +41,7 @@ export class LearnerService {
       me: {
         user: { id: user.id, displayName: user.displayName },
         player: player && { id: player.id, firstName: player.firstName, label: player.label },
+        preferences: { yallaFormat: user.yallaFormat },
       },
       user,
       player,

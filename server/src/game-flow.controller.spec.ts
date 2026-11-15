@@ -5,6 +5,13 @@ import { BadgeStateService } from './badge-state.service';
 import { NfcCardService } from './nfc-card.service';
 import { GameExportService } from './xapi/game-export.service';
 import type { LeitnerFlowService } from './learning/leitner-flow.service';
+import type { RefereeRequest } from './referee.guard';
+
+// The real guard loads `auth.ts` (ESM-only `jose`); handlers are called directly here.
+jest.mock('./referee.guard', () => ({
+  RefereeGuard: class {},
+  refereeUserIdOf: (req: { refereeUserId?: string }) => req.refereeUserId,
+}));
 
 type ResponseMock = Pick<Response, 'status' | 'json'> & {
   status: jest.Mock;
@@ -128,6 +135,10 @@ describe('GameFlowController', () => {
     });
   });
 
+  /** What `RefereeGuard` leaves on the request. */
+  const REFEREE_USER_ID = '507f1f77bcf86cd799439012';
+  const referee = { refereeUserId: REFEREE_USER_ID } as RefereeRequest;
+
   describe('createQuestion learning tag', () => {
     const question = {
       gameId: '507f1f77bcf86cd799439011',
@@ -153,17 +164,19 @@ describe('GameFlowController', () => {
       repository.createQuestionWithOptions.mockResolvedValue('q1');
       const res = createResponseMock();
 
-      await controller.createQuestion({ ...question, learning }, res as unknown as Response);
+      await controller.createQuestion({ ...question, learning }, res as unknown as Response, referee);
 
       expect(res.status).toHaveBeenCalledWith(201);
-      expect(repository.createQuestionWithOptions).toHaveBeenCalledWith(expect.objectContaining({ learning }));
+      expect(repository.createQuestionWithOptions).toHaveBeenCalledWith(
+        expect.objectContaining({ learning, createdByUserId: REFEREE_USER_ID }),
+      );
     });
 
     it('leaves untagged questions untagged (class games)', async () => {
       repository.createQuestionWithOptions.mockResolvedValue('q1');
       const res = createResponseMock();
 
-      await controller.createQuestion(question, res as unknown as Response);
+      await controller.createQuestion(question, res as unknown as Response, referee);
 
       expect(res.status).toHaveBeenCalledWith(201);
       expect(repository.createQuestionWithOptions.mock.calls[0][0]).not.toHaveProperty('learning');
@@ -179,7 +192,7 @@ describe('GameFlowController', () => {
     ])('rejects %s', async (_label, change) => {
       const res = createResponseMock();
 
-      await controller.createQuestion({ ...question, learning: { ...learning, ...change } }, res as unknown as Response);
+      await controller.createQuestion({ ...question, learning: { ...learning, ...change } }, res as unknown as Response, referee);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(repository.createQuestionWithOptions).not.toHaveBeenCalled();
@@ -189,7 +202,7 @@ describe('GameFlowController', () => {
   it('returns 400 for invalid game creation payload', async () => {
     const res = createResponseMock();
 
-    await controller.createGame({ title: '' }, res as unknown as Response);
+    await controller.createGame({ title: '' }, res as unknown as Response, referee);
 
     expect(repository.createGame).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
@@ -204,12 +217,14 @@ describe('GameFlowController', () => {
         title: 'Test Game',
         kind: 'class',
         leitner: null,
-        createdByUserId: '507f1f77bcf86cd799439012',
+        // Ignored: the creator comes from the token.
+        createdByUserId: '507f1f77bcf86cd799439099',
       },
       res as unknown as Response,
+      referee,
     );
 
-    expect(repository.createGame).toHaveBeenCalled();
+    expect(repository.createGame).toHaveBeenCalledWith({ title: 'Test Game', createdByUserId: REFEREE_USER_ID });
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({ gameId: '507f1f77bcf86cd799439011' });
   });

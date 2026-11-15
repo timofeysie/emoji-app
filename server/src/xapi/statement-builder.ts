@@ -9,6 +9,7 @@ import {
   chapterOfSourceRef,
   EXT_ASPECT,
   EXT_GAME_KIND,
+  EXT_INPUT_CHANNEL,
   EXT_ROLE,
   EXT_SCORER,
   EXT_SOURCE_REF,
@@ -43,6 +44,12 @@ const XAPI_UUID_NAMESPACE = '891bcddf-e674-482a-a7b2-28ec1b81586d';
 function xapiUuid(name: string): string {
   return uuidv5(name, XAPI_UUID_NAMESPACE);
 }
+
+/** `ext/game-kind` on tagged statements: a badge game's kind, or YALLA practice (L23). */
+export type StatementGameKind = GameKind | 'yalla-solo';
+
+/** How a YALLA answer arrived (`ext/input-channel`); badge games leave it out (= `nfc-card`). */
+export type InputChannel = 'onscreen-choice' | 'keyboard';
 
 export function gameActivityId(gameId: string): string {
   return `${XAPI_BASE_IRI}/games/${gameId}`;
@@ -96,9 +103,11 @@ export type XApiChoice = { id: string; description: { 'en-US': string } };
 export type XApiInteractionDefinition = {
   type: typeof CMI_INTERACTION_TYPE;
   name: { 'en-US': string };
-  interactionType: 'choice';
+  /** `choice` (A–D: badge games, YALLA on screen) or `fill-in` (YALLA typed). */
+  interactionType: 'choice' | 'fill-in';
   correctResponsesPattern: string[];
-  choices: XApiChoice[];
+  /** Choice only. */
+  choices?: XApiChoice[];
 };
 
 export type XApiAssessmentDefinition = {
@@ -278,7 +287,7 @@ type LearningContext = {
   /** Chapter and book: where it was taught. */
   provenance: XApiGroupingActivity[];
   sourceRef: string;
-  gameKind: GameKind;
+  gameKind: StatementGameKind;
 };
 
 /**
@@ -286,7 +295,7 @@ type LearningContext = {
  * (docs/xAPI/leitner-method.md → Statement changes; learning-objects.md →
  * A1–A3). Throws on a tag that should have been rejected on create.
  */
-function learningContext(learning: LearningTag, gameKind: GameKind): LearningContext {
+function learningContext(learning: LearningTag, gameKind: StatementGameKind): LearningContext {
   const key = parseLearningObjectId(learning.learningObjectId);
   const chapter = chapterOfSourceRef(learning.sourceRef);
   if (!key || !chapter) {
@@ -390,9 +399,11 @@ export function buildAssessedStatement(input: {
   guessId: string;
   answered: XApiAnsweredStatement;
   learning: LearningTag;
-  gameKind?: GameKind;
+  gameKind?: StatementGameKind;
   observation: Observation;
   scorer: string;
+  /** YALLA only; badge-game statements stay exactly as exported before (re-export is idempotent). */
+  inputChannel?: InputChannel;
 }): XApiAssessedStatement {
   const { gameId, guessId, answered, observation, scorer } = input;
   if (observation.learningObjectId !== input.learning.learningObjectId) {
@@ -418,9 +429,134 @@ export function buildAssessedStatement(input: {
         [EXT_SOURCE_REF]: context.sourceRef,
         [EXT_GAME_KIND]: context.gameKind,
         [EXT_SCORER]: scorer,
+        ...(input.inputChannel ? { [EXT_INPUT_CHANNEL]: input.inputChannel } : {}),
       },
     },
   };
+}
+
+export function yallaSessionActivityId(sessionId: string): string {
+  return `${XAPI_BASE_IRI}/yalla/sessions/${sessionId}`;
+}
+
+export function yallaItemActivityId(sessionId: string, itemId: string): string {
+  return `${XAPI_BASE_IRI}/yalla/sessions/${sessionId}/items/${itemId}`;
+}
+
+type YallaAttemptBase = {
+  /** UUID v4 from `POST /api/yalla/me/sessions`; also the registration. */
+  sessionId: string;
+  /** Unique within the session; with `sessionId`, seeds the statement ids. */
+  attemptId: string;
+  /** The item's position in the session, `1`, `2`, … */
+  itemId: string;
+  externalId: string;
+  prompt: string;
+  answeredAt: Date | string;
+  openedAt?: Date | string | null;
+  learning: LearningTag;
+};
+
+/** One answer in a YALLA practice session, already re-checked by the server. */
+export type YallaAttemptInput =
+  | (YallaAttemptBase & {
+      inputChannel: 'onscreen-choice';
+      /** In the order shown; `isCorrect` comes from the content, not the client. */
+      answerOptions: AnswerOptionInput[];
+      /** The chosen slot label. */
+      response: string;
+    })
+  | (YallaAttemptBase & {
+      inputChannel: 'keyboard';
+      /** The text as typed (not normalised), `''` for "Don't know". */
+      response: string;
+      /** The answer it was checked against. */
+      correctResponse: string;
+      /** From `answer-check.ts`, by the server. */
+      success: boolean;
+    });
+
+/**
+ * The `answered` and `assessed` statements for one YALLA answer, chosen
+ * (`choice`) or typed (`fill-in`) (docs/yalla/implementation-plan.md §6 → Recording results). The
+ * same evidence shape as a badge Leitner game, with `game-kind = yalla-solo`
+ * and `input-channel`, so the fold counts it (L23). `ext/game-id` is the
+ * session id, so Players → activity lists the session like a game. Ids are
+ * UUID v5 of the session and attempt: re-posting an answer is a no-op.
+ */
+export function buildYallaAttemptStatements(
+  input: YallaAttemptInput,
+): [XApiAnsweredStatement, XApiAssessedStatement] {
+  const { sessionId, attemptId } = input;
+  const learning = learningContext(input.learning, 'yalla-solo');
+  let definition: XApiInteractionDefinition;
+  let success: boolean;
+  if (input.inputChannel === 'onscreen-choice') {
+    const correctSlotLabels = input.answerOptions.filter((option) => option.isCorrect).map((option) => option.slotLabel);
+    if (!input.answerOptions.some((option) => option.slotLabel === input.response)) {
+      throw new Error(`Attempt '${attemptId}' chose slot '${input.response}', which has no answer option.`);
+    }
+    definition = {
+      type: CMI_INTERACTION_TYPE,
+      name: { 'en-US': input.prompt },
+      interactionType: 'choice',
+      correctResponsesPattern: correctSlotLabels,
+      choices: input.answerOptions.map((option) => ({ id: option.slotLabel, description: { 'en-US': option.text } })),
+    };
+    success = correctSlotLabels.includes(input.response);
+  } else {
+    definition = {
+      type: CMI_INTERACTION_TYPE,
+      name: { 'en-US': input.prompt },
+      interactionType: 'fill-in',
+      correctResponsesPattern: [input.correctResponse],
+    };
+    success = input.success;
+  }
+  const duration = input.openedAt ? isoDuration(toDate(input.openedAt), toDate(input.answeredAt)) : undefined;
+
+  const answered: XApiAnsweredStatement = {
+    id: answeredStatementId(sessionId, attemptId),
+    actor: buildActor(input.externalId),
+    verb: { id: ANSWERED_VERB_ID, display: { 'en-US': 'answered' } },
+    object: {
+      objectType: 'Activity',
+      id: yallaItemActivityId(sessionId, input.itemId),
+      definition,
+    },
+    result: {
+      response: input.response,
+      success,
+      ...(duration ? { duration } : {}),
+    },
+    timestamp: toDate(input.answeredAt).toISOString(),
+    context: {
+      registration: sessionId,
+      contextActivities: {
+        parent: [{ id: yallaSessionActivityId(sessionId) }],
+        grouping: [learning.learningObject, ...learning.provenance],
+      },
+      extensions: {
+        [EXT_GAME_ID]: sessionId,
+        [EXT_SOURCE_REF]: learning.sourceRef,
+        [EXT_ASPECT]: input.learning.aspect,
+        [EXT_GAME_KIND]: learning.gameKind,
+        [EXT_INPUT_CHANNEL]: input.inputChannel,
+      },
+    },
+  };
+  const [observation] = scoreChoiceWhole(input.learning, answered.result.success);
+  const assessed = buildAssessedStatement({
+    gameId: sessionId,
+    guessId: attemptId,
+    answered,
+    learning: input.learning,
+    gameKind: 'yalla-solo',
+    observation,
+    scorer: CHOICE_WHOLE_SCORER,
+    inputChannel: input.inputChannel,
+  });
+  return [answered, assessed];
 }
 
 export function buildScoredStatement(input: {

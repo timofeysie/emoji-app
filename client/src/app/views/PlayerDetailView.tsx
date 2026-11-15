@@ -12,6 +12,7 @@ import {
   type Player,
   type TrackStatus,
 } from './leitner';
+import { authFetch } from '../auth/authFetch';
 
 /** `GET /api/players/:id/activity` (server/src/learning/player-activity.ts). */
 type ActivitySession = {
@@ -133,8 +134,8 @@ export function PlayerDetailView() {
     setActivityError(null);
     try {
       const [playerRes, activityRes] = await Promise.all([
-        fetch(`/api/players/${playerId}`, { credentials: 'same-origin' }),
-        fetch(`/api/players/${playerId}/activity`, { credentials: 'same-origin' }),
+        authFetch(`/api/players/${playerId}`, { credentials: 'same-origin' }),
+        authFetch(`/api/players/${playerId}/activity`, { credentials: 'same-origin' }),
       ]);
       if (playerRes.ok) {
         setPlayer(((await playerRes.json()) as { player: Player }).player);

@@ -21,6 +21,7 @@ describe('UserRepository', () => {
       id: USER_ID.toString(),
       displayName: 'timo',
       playerId: null,
+      yallaFormat: null,
     });
     expect(User.findOneAndUpdate).toHaveBeenCalledWith(
       { authProviderId: 'sub-1' },
@@ -51,5 +52,21 @@ describe('UserRepository', () => {
     await expect(repository.setPlayer(USER_ID.toString(), PLAYER_ID.toString())).rejects.toThrow(
       PlayerAlreadyLinkedError,
     );
+  });
+
+  it('saves the YALLA format, and clears it with null', async () => {
+    const format = { reading: 'keyboard', writing: 'onscreen-choice' };
+    User.findByIdAndUpdate.mockReturnValue(
+      leanResult({ _id: USER_ID, displayName: 'timo', playerId: null, preferences: { yallaFormat: format } }),
+    );
+    await expect(repository.setYallaFormat(USER_ID.toString(), format as never)).resolves.toMatchObject({ yallaFormat: format });
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
+      USER_ID,
+      { $set: { 'preferences.yallaFormat': format } },
+      { returnDocument: 'after', runValidators: true },
+    );
+
+    User.findByIdAndUpdate.mockReturnValue(leanResult({ _id: USER_ID, displayName: 'timo', playerId: null, preferences: {} }));
+    await expect(repository.setYallaFormat(USER_ID.toString(), null)).resolves.toMatchObject({ yallaFormat: null });
   });
 });

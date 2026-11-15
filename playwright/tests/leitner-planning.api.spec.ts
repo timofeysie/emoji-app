@@ -336,7 +336,7 @@ test.describe('refusals', () => {
     const student = await leitner.student();
 
     expect((await leitner.planRaw({ playerId: student.id, aspects: ['listening'], dryRun: true })).status()).toBe(400);
-    expect((await leitner.planRaw({ playerId: student.id })).status()).toBe(400); // create needs createdByUserId
+    expect((await leitner.planRaw({ playerId: student.id, dryRun: true, extra: 1 } as never)).status()).toBe(400); // strict body
     expect((await leitner.planRaw({ playerId: student.id, chapter: 99, dryRun: true })).status()).toBe(404);
     expect((await leitner.planRaw({ playerId: '0000000000000000000000ff', dryRun: true })).status()).toBe(404);
     expect((await leitner.progressRaw(student.id, { chapter: 99 })).status()).toBe(404);
