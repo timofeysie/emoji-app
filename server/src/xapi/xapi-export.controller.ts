@@ -1,6 +1,7 @@
-import { Controller, Param, Post, Res } from '@nestjs/common';
+import { Controller, Param, Post, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
+import { RefereeGuard } from '../referee.guard';
 import { GameExportService } from './game-export.service';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
@@ -9,14 +10,14 @@ const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char 
  * Manual export of one completed game's xAPI statements to the configured
  * LRS (docs/xAPI/xapi-export-plan.md Step 1c). Also Retry export for a
  * Leitner game left pending: success deletes it (docs/xAPI/leitner-method.md
- * → lifecycle). Referee-only once Step 0 auth lands; until then the
- * prototype guardrails apply.
+ * → lifecycle). Needs a signed-in referee (RefereeGuard).
  */
 @Controller('api')
 export class XapiExportController {
   constructor(private readonly gameExportService: GameExportService) {}
 
   @Post('games/:gameId/xapi-export')
+  @UseGuards(RefereeGuard)
   async exportGame(@Param('gameId') gameId: string, @Res() res: Response): Promise<void> {
     if (!objectIdSchema.safeParse(gameId).success) {
       res.status(400).json({ error: 'Invalid gameId' });

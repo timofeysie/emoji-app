@@ -3,6 +3,12 @@ import { PairBindingsController } from './pair-bindings.controller';
 import { GameDataRepository, PairBindingSnapshot } from './persistence/game-data.repository';
 import { BadgeStateService } from './badge-state.service';
 
+// The real guard loads `auth.ts` (ESM-only `jose`); handlers are called directly here.
+jest.mock('./referee.guard', () => ({
+  RefereeGuard: class {},
+  refereeUserIdOf: (req: { refereeUserId?: string }) => req.refereeUserId,
+}));
+
 type ResponseMock = Pick<Response, 'status' | 'json'> & {
   status: jest.Mock;
   json: jest.Mock;

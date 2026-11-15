@@ -16,6 +16,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '../shared/button';
 import { TextReveal } from '../shared/text-reveal';
 import { getWsUrl } from '../shared/ws-url';
+import { useIsSignedIn } from '../auth/sign-in-access';
 import { LeitnerSummaryCard, useLeitnerPlayer } from './components/LeitnerGamePanel';
 import type { GameKind, LeitnerSummary } from './leitner';
 
@@ -318,6 +319,7 @@ function readinessLabel(ready: boolean | null): string {
 export function GamePlayView() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
+  const signedIn = useIsSignedIn();
   const [game, setGame] = useState<GamePlayDetail | null>(null);
   const [finished, setFinished] = useState<FinishedGame | null>(null);
   const finishedPlayer = useLeitnerPlayer(finished?.playerId);
@@ -514,14 +516,16 @@ export function GamePlayView() {
           <p className="mt-1 text-sm text-muted-foreground">
             {unavailableMessage(game.state)}
           </p>
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-4"
-            onClick={() => navigate(`/games/${game.id}`)}
-          >
-            Open referee view
-          </Button>
+          {signedIn && (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4"
+              onClick={() => navigate(`/games/${game.id}`)}
+            >
+              Open referee view
+            </Button>
+          )}
         </div>
       ) : (
         <AnimatePresence mode="wait">

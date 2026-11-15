@@ -259,6 +259,9 @@ Moodle involvement.
 > file (`security.md` D13; for now it stays in `rainbow-connection`).
 > Spectator expiry and rate limits are server config with env overrides
 > (D10), not shared with the station.
+>
+> Current status and the sign-in gating that comes before Step 0 are in
+> [Users, roles and permissions](#users-roles-and-permissions--where-we-are-and-next-steps).
 
 Kept here as the agreed design for when it's picked up. Today every game
 endpoint and `/ws` is open to the internet, which is why the prototype
@@ -467,7 +470,9 @@ access).
 ## Suggested implementation order
 
 - *(Step 0 deferred until funded; see above. The prototype relies on the
-  guardrails in `security.md`.)*
+  guardrails in `security.md`. Sign-in gating that doesn't wait for
+  funding is tracked in [Users, roles and
+  permissions](#users-roles-and-permissions--where-we-are-and-next-steps).)*
 1. **Step 1a** — player identity + referee-only badge assignment (server +
    a minimal referee UI control).
 2. **Step 1b** — statement generation as a pure, testable function (verify
@@ -517,3 +522,115 @@ access).
   to `/api/device/*` with credentials needs a coordinated update of
   `emoji-os-zero.py`. Stations running the old script will stop working
   until updated.
+
+---
+
+## Users, roles and permissions — where we are and next steps
+
+*Added 2026-11-14.* Step 0 was written as "the access-control part of the
+xAPI export". It has turned into the app's whole signed-in-vs-guest story
+(YALLA, the chat panel, referee views), so this section is the umbrella
+for it. **Step 0 keeps its name** for the deferred server-side build-out
+(D5–D7, device credentials, WebSocket split), because `security.md` and
+the acceptance criteria above refer to it. The near-term sign-in gating
+below (Phases 1–2) doesn't wait for funding.
+
+The decisions (D1–D14) and the role/authorisation tables stay in
+[`security.md`](./security.md#roles). This section only tracks status and
+order.
+
+### Roles in the prototype
+
+| Role | Signed in? | Can see / do (prototype target) |
+| --- | --- | --- |
+| **Guest** (students, spectators for now) | No | Dashboard, Lights/Scenes demo pages, the games list read-only (Play only), and student mode (`/games/:gameId/play`). No chat, no referee views, no YALLA, no Profile. |
+| **Signed-in user (referee)** | Cognito | Create and manage games, referee panel, players and badge binding, xAPI export, chat panel, YALLA, Profile. |
+| **Platform admin** | Cognito + group | Same as referee for now; a separate `platform-admin` group is deferred to Step 0. |
+| **Device** (station, badge relay) | No (device credential deferred to Step 0) | Device endpoints, unchanged. |
+| **Player** | Never (D1) | — |
+
+For the prototype, **any signed-in user counts as a referee**. Cognito
+groups (`referee`, `platform-admin`) and org membership come with Step 0.
+
+### Where we are (2026-11-14)
+
+| Area | Status |
+| --- | --- |
+| Cognito sign-in (client + `requireAuth` / Nest `AuthGuard`) | ✅ Done. The token's `sub`/`username` are attached as `req.auth`. |
+| YALLA (`/yalla`, Profile) | ✅ Done. Hidden in the header and behind `RequireYalla` when signed out; `/api/yalla/*` and `/api/me` use `AuthGuard`. |
+| Chat | ✅ `POST /api/chat` requires login. Phase 1: the chat button and panel are hidden from guests. |
+| Referee views (game detail / `GameRefereePanel`, Players, Badges) | ✅ Phase 1: behind `RequireSignIn`, header links hidden from guests. The games list is open read-only. |
+| Referee-only writes | ✅ Phase 2: `RefereeGuard` (401 without a token). See the list below. |
+| `createdByUserId` | ✅ Phase 2: from the token (`RefereeGuard` upserts the `User`); a body value is ignored. `DEMO_CREATOR_ID` is gone from the client. Same for `assignedByUserId` on NFC card-group attach. |
+| Reads, device routes, `/ws` | Still open (by design until Step 0). |
+| Staging check | ⏳ Not yet: deploy and check by hand (e2e runs with auth off). |
+| Step 0 (route prefixes, share codes, device credentials, WS split, audit) | ⏸ Phase 3. |
+
+### Phase 1 — sign-in gating in the UI ✅ (2026-11-14)
+
+- `client/src/app/auth/sign-in-access.tsx`: `isSignedIn()`, `useIsSignedIn()`
+  and `RequireSignIn`, used by the header and the routes. They honour
+  `VITE_DISABLE_AUTH` for local dev and e2e. YALLA's `canUseYalla` now
+  delegates to it.
+- Guests don't get the chat button or panel. The panel is unmounted, so
+  signing out also drops the conversation.
+- `/games/:gameId` (referee view), `/players`, `/players/:playerId` and
+  `/badges` redirect guests to `/`. Their header links are hidden.
+- **Decided:** students find their game without signing in, because players
+  never sign in (D1). The games list (`/games`) is open, read-only for
+  guests: no New Game / New Leitner Game, no Edit, just Play into student
+  mode (`/games/:gameId/play`). Student mode hides "Open referee view" from
+  guests. Lights, Scenes and the dashboard stay open as demo pages.
+- Hiding the Badges *page* doesn't affect stations: they never use it, and
+  none of their API calls are guarded (see Phase 2).
+
+Phase 1 only hides UI. Phase 2 is what stops a guest from writing.
+
+### Phase 2 — server enforcement for referee writes ✅ (2026-11-14)
+
+`server/src/referee.guard.ts` checks the token like `AuthGuard`, then
+upserts the caller's `User` and sets `req.refereeUserId`. It guards:
+
+- `POST /api/games`, `/games/:id/state`, `/games/:id/participants`
+- `POST /api/games/nfc-card-groups`, `/games/:id/nfc-card-groups/demo`,
+  `/games/:id/nfc-card-groups/:groupId/attach`
+- `POST /api/questions`, `/questions/:id/state`
+- `POST /api/players`, `PUT`/`DELETE /api/games/:id/player-bindings/:badgeName`
+- `POST /api/games/:id/pairs`, `DELETE /api/games/:id/stations/:stationName`
+- `POST /api/leitner-games` (dry runs too)
+- `POST /api/games/:id/xapi-export`
+
+The referee views call these with `authFetch`, so the token is sent.
+Station routes (`guesses`, `status`, `emoji`, `join`, `readiness`,
+`GET pairs/:pairName`, `nfc-cards`), every `GET` and `/ws` are unchanged.
+The station firmware doesn't need an update.
+
+Not done in Phase 2:
+- `assignedByUserId` on player bindings needs a new field on the binding
+  model. It stays with Step 0, as Step 1a planned.
+- `scripts/create-leitner-game.mjs` and `create-vocab-game.mjs` send no
+  token. They work against a local server with `DISABLE_AUTH=true`, but get
+  401 from staging.
+
+**To check on staging after deploy:**
+- Signed out: no chat button, no Players/Badges/YALLA/Profile links.
+  Games lists games with Play only (no New Game, no Edit); `/games/<id>`
+  redirects to `/`. Student mode on a live game still works.
+- Signed in: create a game and a Leitner game, run one, bind a player,
+  and export.
+- `curl -X POST https://emoji-staging.kogs.link/api/games` without a token
+  returns 401.
+- A station still joins, guesses and gets readiness.
+
+### Phase 3 — Step 0 (release candidate for a school pilot)
+
+**When:** the learning sport's rules and game flow have settled and the
+prototype is dependable enough to be a release candidate for a school
+pilot. Funding is the other trigger (D12). As designed above and in
+`security.md`: default-deny `/api/*`, `/api/public/*` with share codes,
+`/api/device/*` with device credentials, the WebSocket split, CORS, the
+audit log, Cognito groups and org tenancy.
+
+### Open questions
+
+- None for Phases 1–2. The guest decisions are recorded under Phase 1.

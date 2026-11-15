@@ -14,6 +14,7 @@ import {
   type Player,
   type TrackChange,
 } from '../leitner';
+import { authFetch } from '../../auth/authFetch';
 
 export type LeitnerExported = { statementsSent: number; summary: LeitnerSummary | null };
 
@@ -25,7 +26,7 @@ export function useLeitnerPlayer(playerId: string | undefined): Player | null {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch('/api/players', { credentials: 'same-origin' });
+        const res = await authFetch('/api/players', { credentials: 'same-origin' });
         if (!res.ok || cancelled) return;
         const { players } = (await res.json()) as { players: Player[] };
         if (!cancelled) setPlayer(players.find((p) => p.id === playerId) ?? null);
@@ -71,7 +72,7 @@ export function LeitnerGamePanel({
     setRetrying(true);
     setRetryError(null);
     try {
-      const res = await fetch(`/api/games/${gameId}/xapi-export`, {
+      const res = await authFetch(`/api/games/${gameId}/xapi-export`, {
         method: 'POST',
         credentials: 'same-origin',
       });

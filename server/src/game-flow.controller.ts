@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { GameDataRepository } from './persistence/game-data.repository';
@@ -9,6 +9,7 @@ import { QuestionCloser } from './question-closer';
 import { LeitnerFlowService } from './learning/leitner-flow.service';
 import { broadcastBindingsChanged, reportRosterChange } from './station-roster-sync';
 import { GameExportService, type GameExportOutcome } from './xapi/game-export.service';
+import { RefereeGuard, refereeUserIdOf, type RefereeRequest } from './referee.guard';
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char hex ObjectId');
 const slotLabelSchema = z.enum(['A', 'B', 'C', 'D', 'E']);
@@ -26,9 +27,9 @@ const gameLifecycleStateSchema = z.enum([
   'cancelled',
 ]);
 
+/** `createdByUserId` comes from the token (RefereeGuard); a body value is ignored. */
 const createGameSchema = z.object({
   title: z.string().min(1),
-  createdByUserId: objectIdSchema,
 });
 
 const addParticipantSchema = z
@@ -61,13 +62,12 @@ const createNfcCardGroupSchema = z.object({
     .min(1),
 });
 
-const attachNfcCardGroupSchema = z.object({
-  assignedByUserId: objectIdSchema.optional(),
-});
+/** `assignedByUserId` comes from the token (RefereeGuard); a body value is ignored. */
+const attachNfcCardGroupSchema = z.object({});
 
+/** `createdByUserId` comes from the token (RefereeGuard); a body value is ignored. */
 const createQuestionSchema = z.object({
   gameId: objectIdSchema,
-  createdByUserId: objectIdSchema,
   text: z.string().min(1),
   sequence: z.number().int().positive(),
   mode: questionModeSchema,
@@ -394,7 +394,8 @@ export class GameFlowController {
   }
 
   @Post('games')
-  async createGame(@Body() body: unknown, @Res() res: Response): Promise<void> {
+  @UseGuards(RefereeGuard)
+  async createGame(@Body() body: unknown, @Res() res: Response, @Req() req: RefereeRequest): Promise<void> {
     const result = createGameSchema.safeParse(body);
     if (!result.success) {
       res.status(400).json({ error: 'Validation failed', details: getValidationErrors(result.error) });
@@ -402,7 +403,10 @@ export class GameFlowController {
     }
 
     try {
-      const gameId = await this.gameDataRepository.createGame(result.data);
+      const gameId = await this.gameDataRepository.createGame({
+        ...result.data,
+        createdByUserId: refereeUserIdOf(req),
+      });
       res.status(201).json({ gameId });
     } catch (error) {
       res.status(500).json({ error: 'Failed to create game', message: String(error) });
@@ -410,6 +414,7 @@ export class GameFlowController {
   }
 
   @Post('games/:gameId/state')
+  @UseGuards(RefereeGuard)
   async setGameState(
     @Param('gameId') gameId: string,
     @Body() body: unknown,
@@ -580,6 +585,7 @@ export class GameFlowController {
   }
 
   @Post('games/:gameId/participants')
+  @UseGuards(RefereeGuard)
   async addParticipant(
     @Param('gameId') gameId: string,
     @Body() body: unknown,
@@ -605,6 +611,7 @@ export class GameFlowController {
   }
 
   @Post('games/nfc-card-groups')
+  @UseGuards(RefereeGuard)
   async createNfcCardGroup(@Body() body: unknown, @Res() res: Response): Promise<void> {
     const result = createNfcCardGroupSchema.safeParse(body);
     if (!result.success) {
@@ -626,6 +633,7 @@ export class GameFlowController {
    * it to the game. Preferred referee path — avoids create-then-attach races.
    */
   @Post('games/:gameId/nfc-card-groups/demo')
+  @UseGuards(RefereeGuard)
   async assignDemoNfcCardGroup(
     @Param('gameId') gameId: string,
     @Res() res: Response,
@@ -656,11 +664,13 @@ export class GameFlowController {
   }
 
   @Post('games/:gameId/nfc-card-groups/:groupId/attach')
+  @UseGuards(RefereeGuard)
   async attachNfcCardGroup(
     @Param('gameId') gameId: string,
     @Param('groupId') groupId: string,
     @Body() body: unknown,
     @Res() res: Response,
+    @Req() req: RefereeRequest,
   ): Promise<void> {
     const gameIdResult = objectIdSchema.safeParse(gameId);
     const groupIdResult = objectIdSchema.safeParse(groupId);
@@ -679,7 +689,7 @@ export class GameFlowController {
       await this.gameDataRepository.assignNfcCardGroupToGame({
         gameId,
         groupId,
-        assignedByUserId: payloadResult.data.assignedByUserId,
+        assignedByUserId: refereeUserIdOf(req),
       });
       res.status(201).json({ ok: true });
     } catch (error) {
@@ -688,7 +698,8 @@ export class GameFlowController {
   }
 
   @Post('questions')
-  async createQuestion(@Body() body: unknown, @Res() res: Response): Promise<void> {
+  @UseGuards(RefereeGuard)
+  async createQuestion(@Body() body: unknown, @Res() res: Response, @Req() req: RefereeRequest): Promise<void> {
     const result = createQuestionSchema.safeParse(body);
     if (!result.success) {
       res.status(400).json({ error: 'Validation failed', details: getValidationErrors(result.error) });
@@ -696,7 +707,10 @@ export class GameFlowController {
     }
 
     try {
-      const questionId = await this.gameDataRepository.createQuestionWithOptions(result.data);
+      const questionId = await this.gameDataRepository.createQuestionWithOptions({
+        ...result.data,
+        createdByUserId: refereeUserIdOf(req),
+      });
       res.status(201).json({ questionId });
     } catch (error) {
       res.status(500).json({ error: 'Failed to create question', message: String(error) });
@@ -704,6 +718,7 @@ export class GameFlowController {
   }
 
   @Post('questions/:questionId/state')
+  @UseGuards(RefereeGuard)
   async setQuestionState(
     @Param('questionId') questionId: string,
     @Body() body: unknown,

@@ -1,9 +1,10 @@
-import { Body, Controller, Post, Res } from '@nestjs/common';
+import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
 import { toQuestionInput, vocabSkillValues } from '../games/generators/vocab-choice';
 import { GameDataRepository } from '../persistence/game-data.repository';
 import { PlayerRepository } from '../persistence/player.repository';
+import { RefereeGuard, refereeUserIdOf, type RefereeRequest } from '../referee.guard';
 import { KOREAN_BOOK } from './learning-object';
 import { LeitnerPlanner, sendPlanError, type LeitnerPlan } from './leitner-planner';
 import { LeitnerSetupService, previewSetup } from './leitner-setup.service';
@@ -13,7 +14,7 @@ const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, 'must be a 24-char 
 const createLeitnerGameSchema = z
   .object({
     playerId: objectIdSchema,
-    /** Required unless `dryRun`. */
+    /** Ignored: the creator comes from the token (RefereeGuard). Accepted so old scripts still work. */
     createdByUserId: objectIdSchema.optional(),
     book: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).default(KOREAN_BOOK),
     chapter: z
@@ -34,12 +35,7 @@ const createLeitnerGameSchema = z
     now: z.string().datetime({ offset: true }).optional(),
     dryRun: z.boolean().default(false),
   })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (!value.dryRun && !value.createdByUserId) {
-      ctx.addIssue({ path: ['createdByUserId'], code: z.ZodIssueCode.custom, message: 'required unless dryRun' });
-    }
-  });
+  .strict();
 
 function getValidationErrors(error: ZodError): Array<{ path: string; message: string }> {
   return error.issues.map((issue) => ({
@@ -50,8 +46,8 @@ function getValidationErrors(error: ZodError): Array<{ path: string; message: st
 
 /**
  * Plans and creates a student's next solo Leitner game
- * (docs/xAPI/leitner-method.md → Referee flow, API). Referee-only once
- * Step 0 auth lands. Creating also presets the student's live station and
+ * (docs/xAPI/leitner-method.md → Referee flow, API). Needs a signed-in
+ * referee (RefereeGuard). Creating also presets the student's live station and
  * a card group (`setup`); the dry run says what it would preset.
  */
 @Controller('api')
@@ -64,7 +60,8 @@ export class LeitnerGamesController {
   ) {}
 
   @Post('leitner-games')
-  async createLeitnerGame(@Body() body: unknown, @Res() res: Response): Promise<void> {
+  @UseGuards(RefereeGuard)
+  async createLeitnerGame(@Body() body: unknown, @Res() res: Response, @Req() req: RefereeRequest): Promise<void> {
     const parsed = createLeitnerGameSchema.safeParse(body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: getValidationErrors(parsed.error) });
@@ -126,7 +123,7 @@ export class LeitnerGamesController {
       const gameId = await this.gameDataRepository.createLeitnerGame({
         // Game.title reaches the LRS: the label, never the first name.
         title: `Leitner: ${player.label} · ch. ${input.chapter}${input.scope === 'review' ? ' + review' : ''}`,
-        createdByUserId: input.createdByUserId!,
+        createdByUserId: refereeUserIdOf(req),
         leitner: {
           playerId: player.id,
           book: content.book,

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, Loader2, Users } from 'lucide-react';
 import type { Player } from './leitner';
+import { authFetch } from '../auth/authFetch';
 
 /**
  * Every referee-made player: the same list as "Pick a student" in New
@@ -16,7 +17,7 @@ export function PlayersView() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/players', { credentials: 'same-origin' });
+        const res = await authFetch('/api/players', { credentials: 'same-origin' });
         if (!res.ok) {
           if (!cancelled) setFetchError(`Server returned ${res.status}`);
           return;
