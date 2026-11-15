@@ -1,12 +1,34 @@
 # Staging workflow (macOS / zsh)
 
+## Basic workflow
+
+```sh
+tag="staging-$(date +%F)a"
+staging-2026-11-15a
+
+aws ecr get-login-password --region ap-southeast-2 |
+  docker login --username AWS --password-stdin "$registry"
+
+docker build --platform linux/amd64 -t "emoji-app:$tag" \
+  --build-arg VITE_COGNITO_DOMAIN="https://ap-southeast-2myj579wg2.auth.ap-southeast-2.amazoncognito.com" \
+  --build-arg VITE_COGNITO_CLIENT_ID="7d0kjtsi0h8kjhk2fg1ee64h55" \
+  --build-arg VITE_COGNITO_SCOPES="openid email profile" \
+  .
+
+sed -i '' "s|^image_uri = \".*\"|image_uri = \"$registry/emoji-app:$tag\"|" \
+  infra/terraform/envs/staging/terraform.tfvars
+grep -E 'image_uri|_enabled' infra/terraform/envs/staging/terraform.tfvars
+
+cd infra/terraform/envs/staging
+terraform apply
+terraform plan  
+```
+
 From `develop` onto staging and then into `main`.
 This is the zsh version of README → *Deploy application changes to staging*
 (which is written for PowerShell), plus the order of steps.
 
 Staging: <https://emoji-staging.kogs.link>
-
-## How it fits together
 
 - **Terraform runs whatever image `image_uri` pins** in
   `infra/terraform/envs/staging/terraform.tfvars`. `terraform apply` alone never

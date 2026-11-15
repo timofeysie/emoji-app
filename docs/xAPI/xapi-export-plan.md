@@ -543,7 +543,7 @@ order.
 
 | Role | Signed in? | Can see / do (prototype target) |
 | --- | --- | --- |
-| **Guest** | No | Dashboard, Lights/Scenes demo pages, and student mode (`/games/:gameId/play`). No chat, no referee views, no YALLA, no Profile. |
+| **Guest** (students, spectators for now) | No | Dashboard, Lights/Scenes demo pages, the games list read-only (Play only), and student mode (`/games/:gameId/play`). No chat, no referee views, no YALLA, no Profile. |
 | **Signed-in user (referee)** | Cognito | Create and manage games, referee panel, players and badge binding, xAPI export, chat panel, YALLA, Profile. |
 | **Platform admin** | Cognito + group | Same as referee for now; a separate `platform-admin` group is deferred to Step 0. |
 | **Device** (station, badge relay) | No (device credential deferred to Step 0) | Device endpoints, unchanged. |
@@ -559,7 +559,7 @@ groups (`referee`, `platform-admin`) and org membership come with Step 0.
 | Cognito sign-in (client + `requireAuth` / Nest `AuthGuard`) | ✅ Done. The token's `sub`/`username` are attached as `req.auth`. |
 | YALLA (`/yalla`, Profile) | ✅ Done. Hidden in the header and behind `RequireYalla` when signed out; `/api/yalla/*` and `/api/me` use `AuthGuard`. |
 | Chat | ✅ `POST /api/chat` requires login. Phase 1: the chat button and panel are hidden from guests. |
-| Referee views (Games, game detail / `GameRefereePanel`, Players, Badges) | ✅ Phase 1: behind `RequireSignIn`, header links hidden from guests. |
+| Referee views (game detail / `GameRefereePanel`, Players, Badges) | ✅ Phase 1: behind `RequireSignIn`, header links hidden from guests. The games list is open read-only. |
 | Referee-only writes | ✅ Phase 2: `RefereeGuard` (401 without a token). See the list below. |
 | `createdByUserId` | ✅ Phase 2: from the token (`RefereeGuard` upserts the `User`); a body value is ignored. `DEMO_CREATOR_ID` is gone from the client. Same for `assignedByUserId` on NFC card-group attach. |
 | Reads, device routes, `/ws` | Still open (by design until Step 0). |
@@ -574,11 +574,15 @@ groups (`referee`, `platform-admin`) and org membership come with Step 0.
   delegates to it.
 - Guests don't get the chat button or panel. The panel is unmounted, so
   signing out also drops the conversation.
-- `/games`, `/games/:gameId`, `/players`, `/players/:playerId` and `/badges`
-  redirect guests to `/`. Their header links are hidden.
-- **Decided:** student mode (`/games/:gameId/play`) stays open, because
-  players never sign in (D1). Lights, Scenes and the dashboard stay open as
-  demo pages.
+- `/games/:gameId` (referee view), `/players`, `/players/:playerId` and
+  `/badges` redirect guests to `/`. Their header links are hidden.
+- **Decided:** students find their game without signing in, because players
+  never sign in (D1). The games list (`/games`) is open, read-only for
+  guests: no New Game / New Leitner Game, no Edit, just Play into student
+  mode (`/games/:gameId/play`). Student mode hides "Open referee view" from
+  guests. Lights, Scenes and the dashboard stay open as demo pages.
+- Hiding the Badges *page* doesn't affect stations: they never use it, and
+  none of their API calls are guarded (see Phase 2).
 
 Phase 1 only hides UI. Phase 2 is what stops a guest from writing.
 
@@ -609,8 +613,9 @@ Not done in Phase 2:
   401 from staging.
 
 **To check on staging after deploy:**
-- Signed out: no chat button, no Games/Players/Badges/YALLA/Profile links.
-  `/games` redirects to `/`. Student mode on a live game still works.
+- Signed out: no chat button, no Players/Badges/YALLA/Profile links.
+  Games lists games with Play only (no New Game, no Edit); `/games/<id>`
+  redirects to `/`. Student mode on a live game still works.
 - Signed in: create a game and a Leitner game, run one, bind a player,
   and export.
 - `curl -X POST https://emoji-staging.kogs.link/api/games` without a token

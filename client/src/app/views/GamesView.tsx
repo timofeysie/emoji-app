@@ -19,6 +19,7 @@ import { getWsUrl } from '../shared/ws-url';
 import { NewLeitnerGameDialog } from './components/NewLeitnerGameDialog';
 import type { GameKind } from './leitner';
 import { authFetch } from '../auth/authFetch';
+import { useIsSignedIn } from '../auth/sign-in-access';
 
 /** Placeholder creator ID used when no auth is wired. Must be a 24-char hex ObjectId. */
 
@@ -173,8 +174,10 @@ function NewGameDialog({ onCreated }: { onCreated: () => void }) {
   );
 }
 
+/** Guests get a read-only list: Play (student mode) only, no create or edit. */
 export function GamesView() {
   const navigate = useNavigate();
+  const signedIn = useIsSignedIn();
   const [games, setGames] = useState<GameSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -225,10 +228,12 @@ export function GamesView() {
         <p className="text-sm text-muted-foreground">
           {loading ? 'Loading…' : `${games.length} game${games.length === 1 ? '' : 's'}`}
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <NewLeitnerGameDialog />
-          <NewGameDialog onCreated={() => void loadGames()} />
-        </div>
+        {signedIn && (
+          <div className="flex flex-wrap items-center gap-2">
+            <NewLeitnerGameDialog />
+            <NewGameDialog onCreated={() => void loadGames()} />
+          </div>
+        )}
       </div>
 
       {loading && (
@@ -247,7 +252,13 @@ export function GamesView() {
       {!loading && !fetchError && games.length === 0 && (
         <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
           <Gamepad2 className="mx-auto mb-2 h-8 w-8 opacity-40" aria-hidden />
-          No games yet. Click <strong>New Game</strong> to create one.
+          {signedIn ? (
+            <>
+              No games yet. Click <strong>New Game</strong> to create one.
+            </>
+          ) : (
+            'No games yet.'
+          )}
         </div>
       )}
 
@@ -296,16 +307,18 @@ export function GamesView() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Edit ${game.title}`}
-                    title={`Edit ${game.title}`}
-                    onClick={() => navigate(`/games/${game.id}`)}
-                  >
-                    <Pencil aria-hidden />
-                  </Button>
+                  {signedIn && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Edit ${game.title}`}
+                      title={`Edit ${game.title}`}
+                      onClick={() => navigate(`/games/${game.id}`)}
+                    >
+                      <Pencil aria-hidden />
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="ghost"

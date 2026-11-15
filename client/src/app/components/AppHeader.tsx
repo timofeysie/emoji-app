@@ -17,7 +17,7 @@ import {
 /** `signedIn`: hidden from guests. Profile holds "Practise as", so it's signed-in only too. */
 const NAV_LINKS = [
   { to: '/yalla', label: 'YALLA', signedIn: true },
-  { to: '/games', label: 'Games', signedIn: true },
+  { to: '/games', label: 'Games', signedIn: false },
   { to: '/players', label: 'Players', signedIn: true },
   { to: '/badges', label: 'Badges', signedIn: true },
   { to: '/lights', label: 'Lights', signedIn: false },

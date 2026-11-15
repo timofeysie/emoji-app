@@ -46,7 +46,8 @@ function MainShell() {
           <AppHeader chatOpen={chatOpen} onToggleChat={() => setChatToggled((open) => !open)} />
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <Routes>
-              {/* Student mode: players never sign in (security.md D1). */}
+              {/* Students: the read-only list and student mode. Players never sign in (security.md D1). */}
+              <Route path="/games" element={<GamesView />} />
               <Route path="/games/:gameId/play" element={<GamePlayView />} />
               {/* Referee views: signed-in users only. */}
               <Route
@@ -56,7 +57,6 @@ function MainShell() {
                   </RequireSignIn>
                 }
               >
-                <Route path="/games" element={<GamesView />} />
                 <Route path="/games/:gameId" element={<GameDetailView />} />
                 <Route path="/players" element={<PlayersView />} />
                 <Route path="/players/:playerId" element={<PlayerDetailView />} />
