@@ -63,6 +63,7 @@ In development, Vite proxies `/api` to `localhost:3000`. In production, Express 
 - `useCoreChatArea`: who the assistant is, `Markdown` and `Card` components
 - `game-authoring/useGameAuthoringChatArea`: `proposeGame`, `reviseGameDraft`, `getMyDrafts`, `getGameDraft`, and the `GameDraft`, `OpenGame`, `OpenDraft` components. `proposeGame` gets only the passage's first words and finds the passage in the user's messages (`findPassage`); it returns `problems` and a `mixProblem` for the model to fix with `reviseGameDraft`
 - `library/useLibraryChatArea`: `getBooks`, `findSenses`, `proposeChapter`, `reviseChapterDraft`, `getChapterDraft`, `remixChapter`, and the `ChapterDraft`, `OpenYallaChapter` components. Only when the user asks for a library chapter; new senses are confirmed by the user on the card, never by the model
+- `leitner/useLeitnerChatArea`: `getPlayers` (matches names in the browser, returns only id and label), `createLeitnerGame` (always a dry run) and the `LeitnerPlan` card, which re-plans with the same seed and time and creates the game on the referee's click
 - `useSmartHomeChatArea`: `getLights`, `getScenes`, `controlLight`, `deleteLight`, `deleteScene`, `createLight` (javascript runtime), `LightChat` and `AddScene` components
 - `useDomChatArea`: `setFormInputValue`, `clickButtonByText`, `selectOptionByText` — manipulate React form elements directly via DOM APIs, allowing the AI to fill forms and submit dialogs
 
@@ -72,7 +73,7 @@ The panel has its own `HashbrownProvider` (`chat/ChatSessionProvider.tsx`) that 
 
 **Game drafts** (docs/hashbrown/creating-games-with-hashbrown.md): the AI's output is only ever a draft until the owner clicks Create game. The server re-checks every draft with `gameDraftProblems()`, so keep its `GAME_DRAFT_LIMITS` equal to the client's `GAME_LIMITS` (a spec compares them). The length limits depend on the screens that show game text: read "Text length and screens" in that doc before changing a limit or showing game text somewhere new. Generated options are shuffled in `useGameGeneration`, because models put the correct one first.
 
-**Library chapters** (same doc, Feature 2): a chapter draft publishes into a user `Book` as a `Chapter` (`kogs.chapter.v1` plus `senseIds`). Published vocabulary is frozen (G8): entries can be corrected or appended, never reordered or removed, because `sourceRef` (`ch1/vocabulary/3`) and sense ids reach the LRS. Keep `CHAPTER_DRAFT_LIMITS` equal to the client's `CHAPTER_LIMITS` (a spec compares them). The Leitner planner, progress and export still use the synchronous `getBookContent()` (built-in books only) until H3.
+**Library chapters** (same doc, Feature 2): a chapter draft publishes into a user `Book` as a `Chapter` (`kogs.chapter.v1` plus `senseIds`). Published vocabulary is frozen (G8): entries can be corrected or appended, never reordered or removed, because `sourceRef` (`ch1/vocabulary/3`) and sense ids reach the LRS. Keep `CHAPTER_DRAFT_LIMITS` equal to the client's `CHAPTER_LIMITS` (a spec compares them). Anything that reads a book by slug (Leitner planner, progress, YALLA practice, export) goes through `BookContentService`, so it works for user books too (H3); the synchronous `getBookContent()` only knows built-in books.
 
 Tool arguments are validated with Hashbrown's schema system (`s.object`, `s.string`, etc.).
 

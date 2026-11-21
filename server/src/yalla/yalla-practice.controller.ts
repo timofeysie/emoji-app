@@ -7,7 +7,8 @@ import { AuthGuard } from '../auth.guard';
 import { firstSense, QUIZ_SLOT_LABELS, vocabSkillValues, type VocabSkill } from '../games/generators/vocab-choice';
 import { LearnerService } from '../learner.service';
 import { isTypedCorrect, typedItem } from '../learning/answer-check';
-import { getBookContent, UnknownBookError } from '../learning/book-content';
+import { UnknownBookError, type BookContent } from '../learning/book-content';
+import { BookContentService } from '../learning/book-content.service';
 import { LrsNotConfiguredError } from '../learning/learning-progress.service';
 import { rememberSentStatements } from '../learning/student-evidence';
 import { KOREAN_BOOK } from '../learning/learning-object';
@@ -117,17 +118,17 @@ class InvalidAttemptError extends Error {
 }
 
 /**
- * Re-checks one attempt against the book content and builds its statements.
+ * Re-checks one attempt against its book's content and builds its statements.
  * Choice: the client's options are accepted only if exactly one of them is
  * the right answer, and `success` is whether the chosen one is it. Typed:
  * `answer-check.ts` against the content (the same check the client ran).
  */
 function recheck(
   attempt: Attempt,
+  content: BookContent,
   now: number,
   base: { sessionId: string; externalId: string },
 ): [XApiAnsweredStatement, XApiAssessedStatement] {
-  const content = getBookContent(attempt.book);
   const sense = content.senseBySourceRef.get(attempt.sourceRef);
   const term = termsOf(content).bySourceRef.get(attempt.sourceRef);
   if (!sense || !term || sense.id !== attempt.learningObjectId) {
@@ -198,6 +199,7 @@ export class YallaPracticeController {
   constructor(
     private readonly learnerService: LearnerService,
     private readonly planner: LeitnerPlanner,
+    private readonly bookContent: BookContentService,
   ) {}
 
   /** Plans a session. 200 with no items when nothing is left to ask. */
@@ -276,7 +278,8 @@ export class YallaPracticeController {
     const results: Array<{ attemptId: string; correct: boolean }> = [];
     try {
       for (const attempt of attempts) {
-        const [answered, assessed] = recheck(attempt, now, { sessionId, externalId: player.externalId });
+        const content = await this.bookContent.getBookContent(attempt.book);
+        const [answered, assessed] = recheck(attempt, content, now, { sessionId, externalId: player.externalId });
         statements.push(answered, assessed);
         results.push({ attemptId: attempt.attemptId, correct: answered.result.success });
       }

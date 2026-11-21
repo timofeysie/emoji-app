@@ -22,9 +22,9 @@ export type FoundSense = { id: string; gloss: string; kind: string; from: 'regis
  * file merged with the `senses` collection (the file wins on a clash).
  * Publishing clears the book and the language's senses.
  *
- * H2 uses it for YALLA study pages and sense lookups. The Leitner planner,
- * progress and export still call `getBookContent` (built-in books only)
- * until H3.
+ * Everything that reads a book by slug uses it: YALLA study pages, sense
+ * lookups, the Leitner planner (badge games and YALLA practice), progress,
+ * the practice re-check and export (H3).
  */
 @Injectable()
 export class BookContentService {

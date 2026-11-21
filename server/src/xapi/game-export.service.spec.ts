@@ -2,6 +2,7 @@ import { GameDataRepository, type GameExportData } from '../persistence/game-dat
 import { PlayerRepository } from '../persistence/player.repository';
 import { assessedStatement } from '../test/leitner-statements';
 import { GameExportService } from './game-export.service';
+import { builtInBookContent } from '../test/book-content';
 
 const GAME_ID = '6650f00000000000000000f0';
 const PLAYER_ID = '6650c00000000000000000c0';
@@ -53,7 +54,11 @@ describe('GameExportService', () => {
     recordExportFailure: jest.fn(),
   };
   const players = { getGamePlayerBindings: jest.fn(), getPlayer: jest.fn(), attributeLeitnerGuesses: jest.fn() };
-  const service = new GameExportService(games as unknown as GameDataRepository, players as unknown as PlayerRepository);
+  const service = new GameExportService(
+    games as unknown as GameDataRepository,
+    players as unknown as PlayerRepository,
+    builtInBookContent(),
+  );
 
   /** GET → the student's earlier statements; POST → `postStatus`. */
   function lrs(prior: unknown[], postStatus = 200): jest.Mock {

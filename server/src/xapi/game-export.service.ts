@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { getBookContent } from '../learning/book-content';
+import { BookContentService } from '../learning/book-content.service';
 import { compareTracks, foldTracks, observationsFromStatements, type TrackChange } from '../learning/leitner';
 import { fetchStudentEvidence } from '../learning/student-evidence';
 import { GameDataRepository } from '../persistence/game-data.repository';
@@ -64,6 +64,7 @@ export class GameExportService {
   constructor(
     private readonly gameDataRepository: GameDataRepository,
     private readonly playerRepository: PlayerRepository,
+    private readonly bookContent: BookContentService,
   ) {}
 
   async exportGame(gameId: string): Promise<GameExportOutcome> {
@@ -206,7 +207,7 @@ export class GameExportService {
     try {
       const player = await this.playerRepository.getPlayer(leitner.playerId);
       if (!player) return null;
-      const { language } = getBookContent(leitner.book);
+      const { language } = await this.bookContent.getBookContent(leitner.book);
       const { statements } = await fetchStudentEvidence(config, player.externalId, language);
       return { statements, language };
     } catch {

@@ -7,6 +7,7 @@ import { GameDataRepository } from '../persistence/game-data.repository';
 import { PlayerRepository } from '../persistence/player.repository';
 import { assessedStatement } from '../test/leitner-statements';
 import { YallaProgressController } from './yalla-progress.controller';
+import { builtInBookContent } from '../test/book-content';
 
 // The guard is covered in auth.guard.spec.ts; importing the real one needs Cognito env.
 jest.mock('../auth.guard', () => ({ AuthGuard: class {} }));
@@ -35,7 +36,7 @@ describe('YallaProgressController', () => {
   const games = { listLeitnerGamesForPlayer: jest.fn() };
   const players = { getPlayer: jest.fn() };
   const learner = { resolveLearner: jest.fn() };
-  const service = new LearningProgressService(games as unknown as GameDataRepository);
+  const service = new LearningProgressService(games as unknown as GameDataRepository, builtInBookContent());
   const controller = new YallaProgressController(learner as unknown as LearnerService, service);
 
   beforeEach(() => {
@@ -79,6 +80,7 @@ describe('YallaProgressController', () => {
       players as unknown as PlayerRepository,
       games as unknown as GameDataRepository,
       service,
+      builtInBookContent(),
     );
     const query = { chapter: '27', aspects: 'reading,writing', now: NOW };
 

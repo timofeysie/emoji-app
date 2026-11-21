@@ -4,6 +4,7 @@ import { PlayerRepository } from '../persistence/player.repository';
 import { assessedStatement } from '../test/leitner-statements';
 import { LearningProgressService } from './learning-progress.service';
 import { LearningProgressController } from './progress.controller';
+import { builtInBookContent } from '../test/book-content';
 
 type ResponseMock = Pick<Response, 'status' | 'json'> & {
   status: jest.Mock;
@@ -33,7 +34,8 @@ describe('LearningProgressController', () => {
   const controller = new LearningProgressController(
     repository as unknown as PlayerRepository,
     games as unknown as GameDataRepository,
-    new LearningProgressService(games as unknown as GameDataRepository),
+    new LearningProgressService(games as unknown as GameDataRepository, builtInBookContent()),
+    builtInBookContent(),
   );
 
   beforeEach(() => {
@@ -124,9 +126,9 @@ describe('LearningProgressController', () => {
     ]);
   });
 
-  it("lists the book's chapters, and 404s an unknown book", () => {
+  it("lists the book's chapters, and 404s an unknown book", async () => {
     const res = createResponseMock();
-    controller.getChapters('korean-language-book', res as unknown as Response);
+    await controller.getChapters('korean-language-book', res as unknown as Response);
     expect(res.status).toHaveBeenCalledWith(200);
     const body = res.json.mock.calls[0][0] as { language: string; chapters: Array<{ chapter: string; entryCount: number }> };
     expect(body.language).toBe('ko');
@@ -134,7 +136,7 @@ describe('LearningProgressController', () => {
     expect(body.chapters.every((chapter) => chapter.entryCount > 0)).toBe(true);
 
     const unknown = createResponseMock();
-    controller.getChapters('no-such-book', unknown as unknown as Response);
+    await controller.getChapters('no-such-book', unknown as unknown as Response);
     expect(unknown.status).toHaveBeenCalledWith(404);
   });
 

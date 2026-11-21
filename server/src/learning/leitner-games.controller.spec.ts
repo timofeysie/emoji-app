@@ -7,6 +7,7 @@ import { firstSense, termsFromChapter } from '../games/generators/vocab-choice';
 import { LeitnerGamesController } from './leitner-games.controller';
 import { LeitnerPlanner } from './leitner-planner';
 import type { RefereeRequest } from '../referee.guard';
+import { builtInBookContent } from '../test/book-content';
 
 // The real guard loads `auth.ts` (ESM-only `jose`); handlers are called directly here.
 jest.mock('../referee.guard', () => ({
@@ -39,7 +40,7 @@ describe('LeitnerGamesController', () => {
   const controller = new LeitnerGamesController(
     players as unknown as PlayerRepository,
     games as unknown as GameDataRepository,
-    new LeitnerPlanner(games as unknown as GameDataRepository),
+    new LeitnerPlanner(games as unknown as GameDataRepository, builtInBookContent()),
   );
 
   function lrsReturns(statements: unknown[]): jest.Mock {

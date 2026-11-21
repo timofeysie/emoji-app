@@ -63,23 +63,11 @@ function useFormat(): [GameFormat, (format: GameFormat | null) => void] {
 /**
  * Solo Leitner practice for this chapter (docs/yalla/implementation-plan.md
  * §6, milestones Y4–Y5): set up a session, answer each word by typing it or
- * choosing A–D, see the summary. Answers go through the outbox; the header
+ * choosing A–D, see the summary. Library chapters too (docs/hashbrown, H3):
+ * the planner reads user books, and their words share the built-in tracks. Answers go through the outbox; the header
  * pills reload once they're in the LRS.
  */
 export function ExercisesSection() {
-  const chapter = useStudyChapter();
-  // Library chapters are study-only until the planner reads user books (docs/hashbrown, H3).
-  if (chapter.owner === 'mine' || chapter.owner === 'other') {
-    return (
-      <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground" data-testid="library-exercises-later">
-        Exercises for library chapters are coming soon. For now, study the passage, vocabulary and patterns.
-      </p>
-    );
-  }
-  return <ChapterExercises />;
-}
-
-function ChapterExercises() {
   const chapter = useStudyChapter();
   const progress = useChapterProgress();
   const playerId = useMeStore((state) => state.me?.player?.id ?? null);

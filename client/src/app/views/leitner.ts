@@ -168,3 +168,31 @@ export function errorText(body: Record<string, unknown>, status: number): string
   const message = typeof body['message'] === 'string' ? body['message'] : null;
   return error ?? message ?? `Server error ${status}`;
 }
+
+/** A planning refusal the referee can act on: the message, and the games that block it (open them to fix it). */
+export type LeitnerRefusal = { message: string; gameIds: string[]; action: string | null };
+
+/** What a refused `POST /api/leitner-games` means for the referee (the dialog and the chat card). */
+export function leitnerRefusal(status: number, body: Record<string, unknown>): LeitnerRefusal {
+  if (status === 409 && Array.isArray(body['pendingExport'])) {
+    return {
+      message: "This student's last Leitner game hasn't reached the LRS yet. Retry its export first, so the plan uses up-to-date levels.",
+      gameIds: (body['pendingExport'] as PendingExport[]).map((game) => game.gameId),
+      action: 'Open to retry export',
+    };
+  }
+  if (status === 409 && Array.isArray(body['inPlay'])) {
+    return {
+      message: 'A Leitner game for this student is being played. End it first.',
+      gameIds: body['inPlay'] as string[],
+      action: 'Open game',
+    };
+  }
+  const none = { gameIds: [], action: null };
+  if (status === 422 && Array.isArray(body['sourceRefs'])) {
+    return { ...none, message: `${errorText(body, status)}: ${(body['sourceRefs'] as string[]).join(', ')}` };
+  }
+  if (status === 503) return { ...none, message: 'The LRS is not configured on this server, so levels cannot be read.' };
+  if (status === 502) return { ...none, message: 'The LRS request failed. Try again in a moment.' };
+  return { ...none, message: errorText(body, status) };
+}

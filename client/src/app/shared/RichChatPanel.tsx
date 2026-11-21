@@ -9,6 +9,7 @@ import { useSmartHomeChatArea } from '../chat/smart-home/useSmartHomeChatArea';
 import { useCoreChatArea } from '../chat/useCoreChatArea';
 import { useGameAuthoringChatArea } from '../chat/game-authoring/useGameAuthoringChatArea';
 import { useLibraryChatArea } from '../chat/library/useLibraryChatArea';
+import { useLeitnerChatArea } from '../chat/leitner/useLeitnerChatArea';
 import { useChatContextUsage } from '../chat/useChatContextUsage';
 import { useDomChatArea } from '../chat/useDomChatArea';
 import { Button } from './button';
@@ -25,6 +26,7 @@ export const RichChatPanel = () => {
     useCoreChatArea(),
     useGameAuthoringChatArea(() => userTextsRef.current),
     useLibraryChatArea(() => userTextsRef.current),
+    useLeitnerChatArea(),
     useSmartHomeChatArea(),
     useDomChatArea(),
   ];

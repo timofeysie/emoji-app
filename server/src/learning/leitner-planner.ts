@@ -12,13 +12,13 @@ import type { PlayerSummary } from '../persistence/player.repository';
 import { loadLrsConfigFromEnv, LrsRequestError, type LrsConfig } from '../xapi/lrs-client';
 import {
   chapterLearningObjects,
-  getBookContent,
   UnknownBookError,
   UnknownChapterError,
   UnregisteredSensesError,
   type BookContent,
   type LearningObject,
 } from './book-content';
+import { BookContentService } from './book-content.service';
 import { foldTracks, type TrackState } from './leitner';
 import { chapterOfSourceRef, parseQualifiedSourceRef } from './learning-object';
 import { LrsNotConfiguredError, type PendingExport } from './learning-progress.service';
@@ -135,16 +135,20 @@ function pendingExport(games: LeitnerGameStatus[]): PendingExport[] {
  */
 @Injectable()
 export class LeitnerPlanner {
-  constructor(private readonly gameDataRepository: GameDataRepository) {}
+  constructor(
+    private readonly gameDataRepository: GameDataRepository,
+    private readonly bookContent: BookContentService,
+  ) {}
 
   /**
-   * The book, chapter and LRS are checked before `loadPlayer` runs.
+   * The book (built-in or a user book), chapter and LRS are checked before
+   * `loadPlayer` runs.
    * @throws UnknownBookError, UnknownChapterError, UnregisteredSensesError,
    *   LrsNotConfiguredError, PlayerNotFoundError, PendingExportError,
    *   GameInPlayError, LrsRequestError
    */
   async plan(request: PlanRequest, loadPlayer: () => Promise<PlayerSummary | null>): Promise<LeitnerPlan> {
-    const content = getBookContent(request.book);
+    const content = await this.bookContent.getBookContent(request.book);
     const chapterObjects: LearningObject[] = chapterLearningObjects(content, request.chapter);
 
     let config: LrsConfig;

@@ -25,25 +25,27 @@ import { cn } from '../../shared/utils';
 import {
   dueLabel,
   errorBody,
-  errorText,
   LEITNER_ASPECTS,
   LEITNER_BOOK,
+  leitnerRefusal,
   levelLabel,
   PICK_REASONS,
   REASON_STYLES,
   type LeitnerScope,
   type LeitnerSetup,
-  type PendingExport,
   type Plan,
   type Player,
   type Progress,
   type ProgressTrack,
 } from '../leitner';
 import { authFetch } from '../../auth/authFetch';
+import { fetchYalla, type BookSummary } from '../../yalla/yalla-api';
 
 const DEFAULT_CHAPTER = '27';
 
-type Chapter = { chapter: string; entryCount: number };
+type Chapter = { chapter: string; entryCount: number; title?: string };
+
+const OWNER_HINT = { mine: 'yours', other: 'shared' } as const;
 
 /** A refusal the referee can act on: open the blocking game. */
 type Blocked = { message: string; gameIds: string[]; action: string };
@@ -52,7 +54,8 @@ type Preview = { plan: Plan; progress: Progress | null; setup: LeitnerSetup | nu
 
 /**
  * Games → New Leitner game (docs/xAPI/leitner-method.md → Referee flow):
- * pick the student, chapter, scope and aspects, optionally preview the plan
+ * pick the student, book (built-in or a library book, docs/hashbrown H3),
+ * chapter, scope and aspects, optionally preview the plan
  * (a dry run plus the progress table), then create the game and open it.
  * Creating presets the student's live station and a card group.
  */
@@ -60,6 +63,8 @@ export function NewLeitnerGameDialog() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [books, setBooks] = useState<BookSummary[]>([]);
+  const [book, setBook] = useState(LEITNER_BOOK);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [playerId, setPlayerId] = useState('');
   const [chapter, setChapter] = useState(DEFAULT_CHAPTER);
@@ -73,20 +78,18 @@ export function NewLeitnerGameDialog() {
 
   const loadOptions = useCallback(async () => {
     try {
-      const [playersRes, chaptersRes] = await Promise.all([
+      const [playersRes, loadedBooks] = await Promise.all([
         authFetch('/api/players', { credentials: 'same-origin' }),
-        authFetch(`/api/books/${LEITNER_BOOK}/chapters`, { credentials: 'same-origin' }),
+        // Library books change while the app is open: not cached.
+        fetchYalla<{ books: BookSummary[] }>('/books', { cache: false }).then(
+          (body) => body.books,
+          () => [],
+        ),
       ]);
       if (playersRes.ok) {
         setPlayers(((await playersRes.json()) as { players: Player[] }).players);
       }
-      if (chaptersRes.ok) {
-        const loaded = ((await chaptersRes.json()) as { chapters: Chapter[] }).chapters;
-        setChapters(loaded);
-        setChapter((current) =>
-          loaded.some((c) => c.chapter === current) ? current : (loaded[0]?.chapter ?? current),
-        );
-      }
+      setBooks(loadedBooks);
     } catch {
       setError('Could not reach server.');
     }
@@ -96,15 +99,49 @@ export function NewLeitnerGameDialog() {
     if (open) void loadOptions();
   }, [open, loadOptions]);
 
+  const bookSummary = books.find((entry) => entry.book === book);
+
+  // The chapters the planner can use (any book), titled from the library and without archived ones.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await authFetch(`/api/books/${book}/chapters`, { credentials: 'same-origin' });
+        if (!res.ok || cancelled) return;
+        const loaded = ((await res.json()) as { chapters: Chapter[] }).chapters;
+        const summaries = new Map((bookSummary?.chapters ?? []).map((summary) => [summary.chapter, summary]));
+        const usable = loaded
+          .filter((c) => !summaries.get(c.chapter)?.archived)
+          .map((c) => {
+            const summary = summaries.get(c.chapter);
+            return { ...c, title: summary ? summary.titleNative || summary.titleTarget : undefined };
+          });
+        setChapters(usable);
+        setChapter((current) =>
+          usable.some((c) => c.chapter === current)
+            ? current
+            : (usable.find((c) => c.chapter === DEFAULT_CHAPTER)?.chapter ?? usable[0]?.chapter ?? current),
+        );
+      } catch {
+        if (!cancelled) setError('Could not reach server.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, book, bookSummary]);
+
   // Any change makes the previewed plan stale.
   useEffect(() => {
     setPreview(null);
     setBlocked(null);
     setError(null);
-  }, [playerId, chapter, scope, aspects]);
+  }, [playerId, book, chapter, scope, aspects]);
 
   const reset = () => {
     setPlayerId('');
+    setBook(LEITNER_BOOK);
     setScope('review');
     setAspects([...LEITNER_ASPECTS]);
     setPreview(null);
@@ -114,7 +151,7 @@ export function NewLeitnerGameDialog() {
 
   const request = (extra: Record<string, unknown>) => ({
     playerId,
-    book: LEITNER_BOOK,
+    book,
     chapter,
     scope,
     aspects,
@@ -123,36 +160,9 @@ export function NewLeitnerGameDialog() {
 
   /** 409s name the game that blocks planning; the referee resolves it there. */
   const handleRefusal = (status: number, body: Record<string, unknown>) => {
-    if (status === 409 && Array.isArray(body['pendingExport'])) {
-      const pending = body['pendingExport'] as PendingExport[];
-      setBlocked({
-        message: "This student's last Leitner game hasn't reached the LRS yet. Retry its export first, so the plan uses up-to-date levels.",
-        gameIds: pending.map((game) => game.gameId),
-        action: 'Open to retry export',
-      });
-      return;
-    }
-    if (status === 409 && Array.isArray(body['inPlay'])) {
-      setBlocked({
-        message: 'A Leitner game for this student is being played. End it first.',
-        gameIds: body['inPlay'] as string[],
-        action: 'Open game',
-      });
-      return;
-    }
-    if (status === 422 && Array.isArray(body['sourceRefs'])) {
-      setError(`${errorText(body, status)}: ${(body['sourceRefs'] as string[]).join(', ')}`);
-      return;
-    }
-    if (status === 503) {
-      setError('The LRS is not configured on this server, so levels cannot be read.');
-      return;
-    }
-    if (status === 502) {
-      setError('The LRS request failed. Try again in a moment.');
-      return;
-    }
-    setError(errorText(body, status));
+    const refusal = leitnerRefusal(status, body);
+    if (refusal.action) setBlocked({ message: refusal.message, gameIds: refusal.gameIds, action: refusal.action });
+    else setError(refusal.message);
   };
 
   const previewPlan = async () => {
@@ -164,7 +174,7 @@ export function NewLeitnerGameDialog() {
     setError(null);
     setBlocked(null);
     try {
-      const query = new URLSearchParams({ book: LEITNER_BOOK, chapter, scope, aspects: aspects.join(',') });
+      const query = new URLSearchParams({ book, chapter, scope, aspects: aspects.join(',') });
       const [planRes, progressRes] = await Promise.all([
         authFetch('/api/leitner-games', {
           method: 'POST',
@@ -278,6 +288,27 @@ export function NewLeitnerGameDialog() {
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <Label htmlFor="leitner-book">Book</Label>
+            <Select value={book} onValueChange={setBook}>
+              <SelectTrigger id="leitner-book">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(books.length ? books : [{ book, title: book, language: 'ko', chapters: [] } satisfies BookSummary])
+                  .filter((entry) => entry.chapters.length > 0 || entry.book === book)
+                  .map((entry) => (
+                    <SelectItem key={entry.book} value={entry.book}>
+                      {entry.title}
+                      {entry.owner && entry.owner !== 'built-in' && (
+                        <span className="ml-1.5 text-[10px] text-muted-foreground">{OWNER_HINT[entry.owner]}</span>
+                      )}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="leitner-chapter">Chapter</Label>
             <Select value={chapter} onValueChange={setChapter}>
               <SelectTrigger id="leitner-chapter">
@@ -287,6 +318,7 @@ export function NewLeitnerGameDialog() {
                 {(chapters.length ? chapters : [{ chapter, entryCount: 0 }]).map((c) => (
                   <SelectItem key={c.chapter} value={c.chapter}>
                     Chapter {c.chapter}
+                    {c.title && <span className="ml-1.5">· {c.title}</span>}
                     {c.entryCount > 0 && (
                       <span className="ml-1.5 text-[10px] text-muted-foreground">
                         {c.entryCount} words

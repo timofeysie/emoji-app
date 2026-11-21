@@ -5,12 +5,12 @@ import type { PlayerSummary } from '../persistence/player.repository';
 import { loadLrsConfigFromEnv, LrsRequestError } from '../xapi/lrs-client';
 import {
   chapterLearningObjects,
-  getBookContent,
   UnknownBookError,
   UnknownChapterError,
   UnregisteredSensesError,
   type BookContent,
 } from './book-content';
+import { BookContentService } from './book-content.service';
 import {
   buildProgress,
   DEFAULT_LEITNER_CONFIG,
@@ -93,14 +93,17 @@ export function countByAspect(tracks: readonly ProgressTrack[], aspects: readonl
  */
 @Injectable()
 export class LearningProgressService {
-  constructor(private readonly gameDataRepository: GameDataRepository) {}
+  constructor(
+    private readonly gameDataRepository: GameDataRepository,
+    private readonly bookContent: BookContentService,
+  ) {}
 
   /**
    * @throws UnknownBookError, UnknownChapterError, UnregisteredSensesError,
    *   LrsNotConfiguredError, LrsRequestError (see `sendProgressError`)
    */
   async forChapter(player: PlayerSummary, query: ProgressQuery): Promise<ChapterProgress> {
-    const content = getBookContent(query.book);
+    const content = await this.bookContent.getBookContent(query.book);
     const objects = chapterLearningObjects(content, query.chapter);
     const evidence = await this.evidence(player, content);
 
@@ -141,7 +144,7 @@ export class LearningProgressService {
    * @throws UnknownBookError, LrsNotConfiguredError, LrsRequestError
    */
   async forBook(player: PlayerSummary, query: Omit<ProgressQuery, 'chapter' | 'scope'>): Promise<BookProgress> {
-    const content = getBookContent(query.book);
+    const content = await this.bookContent.getBookContent(query.book);
     const evidence = await this.evidence(player, content);
 
     const chapters: BookProgress['chapters'] = [];

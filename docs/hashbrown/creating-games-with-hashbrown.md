@@ -1,8 +1,9 @@
 # Creating games with Hashbrown
 
-Status: **H0 to H2 built** (2026-11-21): single game creation on the
-Draft Game page and in the chat, and library chapters for study in YALLA.
-H3 (Leitner on library chapters) is next.
+Status: **H0 to H3 built** (H0–H2 2026-11-21, H3 2026-11-22): single game
+creation on the Draft Game page and in the chat, library chapters in YALLA,
+and Leitner games and YALLA Exercises on library chapters. H4 (grammar
+learning objects) is next.
 
 > ⚠️ **Text length is a standing design issue.** How long a question or an
 > option can be depends on the smallest screen that shows it: student
@@ -698,7 +699,7 @@ conversation, so they don't need one.
 | H1 ✅ | **Single game creation**: `ContentSource`, `ContentDraft`, draft endpoints, `createGameWithQuestions`, the **Draft Game** button, drafts list and `GameDraftEditor` page (`useStructuredCompletion`), the card-slot check at Start, Duplicate and remix of games, and `asking-for-games.md`. Built 2026-11-21, see [H1: what was built](#h1-what-was-built). | H0 |
 | H1b ✅ | **Single games from the chat**: `proposeGame` / `reviseGameDraft` / `getMyDrafts`, the `GameDraft` card, `OpenGame` / `OpenDraft`. Built 2026-11-21, see [H1b: what was built](#h1b-what-was-built). | H1 |
 | H2 ✅ | **Library chapters (study only)**: `Book`, `Chapter`, the `Sense` collection, async `BookContentService`, shared `kogsChapterV1Schema`, `findSenses` / `proposeChapter` / `ChapterDraft` / `OpenYallaChapter`, open books in YALLA, **Save as library chapter**, remix and archive. Built 2026-11-21, see [H2: what was built](#h2-what-was-built). | H1 (drafts) |
-| H3 | **Leitner on library chapters**: planner and generator on user books, book picker in `NewLeitnerGameDialog`, YALLA Exercises on user books, `createLeitnerGame` chat tool with dry-run plan. | H2 |
+| H3 ✅ | **Leitner on library chapters**: planner and generator on user books, book picker in `NewLeitnerGameDialog`, YALLA Exercises on user books, `createLeitnerGame` chat tool with dry-run plan. Built 2026-11-22, see [H3: what was built](#h3-what-was-built). | H2 |
 | H4 | **Grammar learning objects**: the romanisation and slug rules, pattern registry, cloze generator, pattern tracks. | H3. Identity decided ([A4](#decided-grammar-pattern-identity-a4)). |
 | Later | A quick game from a library chapter (questions tagged, so they could count if class games ever join `countedGameKinds`). `org`/`private` visibility with organisations. The single create flow in `future-game-formats.md`, where "from pasted text" becomes a content-source option. | — |
 
@@ -1078,6 +1079,70 @@ Built 2026-11-21.
 - **Two real referees.** `DISABLE_AUTH` gives one identity. The specs
   cover owner-only edits, archives and publishes.
 
+### H3: what was built
+
+Built 2026-11-22.
+
+- **Server, content:** everything that reads a book by slug now goes
+  through the async `BookContentService`: the `LeitnerPlanner` (badge games
+  and YALLA practice), `LearningProgressService` (Players → detail and
+  YALLA pills), `GET /api/books/:book/chapters`,
+  `GET /api/players/:id/activity`, the YALLA practice re-check
+  (`POST /api/yalla/me/results`) and the Leitner export's track changes.
+  The synchronous `getBookContent()` is left for the built-in books inside
+  `book-content.ts`, `yalla-content.ts` and the chapter-draft remix of a
+  built-in chapter.
+- **Server, Leitner games:** `POST /api/leitner-games` takes any user book
+  (the slug was already in the schema). Questions are tagged
+  `{ book: '<user-slug>', sourceRef: 'ch1/vocabulary/3', learningObjectId }`
+  with the chapter's stored `senseIds`, so a reused sense keeps its id (one
+  track, A1). A user book's game title is
+  `Leitner: Player 7F3A · <slug> ch. 1` (the slug has no names, G9). The
+  built-in book's title is unchanged.
+- **Client, Games:** `NewLeitnerGameDialog` has a **Book** picker (from
+  `/api/yalla/books`: built-in, *yours*, *shared*). Chapters come from
+  `/api/books/:book/chapters`, titled from the library, without archived
+  chapters. The default is still ch. 27 of the built-in book. The refusal
+  messages moved to `leitnerRefusal()` in `views/leitner.ts`, shared with
+  the chat card.
+- **Client, YALLA:** Exercises on a library chapter are the normal practice
+  (the "coming soon" note is gone).
+- **Client, chat** (`chat/leitner/useLeitnerChatArea.ts`, fourth in the
+  panel):
+  - `getPlayers({ name })` matches the name in the browser and returns only
+    `playerId` and `label`, so first names don't go to OpenAI from a tool
+    result (the user may still type one).
+  - `createLeitnerGame` is always a dry run. It returns the words, `seed`
+    and `now`, or `refused` with the reason (pending export, game in play,
+    no LRS).
+  - `<LeitnerPlan>` takes the request plus `seed` and `now` as props
+    (small, G2), plans again on mount and shows the words, the station
+    preset and what it replaces. **Create game** replays the plan's seed
+    and time, so the game is the one shown, then opens it. The created game
+    id is remembered in `sessionStorage` so a re-rendered card doesn't offer
+    Create again.
+- **Checked:**
+  - **Specs:** `leitner-user-books.spec.ts` (5) publishes a library chapter
+    into the in-memory repository and then: creates a badge game whose
+    questions carry the user book and `ko/lexeme/시험/test`; dry run and
+    404 for an unknown chapter; a `시험` answer from the built-in book shows
+    as the same track on the library chapter (progress and planner); YALLA
+    practice on the library chapter sends `assessed` on the shared id with
+    `source-ref` `<slug>/ch1/vocabulary/0`, and a mismatched id is refused.
+    The library spec fixtures moved to `server/src/test/library-fixtures.ts`.
+    All 489 server tests pass. Lint and the build are clean, and the client
+    typecheck shows the same 4 errors as before.
+
+**Not checked:**
+- **Against a real LRS and Mongo.** The specs mock the LRS and use the
+  in-memory book repository. A badge game from a library chapter hasn't
+  been played and exported to `emojiapp-dev` yet.
+- **AI output.** `getPlayers` → `getBooks` → `createLeitnerGame` →
+  `<LeitnerPlan>` hasn't been run against `gpt-4.1`, in particular whether
+  it copies `seed` and `now` into the props. (If it doesn't, the card still
+  shows the plan it will create, from a fresh dry run.)
+- **The dialog, the chat card and YALLA Exercises on screen.**
+
 ### Acceptance — H0b
 
 - [ ] The context reading appears under the chat input. Before the first
@@ -1164,13 +1229,16 @@ Built 2026-11-21.
 
 ### Acceptance — H3
 
-- [ ] The referee creates a Leitner game for a player from a user-book
+- [x] The referee creates a Leitner game for a player from a user-book
       chapter. Its questions are tagged with that book and the shared
-      learning objects.
+      learning objects. *(Specs; the dialog and the chat card still to
+      check on screen.)*
 - [ ] After play and export, `assessed` statements for a reused sense
       update the same track the built-in book uses (one track per sense).
-- [ ] YALLA Exercises on a user chapter record `yalla-solo` evidence that
-      moves the same tracks.
+      *(The fold and the planner agree in specs. Play and export to
+      `emojiapp-dev` still to do.)*
+- [x] YALLA Exercises on a user chapter record `yalla-solo` evidence that
+      moves the same tracks. *(Specs, with a mocked LRS; check on screen.)*
 
 ---
 

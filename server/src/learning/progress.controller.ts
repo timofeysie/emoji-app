@@ -4,7 +4,8 @@ import { z, ZodError } from 'zod';
 import { PlayerRepository } from '../persistence/player.repository';
 import { GameDataRepository } from '../persistence/game-data.repository';
 import { loadLrsConfigFromEnv, LrsRequestError, type LrsConfig } from '../xapi/lrs-client';
-import { getBookContent, UnknownBookError } from './book-content';
+import { UnknownBookError, type BookContent } from './book-content';
+import { BookContentService } from './book-content.service';
 import { LearningProgressService, sendProgressError } from './learning-progress.service';
 import { fetchStudentStatements } from './student-evidence';
 import { summarizePlayerActivity } from './player-activity';
@@ -55,17 +56,18 @@ export class LearningProgressController {
     private readonly playerRepository: PlayerRepository,
     private readonly gameDataRepository: GameDataRepository,
     private readonly progressService: LearningProgressService,
+    private readonly bookContent: BookContentService,
   ) {}
 
-  /** The chapters a Leitner game can be planned from (the referee's chapter picker). */
+  /** The chapters a Leitner game can be planned from (the referee's chapter picker), built-in or user book. */
   @Get('books/:book/chapters')
-  getChapters(@Param('book') book: string, @Res() res: Response): void {
+  async getChapters(@Param('book') book: string, @Res() res: Response): Promise<void> {
     if (!slugSchema.safeParse(book).success) {
       res.status(400).json({ error: 'Invalid book' });
       return;
     }
     try {
-      const content = getBookContent(book);
+      const content = await this.bookContent.getBookContent(book);
       const chapters = [...content.chapters.values()]
         .map((vocabulary) => ({ chapter: vocabulary.chapter, entryCount: vocabulary.entries.length }))
         .sort((a, b) => Number(a.chapter) - Number(b.chapter));
@@ -139,9 +141,9 @@ export class LearningProgressController {
     }
     const { book, now: nowParam } = queryResult.data;
 
-    let content;
+    let content: BookContent;
     try {
-      content = getBookContent(book);
+      content = await this.bookContent.getBookContent(book);
     } catch (error) {
       if (error instanceof UnknownBookError) {
         res.status(404).json({ error: error.message });

@@ -7,6 +7,7 @@ import { EXT_GAME_KIND, EXT_INPUT_CHANNEL } from '../learning/learning-object';
 import { LeitnerPlanner } from '../learning/leitner-planner';
 import { GameDataRepository } from '../persistence/game-data.repository';
 import { YallaPracticeController } from './yalla-practice.controller';
+import { builtInBookContent } from '../test/book-content';
 
 // The guard is covered in auth.guard.spec.ts; importing the real one needs Cognito env.
 jest.mock('../auth.guard', () => ({ AuthGuard: class {} }));
@@ -39,7 +40,8 @@ describe('YallaPracticeController', () => {
   const learner = { resolveLearner: jest.fn() };
   const controller = new YallaPracticeController(
     learner as unknown as LearnerService,
-    new LeitnerPlanner(games as unknown as GameDataRepository),
+    new LeitnerPlanner(games as unknown as GameDataRepository, builtInBookContent()),
+    builtInBookContent(),
   );
   /** Every statement POSTed to the LRS, in order. */
   let sent: Json[];

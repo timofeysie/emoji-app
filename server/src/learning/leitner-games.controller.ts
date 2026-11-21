@@ -121,8 +121,8 @@ export class LeitnerGamesController {
         await this.gameDataRepository.deleteGame(gameId);
       }
       const gameId = await this.gameDataRepository.createLeitnerGame({
-        // Game.title reaches the LRS: the label, never the first name.
-        title: `Leitner: ${player.label} · ch. ${input.chapter}${input.scope === 'review' ? ' + review' : ''}`,
+        // Game.title reaches the LRS: the label, never the first name. A user book's slug has no names (G9).
+        title: `Leitner: ${player.label} · ${content.book === KOREAN_BOOK ? '' : `${content.book} `}ch. ${input.chapter}${input.scope === 'review' ? ' + review' : ''}`,
         createdByUserId: refereeUserIdOf(req),
         leitner: {
           playerId: player.id,
