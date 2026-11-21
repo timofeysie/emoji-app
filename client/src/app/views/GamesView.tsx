@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Gamepad2, GraduationCap, Loader2, Pencil, Play, Plus } from 'lucide-react';
+import { FileText, Gamepad2, GraduationCap, Loader2, Pencil, Play, Plus } from 'lucide-react';
 import { Button } from '../shared/button';
 import {
   Dialog,
@@ -232,6 +232,10 @@ export function GamesView() {
           <div className="flex flex-wrap items-center gap-2">
             <NewLeitnerGameDialog />
             <NewGameDialog onCreated={() => void loadGames()} />
+            <Button variant="outline" onClick={() => navigate('/games/drafts')}>
+              <FileText className="mr-1.5 h-4 w-4" aria-hidden />
+              Draft Game
+            </Button>
           </div>
         )}
       </div>

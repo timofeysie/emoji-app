@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
-import { GameDataRepository } from './persistence/game-data.repository';
+import { cardSlotProblem, GameDataRepository } from './persistence/game-data.repository';
 import { learningTagSchema } from './learning/learning-object';
 import { BadgeStateService } from './badge-state.service';
 import { NfcCardService, shortCardLabel } from './nfc-card.service';
@@ -307,8 +307,11 @@ export class GameFlowController {
       return;
     }
     try {
-      const group = await this.gameDataRepository.getActiveNfcCardGroupForGame(gameId);
-      res.status(200).json({ group });
+      const [group, slotCheck] = await Promise.all([
+        this.gameDataRepository.getActiveNfcCardGroupForGame(gameId),
+        this.gameDataRepository.getCardSlotCheck(gameId),
+      ]);
+      res.status(200).json({ group, slotCheck, slotProblem: cardSlotProblem(slotCheck) });
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch NFC card group', message: String(error) });
     }
@@ -433,6 +436,14 @@ export class GameFlowController {
 
     try {
       const { state } = payloadResult.data;
+      if (state === 'active') {
+        // A round no card can answer would never close (docs/hashbrown → Options per question).
+        const slotProblem = cardSlotProblem(await this.gameDataRepository.getCardSlotCheck(gameId));
+        if (slotProblem) {
+          res.status(409).json({ error: slotProblem });
+          return;
+        }
+      }
       const { openedQuestionId, leitnerExport } = await this.applyGameState(gameId, state);
       res.status(200).json({
         ok: true,
@@ -653,8 +664,11 @@ export class GameFlowController {
     try {
       const groupId = await this.gameDataRepository.ensureNfcCardGroup(demoGroup);
       await this.gameDataRepository.assignNfcCardGroupToGame({ gameId, groupId });
-      const group = await this.gameDataRepository.getActiveNfcCardGroupForGame(gameId);
-      res.status(200).json({ group });
+      const [group, slotCheck] = await Promise.all([
+        this.gameDataRepository.getActiveNfcCardGroupForGame(gameId),
+        this.gameDataRepository.getCardSlotCheck(gameId),
+      ]);
+      res.status(200).json({ group, slotCheck, slotProblem: cardSlotProblem(slotCheck) });
     } catch (error) {
       res.status(500).json({
         error: 'Failed to assign demo NFC card group',

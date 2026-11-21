@@ -9,7 +9,11 @@ import {
 import {
   assignmentReasonValues,
   badgeStatusValues,
+  contentDraftStatusValues,
+  contentDraftTypeValues,
+  contentSourceFormatValues,
   gameKindValues,
+  gameOriginKindValues,
   gameNfcCardGroupAssignmentStatusValues,
   gameStateValues,
   leitnerPickReasonValues,
@@ -92,6 +96,21 @@ const leitnerPlanSchema = new Schema(
   { _id: false },
 );
 
+/**
+ * Where a game came from when it wasn't made by hand: an accepted content
+ * draft (docs/hashbrown/creating-games-with-hashbrown.md → Server).
+ */
+const gameOriginSchema = new Schema(
+  {
+    kind: { type: String, required: true, enum: gameOriginKindValues },
+    contentSourceId: { type: objectId, ref: 'ContentSource', default: null },
+    draftId: { type: objectId, ref: 'ContentDraft', required: true },
+    /** Duplicate or remix of another game. Credited by title only (G12). */
+    remixedFromGameId: { type: objectId, ref: 'Game', default: null },
+  },
+  { _id: false },
+);
+
 const gameSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
@@ -99,6 +118,8 @@ const gameSchema = new Schema(
     /** Missing on games made before this field: read as `class`. */
     kind: { type: String, enum: gameKindValues, default: 'class', immutable: true },
     leitner: { type: leitnerPlanSchema, default: undefined, immutable: true },
+    /** Missing: made by hand. */
+    origin: { type: gameOriginSchema, default: undefined, immutable: true },
     createdByUserId: { type: objectId, ref: 'User', required: true, immutable: true },
     startedAt: { type: Date },
     endedAt: { type: Date },
@@ -360,6 +381,83 @@ pairBindingSchema.index({ pairName: 1 }, { unique: true });
 pairBindingSchema.index({ gameId: 1 });
 pairBindingSchema.index({ gameId: 1, stationName: 1 });
 
+const languagePairSchema = new Schema(
+  {
+    /** The language being learned, e.g. `ko`. */
+    target: { type: String, required: true },
+    /** The learner's language, e.g. `en`. */
+    native: { type: String, required: true },
+  },
+  { _id: false },
+);
+
+/**
+ * Text a user pasted for the AI to draft from (G13). Never edited: a changed
+ * paste is a new source. Others can read it once a draft using it is shared
+ * or a game made from it is accepted (G12, G14).
+ */
+const contentSourceSchema = new Schema(
+  {
+    ownerUserId: { type: objectId, ref: 'User', required: true, immutable: true },
+    format: { type: String, required: true, enum: contentSourceFormatValues, immutable: true },
+    language: { type: languagePairSchema, required: true, immutable: true },
+    title: { type: String, default: '', trim: true },
+    raw: { type: String, required: true, immutable: true },
+    /** SHA-256 of `raw`, so pasting the same text again reuses the source. */
+    checksum: { type: String, required: true, immutable: true },
+  },
+  { timestamps: { createdAt: true, updatedAt: false }, collection: 'contentSources' },
+);
+contentSourceSchema.index({ ownerUserId: 1, checksum: 1 }, { unique: true });
+
+const draftProblemSchema = new Schema(
+  {
+    path: { type: String, required: true },
+    message: { type: String, required: true },
+  },
+  { _id: false },
+);
+
+/**
+ * Something the AI (or a person) is drafting, before it becomes playable
+ * (G1). `payload` is validated by the server's draft schema for `type`, and
+ * `problems` lists what still stops it being accepted.
+ */
+const contentDraftSchema = new Schema(
+  {
+    ownerUserId: { type: objectId, ref: 'User', required: true, immutable: true },
+    type: { type: String, required: true, enum: contentDraftTypeValues, immutable: true },
+    sourceId: { type: objectId, ref: 'ContentSource', default: null },
+    title: { type: String, default: '', trim: true },
+    payload: { type: Schema.Types.Mixed, default: null },
+    settings: {
+      type: new Schema(
+        {
+          mix: { type: String, required: true },
+          questionCount: { type: Number, required: true },
+          optionsPerQuestion: { type: Number, required: true },
+        },
+        { _id: false },
+      ),
+      required: true,
+    },
+    problems: { type: [draftProblemSchema], default: [] },
+    status: { type: String, required: true, enum: contentDraftStatusValues, default: 'draft' },
+    /** Listed in every signed-in user's Shared drafts (G14). */
+    shared: { type: Boolean, required: true, default: false },
+    lastEditedByUserId: { type: objectId, ref: 'User', required: true },
+    /** Game drafts: the game made on accept. */
+    resultGameId: { type: objectId, ref: 'Game', default: null },
+    /** Duplicated from this game: recorded on the game made from it. */
+    remixedFromGameId: { type: objectId, ref: 'Game', default: null },
+    /** Bumped by every write; a write against an older one is refused. */
+    revision: { type: Number, required: true, default: 1 },
+  },
+  { timestamps: true, collection: 'contentDrafts' },
+);
+contentDraftSchema.index({ ownerUserId: 1, updatedAt: -1 });
+contentDraftSchema.index({ shared: 1, updatedAt: -1 }, { partialFilterExpression: { shared: true } });
+
 export type User = InferSchemaType<typeof userSchema>;
 export type Badge = InferSchemaType<typeof badgeSchema>;
 export type Game = InferSchemaType<typeof gameSchema>;
@@ -374,6 +472,8 @@ export type NfcCard = InferSchemaType<typeof nfcCardSchema>;
 export type GameNfcCardGroupAssignment = InferSchemaType<typeof gameNfcCardGroupAssignmentSchema>;
 export type Guess = InferSchemaType<typeof guessSchema>;
 export type PairBinding = InferSchemaType<typeof pairBindingSchema>;
+export type ContentSource = InferSchemaType<typeof contentSourceSchema>;
+export type ContentDraft = InferSchemaType<typeof contentDraftSchema>;
 
 export type UserDocument = HydratedDocument<User>;
 export type BadgeDocument = HydratedDocument<Badge>;
@@ -405,6 +505,8 @@ export type DbModels = {
   GameNfcCardGroupAssignment: Model<GameNfcCardGroupAssignment>;
   Guess: Model<Guess>;
   PairBinding: Model<PairBinding>;
+  ContentSource: Model<ContentSource>;
+  ContentDraft: Model<ContentDraft>;
 };
 
 export function registerModels(connection: Connection): DbModels {
@@ -426,6 +528,8 @@ export function registerModels(connection: Connection): DbModels {
     ),
     Guess: connection.model('Guess', guessSchema),
     PairBinding: connection.model('PairBinding', pairBindingSchema),
+    ContentSource: connection.model('ContentSource', contentSourceSchema),
+    ContentDraft: connection.model('ContentDraft', contentDraftSchema),
   };
 }
 

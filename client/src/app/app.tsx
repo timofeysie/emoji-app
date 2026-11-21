@@ -16,6 +16,8 @@ import { ScheduledScenesView } from './views/ScheduledScenesView';
 import { BadgesView } from './views/BadgesView';
 import { GamesView } from './views/GamesView';
 import { GameDetailView } from './views/GameDetailView';
+import { GameDraftsView } from './views/GameDraftsView';
+import { GameDraftView } from './views/GameDraftView';
 import { GamePlayView } from './views/GamePlayView';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { UserProfileView } from './views/UserProfileView';
@@ -58,6 +60,8 @@ function MainShell() {
                   </RequireSignIn>
                 }
               >
+                <Route path="/games/drafts" element={<GameDraftsView />} />
+                <Route path="/games/drafts/:draftId" element={<GameDraftView />} />
                 <Route path="/games/:gameId" element={<GameDetailView />} />
                 <Route path="/players" element={<PlayersView />} />
                 <Route path="/players/:playerId" element={<PlayerDetailView />} />

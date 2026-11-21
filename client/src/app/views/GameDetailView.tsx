@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { LayoutGroup, motion } from 'motion/react';
-import { CheckCircle2, ChevronLeft, Circle, GraduationCap, Loader2, Plus } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, Circle, Copy, GraduationCap, Loader2, Plus } from 'lucide-react';
 import { Button } from '../shared/button';
 import { GameRefereePanel } from './components/GameRefereePanel';
 import { PlayerBindingsPanel } from './components/PlayerBindingsPanel';
@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { cn } from '../shared/utils';
 import { gameLogRef, logGameState } from '../shared/game-state-log';
 import { getWsUrl } from '../shared/ws-url';
+import { createDraft } from '../game-authoring/drafts-api';
 import {
   PairGuessChart,
   type GuessChartData,
@@ -126,12 +127,46 @@ type GameDetail = {
   leitner?: LeitnerGameInfo | null;
   exportError?: string | null;
   exportAttemptedAt?: string | null;
+  /** Made from a draft (docs/hashbrown). A duplicate credits its game by title only. */
+  origin?: { draftId: string; remixedFromGameId: string | null; remixedFromTitle: string | null } | null;
   createdAt: string;
   startedAt: string | null;
   endedAt: string | null;
   questions: Question[];
   boundPairs: BoundPair[];
 };
+
+/** Copies a class game into a new draft of the user's own (any referee's game). */
+function DuplicateGameButton({ gameId }: { gameId: string }) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={busy}
+        title="Copy this game into a new draft you can edit"
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            const { draft } = await createDraft({ fromGameId: gameId });
+            navigate(`/games/drafts/${draft.id}`);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not duplicate the game.');
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? <Loader2 className="animate-spin" aria-hidden /> : <Copy aria-hidden />}
+        Duplicate
+      </Button>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </span>
+  );
+}
 
 const STATE_STYLES: Record<GameState, string> = {
   draft: 'bg-muted text-muted-foreground',
@@ -906,8 +941,26 @@ export function GameDetailView() {
           <h1 className="text-xl font-bold">{game.title}</h1>
           <StateChip state={game.state} />
           {isLeitner && <LeitnerChip />}
+          {!isLeitner && (
+            <span className="ml-auto">
+              <DuplicateGameButton gameId={game.id} />
+            </span>
+          )}
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
+          {game.origin?.remixedFromGameId && (
+            <>
+              Remixed from{' '}
+              {game.origin.remixedFromTitle ? (
+                <Link className="underline" to={`/games/${game.origin.remixedFromGameId}`}>
+                  {game.origin.remixedFromTitle}
+                </Link>
+              ) : (
+                'a game that was deleted'
+              )}
+              {' · '}
+            </>
+          )}
           Created {new Date(game.createdAt).toLocaleDateString()}
           {game.startedAt && ` · Started ${new Date(game.startedAt).toLocaleDateString()}`}
           {game.endedAt && ` · Ended ${new Date(game.endedAt).toLocaleDateString()}`}

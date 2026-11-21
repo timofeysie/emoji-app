@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ChatController } from './chat.controller';
 import { ChatContextController } from './chat/chat-context.controller';
 import { ChatContextService } from './chat/chat-context.service';
+import { ContentDraftsController } from './content/content-drafts.controller';
+import { ContentDraftRepository } from './persistence/content-draft.repository';
 import { BadgesController } from './badges.controller';
 import { BadgeStateService } from './badge-state.service';
 import { MongoService } from './persistence/mongo.service';
@@ -33,6 +35,7 @@ import { UserRepository } from './persistence/user.repository';
   controllers: [
     ChatController,
     ChatContextController,
+    ContentDraftsController,
     BadgesController,
     GameFlowController,
     NfcCardsController,
@@ -49,6 +52,7 @@ import { UserRepository } from './persistence/user.repository';
   ],
   providers: [
     ChatContextService,
+    ContentDraftRepository,
     LearningProgressService,
     LeitnerPlanner,
     BadgeStateService,

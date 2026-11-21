@@ -11,6 +11,7 @@ function detail(overrides: Partial<GameDetail> = {}): GameDetail {
     state: 'active',
     kind: 'leitner-solo',
     leitner: { playerId: '507f1f77bcf86cd7994390aa', book: 'korean-language-book', chapter: '27', scope: 'chapter' },
+    origin: null,
     exportError: null,
     exportAttemptedAt: null,
     createdAt: '2026-10-24T09:00:00.000Z',

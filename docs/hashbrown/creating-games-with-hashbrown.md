@@ -1,7 +1,8 @@
 # Creating games with Hashbrown
 
-Status: **planning**. Nothing is built yet (added 2026-11-20, revised
-2026-11-21 with answers to the first round of open questions).
+Status: **H0, H0b and H1 built** (2026-11-21): single game creation on the
+Draft Game page. H1b (the chat) is next. Added 2026-11-20, revised
+2026-11-21 with answers to the first round of open questions.
 
 A signed-in user pastes content, for example a few paragraphs of a Korean
 story, and the AI turns it into something playable. There are two features:
@@ -625,7 +626,7 @@ conversation, so they don't need one.
 | --- | --- | --- |
 | H0 ✅ | Decisions above confirmed. Chat panel split into tool hooks, new system prompt skeleton, shared game schema and mix presets, `/api/chat` body limit. No visible change. Built 2026-11-21, see [H0: what was built](#h0-what-was-built). | — |
 | H0b ✅ | **Chat context indicator**: token counting in `ChatController`, `X-Chat-Session` middleware, `GET /api/chat/context/:sessionId`, `useChatContextUsage` and `ContextMeter`. See [Context indicator](#context-indicator). Before H1, so long pastes are visible from the start. Built 2026-11-21, see [H0b: what was built](#h0b-what-was-built). | H0 |
-| H1 | **Single game creation**: `ContentSource`, `ContentDraft`, draft endpoints, `createGameWithQuestions`, the **Draft Game** button, drafts list and `GameDraftEditor` page (`useStructuredCompletion`), the card-slot check at Start, Duplicate and remix of games, and `asking-for-games.md`. | H0 |
+| H1 ✅ | **Single game creation**: `ContentSource`, `ContentDraft`, draft endpoints, `createGameWithQuestions`, the **Draft Game** button, drafts list and `GameDraftEditor` page (`useStructuredCompletion`), the card-slot check at Start, Duplicate and remix of games, and `asking-for-games.md`. Built 2026-11-21, see [H1: what was built](#h1-what-was-built). | H0 |
 | H1b | **Single games from the chat**: `proposeGame` / `reviseGameDraft` / `getMyDrafts`, the `GameDraft` card, `OpenGame` / `OpenDraft`. | H1 |
 | H2 | **Library chapters (study only)**: `Book`, `Chapter`, the `Sense` collection, async `BookContentService`, shared `kogsChapterV1Schema`, `findSenses` / `proposeChapter` / `ChapterDraft` / `OpenYallaChapter`, open books in YALLA, **Save as library chapter**, remix and archive. | H1 (drafts) |
 | H3 | **Leitner on library chapters**: planner and generator on user books, book picker in `NewLeitnerGameDialog`, YALLA Exercises on user books, `createLeitnerGame` chat tool with dry-run plan. | H2 |
@@ -723,6 +724,102 @@ Built 2026-11-21.
   with this build. The API side was checked end to end against a
   separately run server.
 
+### H1: what was built
+
+Built 2026-11-21.
+
+- **Server, models** (`persistence/models.ts`): `ContentSource`
+  (`contentSources`, one per owner and checksum, so pasting the same text
+  again reuses it), `ContentDraft` (`contentDrafts`) and `Game.origin`
+  (`kind: 'ai-draft'`, `contentSourceId`, `draftId`, `remixedFromGameId`).
+- **Server, rules** (`content/game-draft.ts`): the Zod payload schema (the
+  shape, with size caps), `gameDraftProblems()` (the playable rules, each
+  with a path the editor points at) and `GAME_DRAFT_LIMITS`. A spec reads
+  the client's `game-limits.ts` and `question-mixes.ts` and fails if the
+  numbers or mix ids drift apart.
+- **Server, API** (`content/content-drafts.controller.ts`,
+  `persistence/content-draft.repository.ts`), all behind `RefereeGuard`:
+  - `POST /api/content/drafts`: empty, with a source, or `fromGameId`
+    (Duplicate). Only class games can be duplicated.
+  - `GET /api/content/drafts` (`?shared=true` for others' shared drafts)
+    and `GET /api/content/drafts/:id`, which returns the source text.
+  - `PATCH /api/content/drafts/:id` with `revision`. Stale revisions and
+    accepted drafts get 409, and the 409 carries the current draft.
+  - `PUT …/share`, `DELETE` and `POST …/accept`: owner only (403 for
+    someone else's shared draft, 404 for a private one).
+  - Accept re-checks the rules, then calls `createGameWithQuestions()`. If
+    the draft changed in the meantime, it deletes the new game and returns
+    409.
+- **Server, Start check:** `getCardSlotCheck()` and `cardSlotProblem()`.
+  `POST /api/games/:id/state` → `active` gets 409 with *"Question 3 uses E,
+  but this card group has A–D…"*. `GET /api/games/:id/nfc-card-group` also
+  returns `slotProblem`, and the referee panel shows it and turns
+  **Start Game** off.
+- **Client** (`client/src/app/game-authoring/`, `views/`):
+  - `drafts-api.ts`: the draft endpoints
+  - `useGameGeneration.ts`: Generate, Regenerate (with a note) and Generate
+    more, through `useStructuredCompletion` with `gameDraftSchema` and
+    `CHAT_MODEL`
+  - `GameDraftEditor.tsx`: the Source and Questions panes
+  - `GameDraftsView` (`/games/drafts`, **My drafts** and **Shared
+    drafts**) and `GameDraftView` (`/games/drafts/:id`). It autosaves 0.8 s
+    after an edit and shows *Saved* / *Saving…*.
+  - **Draft Game** button in Games, **Duplicate** on a class game's page,
+    and *"Remixed from Title"* on a game made from a duplicate.
+- **Prompt** (`game-authoring.prompt.ts`): `gameRecipe()` now takes the
+  language names and a `free` mix (for a Regenerate note).
+- **Guide:** [`asking-for-games.md`](asking-for-games.md). The page links
+  to it on GitHub (`develop`).
+- **Checked:**
+  - **Specs:** 26 new (rules, access, revisions, accept, Duplicate) plus the
+    Start check. All 453 server tests pass, and lint and the client build
+    are clean.
+  - **API, end to end:** against a separate database on a scratch server,
+    every step from create to Start, including stale revisions, Duplicate
+    keeping the source, and Start refused for an E question with the A–D
+    demo group.
+  - **AI output,** with the page's exact prompt and schema on `gpt-4.1` and
+    a Korean story:
+    - The vocabulary mix gave 6 / 2 / 2 with 4 options, with no problems.
+    - Comprehension with 5 options gave 2 / 2 / 6. One option went over
+      40 characters, and the editor flags it.
+    - A Regenerate note asking for grammar gave a grammar question.
+    - **Generate more** didn't repeat questions.
+
+**Changed from the design:**
+
+- **Options are shuffled when they arrive.** The first test run had the
+  correct answer in A for 10 questions out of 10.
+- **The first run wrote the questions in Korean.** The recipe now names the
+  languages ("Write every question's text in English").
+- **Questions are saved when a generation finishes,** not as they stream.
+  The page shows how many have arrived so far.
+- **The source is saved when the user leaves the paste box or generates,**
+  not on every keystroke. A changed paste is a new source, because sources
+  are never edited.
+- **No `discarded` status:** **Delete** removes the draft. The chat card's
+  **Discard** comes with H1b.
+- **The field is `resultGameId`,** not `resultRef`. Accepting also unshares
+  the draft.
+- **When a save is refused** because the draft changed elsewhere, the page
+  stops saving and offers **Load their version** or **Keep mine**.
+- **The Start check only runs when a card group is attached.** Without one,
+  there's nothing to check, as today.
+- **Titles are capped at 100 characters** (`maxTitleLength`, in both
+  limit files).
+
+**Not checked:**
+- **The pages on screen.** They need the dev server restarted.
+- **Two real referees sharing a draft.** `DISABLE_AUTH` gives one
+  identity. The specs cover it.
+- **Playing at a badge station and exporting to the LRS.** The game is an
+  ordinary untagged class game, as a hand-made one is.
+
+Not done:
+- **`docs/hashbrown/samples/`** and a `manual-tests.md` row for checking
+  AI output by hand (Testing).
+- **A Playwright test** for draft → accept → play → export.
+
 ### Acceptance — H0b
 
 - [ ] The context reading appears under the chat input. Before the first
@@ -744,31 +841,35 @@ Built 2026-11-21.
 ### Acceptance — H1
 
 - [ ] **Draft Game** appears next to **New Game** and **New Leitner Game**
-      for signed-in users, and opens the user's drafts list.
-- [ ] A user pastes a Korean passage, clicks **Generate** and gets 10
+      for signed-in users, and opens the user's drafts list. *(Built; check
+      on screen.)*
+- [x] A user pastes a Korean passage, clicks **Generate** and gets 10
       questions in the vocabulary mix (6 / 2 / 2), with 4 options each and
       exactly one correct. Picking another preset or 5 options changes the
-      result.
+      result. *(Checked with the page's prompt and schema against
+      `gpt-4.1`. Still to check on screen.)*
 - [ ] The user can edit, reorder, delete, add and regenerate questions. The
       draft saves as they go, survives a reload, and several drafts can
-      exist at once.
-- [ ] A shared draft shows in another referee's **Shared drafts**. They can
+      exist at once. *(Built, and the API checked; check on screen.)*
+- [x] A shared draft shows in another referee's **Shared drafts**. They can
       edit it, and an edit made against an old revision is refused rather
       than overwriting. Only the owner can accept, unshare or delete it.
-- [ ] **Create game** makes a `draft` class game with all its questions,
+      *(Specs, plus stale revisions end to end.)*
+- [x] **Create game** makes a `draft` class game with all its questions,
       `origin.kind: 'ai-draft'`, visible in Games. A guest can't call the
-      draft or accept endpoints (401).
-- [ ] An invalid payload (two correct options, 6 options, empty text) is
+      draft or accept endpoints (401, `RefereeGuard`).
+- [x] An invalid payload (two correct options, 6 options, empty text) is
       refused by the server with a problem list, whatever the client sent.
-- [ ] A game with 5-option questions can't be started with an A–D card
-      group, and the referee panel says why.
+- [x] A game with 5-option questions can't be started with an A–D card
+      group, and the referee panel says why. *(The 409 was checked end to
+      end. Check the panel on screen.)*
 - [ ] The game plays at a badge station like any class game, and after
       binding players, **Export to LRS** sends `answered` and `scored`
       statements to `emojiapp-dev`. They show the question text and options
       in Veracity. No `assessed` statements, no names.
-- [ ] **Duplicate** on any game (including another referee's) starts a new
+- [x] **Duplicate** on any game (including another referee's) starts a new
       draft owned by the current user.
-- [ ] `asking-for-games.md` exists and the page links to it.
+- [x] `asking-for-games.md` exists and the page links to it.
 
 ### Acceptance — H1b
 

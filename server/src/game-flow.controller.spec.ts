@@ -38,6 +38,7 @@ describe('GameFlowController', () => {
     ensureNfcCardGroup: jest.fn(),
     assignNfcCardGroupToGame: jest.fn(),
     getActiveNfcCardGroupForGame: jest.fn(),
+    getCardSlotCheck: jest.fn(),
     openNextQuestionForGame: jest.fn(),
     submitGuess: jest.fn(),
     bindPair: jest.fn(),
@@ -82,11 +83,13 @@ describe('GameFlowController', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    repository.getCardSlotCheck.mockResolvedValue({ groupSlots: null, missing: [] });
     repository.getGameDetail.mockResolvedValue({
       id: '507f1f77bcf86cd799439011',
       title: 'Demo Night',
       kind: 'class',
       leitner: null,
+      origin: null,
       exportError: null,
       exportAttemptedAt: null,
       state: 'lobby',
@@ -236,6 +239,7 @@ describe('GameFlowController', () => {
       title: 'Demo Night',
       kind: 'class',
       leitner: null,
+      origin: null,
       exportError: null,
       exportAttemptedAt: null,
       state: 'active',
@@ -265,6 +269,7 @@ describe('GameFlowController', () => {
       title: 'Demo Night',
       kind: 'class',
       leitner: null,
+      origin: null,
       exportError: null,
       exportAttemptedAt: null,
       state: 'active',
@@ -341,6 +346,7 @@ describe('GameFlowController', () => {
       title: 'Demo Night',
       kind: 'class',
       leitner: null,
+      origin: null,
       exportError: null,
       exportAttemptedAt: null,
       state: 'active',
@@ -449,6 +455,7 @@ describe('GameFlowController', () => {
       title: 'Demo Night',
       kind: 'class',
       leitner: null,
+      origin: null,
       exportError: null,
       exportAttemptedAt: null,
       state: 'active',
@@ -562,6 +569,7 @@ describe('GameFlowController', () => {
       title: 'Demo Night',
       kind: 'class',
       leitner: null,
+      origin: null,
       exportError: null,
       exportAttemptedAt: null,
       state: 'active',
@@ -792,6 +800,7 @@ describe('GameFlowController', () => {
       title: 'Demo Night',
       kind: 'class',
       leitner: null,
+      origin: null,
       exportError: null,
       exportAttemptedAt: null,
       state: 'active',
@@ -966,6 +975,22 @@ describe('GameFlowController', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
+    it('refuses Start when the card group has no card for a slot the questions use', async () => {
+      const res = createResponseMock();
+      repository.getCardSlotCheck.mockResolvedValue({
+        groupSlots: ['A', 'B', 'C', 'D'],
+        missing: [{ slotLabel: 'E', questionSequences: [3] }],
+      });
+
+      await controller.setGameState('507f1f77bcf86cd799439011', { state: 'active' }, res as unknown as Response);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Question 3 uses E, but this card group has A–D. Attach a group with a card for every slot.',
+      });
+      expect(repository.setGameState).not.toHaveBeenCalled();
+    });
+
     it('transitions game to active and emits game.started to controllers', async () => {
       const res = createResponseMock();
       repository.setGameState.mockResolvedValue({ gameId: '507f1f77bcf86cd799439011', state: 'active' });
@@ -1007,6 +1032,7 @@ describe('GameFlowController', () => {
         title: 'Leitner: Player 7F3A · ch. 27',
         kind: 'leitner-solo' as const,
         leitner: { playerId: '507f1f77bcf86cd7994390aa', book: 'korean-language-book', chapter: '27', scope: 'chapter' as const },
+        origin: null,
         exportError: null,
         exportAttemptedAt: null,
         state: 'active' as const,
@@ -1116,6 +1142,7 @@ describe('GameFlowController', () => {
         title: 'Leitner: Player 7F3A · ch. 27',
         kind: 'leitner-solo' as const,
         leitner: { playerId: '507f1f77bcf86cd7994390aa', book: 'korean-language-book', chapter: '27', scope: 'chapter' as const },
+        origin: null,
         exportError: null,
         exportAttemptedAt: null,
         state: 'completed' as const,

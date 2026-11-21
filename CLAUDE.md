@@ -50,7 +50,9 @@ In development, Vite proxies `/api` to `localhost:3000`. In production, Express 
 | `client/src/app/store/emoji-app.store.ts` | Zustand store — all CRUD actions for lights, scenes, scheduled scenes |
 | `client/src/app/shared/RichChatPanel.tsx` | AI chat panel — combines the chat areas into one `useUiChat` |
 | `client/src/app/chat/` | Chat areas: each `use…ChatArea()` hook returns its tools, components and prompt section |
-| `client/src/app/game-authoring/` | Shared game-draft schema, question mixes, limits and recipe prompt (docs/hashbrown) |
+| `client/src/app/game-authoring/` | Game drafts (docs/hashbrown): Skillet schema, mixes, limits, recipe prompt, `drafts-api`, `useGameGeneration`, `GameDraftEditor` |
+| `client/src/app/views/GameDraftsView.tsx`, `GameDraftView.tsx` | Draft Game pages: `/games/drafts` and `/games/drafts/:draftId` |
+| `server/src/content/` | Draft rules (`game-draft.ts`, Zod + problems) and `/api/content/drafts` |
 | `server/src/main.ts` | Express server — `/api/chat` streaming endpoint + SPA static serving |
 
 ## Generative UI Pattern
@@ -63,6 +65,8 @@ In development, Vite proxies `/api` to `localhost:3000`. In production, Express 
 The model is `CHAT_MODEL` in `chat/chat-config.ts`.
 
 The panel has its own `HashbrownProvider` (`chat/ChatSessionProvider.tsx`) that sends an `X-Chat-Session` id. `ChatController` counts each chat request and reply with `gpt-tokenizer` (`server/src/chat/chat-context.ts`), and the panel's `ContextMeter` reads `GET /api/chat/context/:sessionId` after each answer. Update `MODEL_CONTEXT_WINDOWS` there when changing `CHAT_MODEL`.
+
+**Game drafts** (docs/hashbrown/creating-games-with-hashbrown.md): the AI's output is only ever a draft until the owner clicks Create game. The server re-checks every draft with `gameDraftProblems()`, so keep its `GAME_DRAFT_LIMITS` equal to the client's `GAME_LIMITS` (a spec compares them). Generated options are shuffled in `useGameGeneration`, because models put the correct one first.
 
 Tool arguments are validated with Hashbrown's schema system (`s.object`, `s.string`, etc.).
 

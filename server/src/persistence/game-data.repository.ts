@@ -11,6 +11,53 @@ export type CreateGameInput = {
   createdByUserId: string;
 };
 
+/** How a game was made when not by hand (`Game.origin`). */
+export type GameOrigin = {
+  kind: 'ai-draft';
+  contentSourceId: string | null;
+  draftId: string;
+  remixedFromGameId: string | null;
+};
+
+/** A class game as Duplicate copies it into a draft. */
+export type GameForDraft = {
+  id: string;
+  title: string;
+  kind: GameKind;
+  contentSourceId: string | null;
+  questions: Array<{ text: string; options: Array<{ text: string; isCorrect: boolean }> }>;
+};
+
+/**
+ * Whether the game's card group has a card for every slot its questions use
+ * (docs/hashbrown/creating-games-with-hashbrown.md → Options per question).
+ * `groupSlots` is null when no group is attached: nothing to check.
+ */
+export type CardSlotCheck = {
+  groupSlots: SlotLabel[] | null;
+  missing: Array<{ slotLabel: SlotLabel; questionSequences: number[] }>;
+};
+
+/** `A–D` for consecutive slots, else `A, C`. */
+function slotRange(slots: SlotLabel[]): string {
+  const codes = slots.map((slot) => slot.charCodeAt(0));
+  const consecutive = codes.every((code, i) => i === 0 || code === codes[i - 1] + 1);
+  return consecutive && slots.length > 2 ? `${slots[0]}–${slots[slots.length - 1]}` : slots.join(', ');
+}
+
+/** "Question 3 uses E, but this card group has A–D." — or null when nothing is missing. */
+export function cardSlotProblem(check: CardSlotCheck): string | null {
+  if (!check.groupSlots || check.missing.length === 0) return null;
+  const uses = check.missing
+    .map(({ slotLabel, questionSequences }) => {
+      const rounds = questionSequences.length === 1 ? `Question ${questionSequences[0]}` : `Questions ${questionSequences.join(', ')}`;
+      return `${rounds} use${questionSequences.length === 1 ? 's' : ''} ${slotLabel}`;
+    })
+    .join('; ');
+  const has = check.groupSlots.length > 0 ? slotRange(check.groupSlots) : 'no cards';
+  return `${uses}, but this card group has ${has}. Attach a group with a card for every slot.`;
+}
+
 /** What a Leitner game was planned from (`Game.leitner`). */
 export type LeitnerPlanRecord = {
   playerId: string;
@@ -178,6 +225,8 @@ export type GameDetail = {
   kind: GameKind;
   /** Leitner games only: the student and what was planned. */
   leitner: { playerId: string; book: string; chapter: string; scope: LeitnerScope } | null;
+  /** Made from a draft; `remixedFromTitle` credits a duplicated game by title only (G12). */
+  origin: (GameOrigin & { remixedFromTitle: string | null }) | null;
   /** Leitner games: why the last export failed (a completed one still stored is pending export). */
   exportError: string | null;
   exportAttemptedAt: string | null;
@@ -346,6 +395,93 @@ export class GameDataRepository {
       throw error;
     }
     return gameId;
+  }
+
+  /**
+   * A class game and all its questions, created together from an accepted
+   * draft. If a question fails, the game is deleted again.
+   */
+  async createGameWithQuestions(input: {
+    title: string;
+    createdByUserId: string;
+    origin: GameOrigin;
+    questions: Array<Omit<CreateQuestionInput, 'gameId' | 'createdByUserId' | 'learning'>>;
+  }): Promise<string> {
+    const { Game } = this.mongoService.getModels();
+    const created = await Game.create({
+      title: input.title,
+      createdByUserId: asObjectId(input.createdByUserId),
+      state: 'draft',
+      kind: 'class',
+      origin: {
+        kind: input.origin.kind,
+        contentSourceId: input.origin.contentSourceId ? asObjectId(input.origin.contentSourceId) : null,
+        draftId: asObjectId(input.origin.draftId),
+        remixedFromGameId: input.origin.remixedFromGameId ? asObjectId(input.origin.remixedFromGameId) : null,
+      },
+    });
+    const gameId = created._id.toString();
+    try {
+      for (const question of input.questions) {
+        await this.createQuestionWithOptions({ ...question, gameId, createdByUserId: input.createdByUserId });
+      }
+    } catch (error) {
+      await this.deleteGame(gameId);
+      throw error;
+    }
+    return gameId;
+  }
+
+  /** The game's questions and options in play order, for Duplicate. Archived rounds are left out. */
+  async getGameForDraft(gameId: string): Promise<GameForDraft | null> {
+    const { Game, Question, AnswerOption } = this.mongoService.getModels();
+    const game = await Game.findById(asObjectId(gameId)).lean();
+    if (!game) return null;
+    const questions = await Question.find({ gameId: game._id, state: { $ne: 'archived' } })
+      .sort({ sequence: 1 })
+      .lean();
+    const options = await AnswerOption.find({ questionId: { $in: questions.map((q) => q._id) } })
+      .sort({ sequence: 1 })
+      .lean();
+    return {
+      id: (game._id as Types.ObjectId).toString(),
+      title: game.title,
+      kind: (game.kind ?? 'class') as GameKind,
+      contentSourceId: game.origin?.contentSourceId ? (game.origin.contentSourceId as Types.ObjectId).toString() : null,
+      questions: questions.map((question) => ({
+        text: question.text,
+        options: options
+          .filter((option) => (option.questionId as Types.ObjectId).equals(question._id as Types.ObjectId))
+          .map((option) => ({ text: option.text, isCorrect: option.isCorrect })),
+      })),
+    };
+  }
+
+  async getCardSlotCheck(gameId: string): Promise<CardSlotCheck> {
+    const { GameNfcCardGroupAssignment, NfcCard, Question, AnswerOption } = this.mongoService.getModels();
+    const gid = asObjectId(gameId);
+    const assignment = await GameNfcCardGroupAssignment.findOne({ gameId: gid, status: 'active' }).lean();
+    if (!assignment) return { groupSlots: null, missing: [] };
+    const cards = await NfcCard.find({ groupId: assignment.groupId, status: 'active' }, { slotLabel: 1 }).lean();
+    const groupSlots = [...new Set(cards.map((card) => card.slotLabel as SlotLabel))].sort();
+    const questions = await Question.find({ gameId: gid, state: { $ne: 'archived' } }, { sequence: 1 }).lean();
+    const sequenceOf = new Map(questions.map((q) => [(q._id as Types.ObjectId).toString(), q.sequence]));
+    const options = await AnswerOption.find(
+      { questionId: { $in: questions.map((q) => q._id) } },
+      { questionId: 1, slotLabel: 1 },
+    ).lean();
+    const missingBySlot = new Map<SlotLabel, Set<number>>();
+    for (const option of options) {
+      const slot = option.slotLabel as SlotLabel;
+      if (groupSlots.includes(slot)) continue;
+      const sequence = sequenceOf.get((option.questionId as Types.ObjectId).toString());
+      if (sequence === undefined) continue;
+      missingBySlot.set(slot, (missingBySlot.get(slot) ?? new Set()).add(sequence));
+    }
+    const missing = [...missingBySlot]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([slotLabel, sequences]) => ({ slotLabel, questionSequences: [...sequences].sort((a, b) => a - b) }));
+    return { groupSlots, missing };
   }
 
   /** Every `leitner-solo` game still stored for this student, oldest first. */
@@ -1583,6 +1719,8 @@ export class GameDataRepository {
     }
 
     const boundPairs = await PairBinding.find({ gameId: asObjectId(gameId) }).lean();
+    const remixedFromId = game.origin?.remixedFromGameId as Types.ObjectId | null | undefined;
+    const remixedFrom = remixedFromId ? await Game.findById(remixedFromId, { title: 1 }).lean() : null;
 
     return {
       id: (game._id as Types.ObjectId).toString(),
@@ -1595,6 +1733,15 @@ export class GameDataRepository {
             book: game.leitner.book,
             chapter: game.leitner.chapter,
             scope: game.leitner.scope as LeitnerScope,
+          }
+        : null,
+      origin: game.origin
+        ? {
+            kind: game.origin.kind as GameOrigin['kind'],
+            contentSourceId: game.origin.contentSourceId ? (game.origin.contentSourceId as Types.ObjectId).toString() : null,
+            draftId: (game.origin.draftId as Types.ObjectId).toString(),
+            remixedFromGameId: remixedFromId ? remixedFromId.toString() : null,
+            remixedFromTitle: remixedFrom?.title ?? null,
           }
         : null,
       exportError: game.exportError ?? null,

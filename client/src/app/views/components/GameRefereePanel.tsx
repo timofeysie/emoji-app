@@ -199,6 +199,8 @@ export function GameRefereePanel({
   // NFC card group assignment
   type CardGroupInfo = { groupId: string; name: string; cardCount: number } | null;
   const [cardGroup, setCardGroup] = useState<CardGroupInfo>(undefined as unknown as CardGroupInfo);
+  /** A slot the questions use that the group has no card for: Start is refused (docs/hashbrown). */
+  const [slotProblem, setSlotProblem] = useState<string | null>(null);
   const [cardGroupLoading, setCardGroupLoading] = useState(true);
   const [assignLoading, setAssignLoading] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
@@ -207,8 +209,9 @@ export function GameRefereePanel({
     try {
       const res = await authFetch(`/api/games/${game.id}/nfc-card-group`, { credentials: 'same-origin' });
       if (!res.ok) return;
-      const data = (await res.json()) as { group: CardGroupInfo };
+      const data = (await res.json()) as { group: CardGroupInfo; slotProblem?: string | null };
       setCardGroup(data.group);
+      setSlotProblem(data.slotProblem ?? null);
     } catch {
       // non-critical
     } finally {
@@ -216,7 +219,7 @@ export function GameRefereePanel({
     }
   };
 
-  useEffect(() => { void loadCardGroup(); }, [game.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void loadCardGroup(); }, [game.id, game.questions.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const assignDemoGroup = async () => {
     setAssignLoading(true);
@@ -234,12 +237,8 @@ export function GameRefereePanel({
         setAssignError(body.error ?? body.message ?? `Server error ${res.status}`);
         return;
       }
-      const data = (await res.json()) as { group: CardGroupInfo };
-      if (data.group) {
-        setCardGroup(data.group);
-      } else {
-        await loadCardGroup();
-      }
+      // Reload rather than use the reply: the slot check comes with the group.
+      await loadCardGroup();
     } catch {
       setAssignError('Network error — could not assign card group.');
     } finally {
@@ -537,6 +536,9 @@ export function GameRefereePanel({
         ) : (
           <p className="text-xs text-muted-foreground italic">No group assigned.</p>
         )}
+        {slotProblem && (
+          <p className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-800">{slotProblem}</p>
+        )}
         <Button
           size="sm"
           variant="outline"
@@ -584,7 +586,8 @@ export function GameRefereePanel({
                 size="sm"
                 variant={btn.variant ?? 'default'}
                 onClick={() => void transitionState(btn.targetState)}
-                disabled={lifecycleLoading !== null}
+                disabled={lifecycleLoading !== null || (btn.label === 'Start Game' && slotProblem !== null)}
+                title={btn.label === 'Start Game' && slotProblem ? slotProblem : undefined}
                 className="h-8 text-xs"
               >
                 {lifecycleLoading === btn.targetState && (

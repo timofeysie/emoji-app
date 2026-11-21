@@ -33,6 +33,13 @@ export const nfcCardStatusValues = ['active', 'retired', 'lost'] as const;
 export const nfcCardGroupStatusValues = ['active', 'inactive', 'archived'] as const;
 export const gameNfcCardGroupAssignmentStatusValues = ['active', 'superseded', 'removed'] as const;
 export const slotLabelValues = ['A', 'B', 'C', 'D', 'E'] as const;
+/** Pasted text kept for AI drafting (docs/hashbrown/creating-games-with-hashbrown.md, G13). */
+export const contentSourceFormatValues = ['freeform-ai'] as const;
+/** `chapter` drafts come with H2. */
+export const contentDraftTypeValues = ['game', 'chapter'] as const;
+export const contentDraftStatusValues = ['draft', 'accepted'] as const;
+/** How a game was made, when not by hand. */
+export const gameOriginKindValues = ['ai-draft'] as const;
 
 export type GameState = (typeof gameStateValues)[number];
 export type ParticipantRole = (typeof participantRoleValues)[number];
@@ -50,5 +57,8 @@ export type NfcCardStatus = (typeof nfcCardStatusValues)[number];
 export type NfcCardGroupStatus = (typeof nfcCardGroupStatusValues)[number];
 export type GameNfcCardGroupAssignmentStatus = (typeof gameNfcCardGroupAssignmentStatusValues)[number];
 export type SlotLabel = (typeof slotLabelValues)[number];
+export type ContentSourceFormat = (typeof contentSourceFormatValues)[number];
+export type ContentDraftType = (typeof contentDraftTypeValues)[number];
+export type ContentDraftStatus = (typeof contentDraftStatusValues)[number];
 
 export type ObjectId = Types.ObjectId;
