@@ -62,6 +62,8 @@ In development, Vite proxies `/api` to `localhost:3000`. In production, Express 
 
 The model is `CHAT_MODEL` in `chat/chat-config.ts`.
 
+The panel has its own `HashbrownProvider` (`chat/ChatSessionProvider.tsx`) that sends an `X-Chat-Session` id. `ChatController` counts each chat request and reply with `gpt-tokenizer` (`server/src/chat/chat-context.ts`), and the panel's `ContextMeter` reads `GET /api/chat/context/:sessionId` after each answer. Update `MODEL_CONTEXT_WINDOWS` there when changing `CHAT_MODEL`.
+
 Tool arguments are validated with Hashbrown's schema system (`s.object`, `s.string`, etc.).
 
 ## Tech Stack

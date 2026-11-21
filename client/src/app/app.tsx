@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { HashbrownProvider } from '@hashbrownai/react';
 import { Outlet, Route, Routes } from 'react-router-dom';
 import { AuthCallback } from './auth/AuthCallback';
+import { ChatSessionProvider } from './chat/ChatSessionProvider';
 import { authFetchMiddleware } from './auth/authFetchMiddleware';
 import { RequireSignIn, useIsSignedIn } from './auth/sign-in-access';
 import { AppHeader } from './components/AppHeader';
@@ -83,7 +84,9 @@ function MainShell() {
               chatOpen ? 'flex' : 'hidden',
             )}
           >
-            <RichChatPanel />
+            <ChatSessionProvider url={chatUrl}>
+              <RichChatPanel />
+            </ChatSessionProvider>
           </div>
         )}
       </div>

@@ -2,9 +2,12 @@ import { Chat } from '@hashbrownai/core';
 import { useRuntime, useToolJavaScript, useUiChat } from '@hashbrownai/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CHAT_MODEL } from '../chat/chat-config';
+import { useChatSessionId } from '../chat/ChatSessionProvider';
+import { ContextMeter } from '../chat/ContextMeter';
 import { composePrompt, type PromptSection } from '../chat/prompt-sections';
 import { useSmartHomeChatArea } from '../chat/smart-home/useSmartHomeChatArea';
 import { useCoreChatArea } from '../chat/useCoreChatArea';
+import { useChatContextUsage } from '../chat/useChatContextUsage';
 import { useDomChatArea } from '../chat/useDomChatArea';
 import { Button } from './button';
 import { RichMessage } from './RichMessage';
@@ -41,6 +44,8 @@ export const RichChatPanel = () => {
   const isWorking = useMemo(() => {
     return isSending || isReceiving || isRunningToolCalls;
   }, [isSending, isReceiving, isRunningToolCalls]);
+
+  const contextReading = useChatContextUsage(useChatSessionId(), isWorking);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -138,6 +143,7 @@ export const RichChatPanel = () => {
             Stop
           </Button>
         )}
+        <ContextMeter reading={contextReading} />
       </div>
     </div>
   );

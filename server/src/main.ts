@@ -10,6 +10,7 @@ import { AppModule } from './app.module';
 import { BadgeStateService } from './badge-state.service';
 import { requestLoggingMiddleware } from './request-logging.middleware';
 import { APP_VERSION } from './app-version';
+import { CHAT_BODY_LIMIT_BYTES } from './chat/chat-context';
 
 async function bootstrap(): Promise<void> {
   const host = process.env['HOST'] ?? 'localhost';
@@ -24,7 +25,7 @@ async function bootstrap(): Promise<void> {
   // The chat resends its whole history, which can hold chapter-sized tool calls
   // (docs/hashbrown/creating-games-with-hashbrown.md). Parsed first, so the
   // default 100 kB parser below skips it.
-  expressApp.use('/api/chat', express.json({ limit: '1mb' }));
+  expressApp.use('/api/chat', express.json({ limit: CHAT_BODY_LIMIT_BYTES }));
   expressApp.use(express.json());
   expressApp.use(requestLoggingMiddleware);
 

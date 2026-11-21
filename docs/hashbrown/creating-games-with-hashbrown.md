@@ -563,34 +563,50 @@ example *Context ≈ 12.4k / 1.05M tokens (1%)*:
   `/api/chat` body limit (H0). With `gpt-4.1`'s 1M-token window, the body
   limit is likely to be reached first, so the indicator goes amber or red
   on whichever of the two is closer.
-- **Before the first message,** it shows the fixed part (system prompt and
-  tools), so the starting cost is visible too.
+- **Before the first answer,** it says *Context: counted after the first
+  answer*. The compiled system prompt and tool schemas only exist inside
+  Hashbrown's request, so there's nothing to count until one is sent. After
+  the first answer, the tooltip's "System prompt and tools" line shows the
+  starting cost.
 
 **How it's counted:** Hashbrown doesn't pass OpenAI's token usage through.
 `@hashbrownai/openai` reads the OpenAI stream itself and drops the final
 usage chunk, so the server counts instead:
-- **The request.** `ChatController` counts the tokens in the request it
-  receives (system, messages, tools, response schema) with `gpt-tokenizer`.
-  Use the `o200k_base` encoding, which is `gpt-4.1`'s, plus OpenAI's small
-  per-message overhead. This is the whole context, because Hashbrown sends
-  the full history every time. It also records the request's byte size.
-- **The reply.** The controller decodes the frames it streams (core's
-  `decodeFrames` on a copy of the stream) and counts the `generation-chunk`
-  text and tool-call arguments.
-- **Storage.** It keeps `{ requestTokens, replyTokens, requestBytes, model,
-  at }` in memory, keyed by the signed-in user and a **chat session id**.
+- **The request.** `ChatController` counts the OpenAI request exactly as
+  the adapter builds it, through the adapter's `transformRequestOptions`
+  hook, with `gpt-tokenizer`'s `o200k_base` encoding (`gpt-4.1`'s). This is
+  the whole context, because Hashbrown sends the full history every time.
+  - Messages are counted as text, plus OpenAI's 3 tokens per message and 3
+    to prime the reply.
+  - Tools are counted as OpenAI renders them for the model (a `namespace
+    functions` of TypeScript-like types), not as JSON, which is up to twice
+    as long.
+  - The response schema is counted as its JSON without `additionalProperties`
+    and `required`, plus 8 tokens.
+  - It also records the request's byte size.
+- **The reply.** The controller reads the frames it streams (Hashbrown's
+  `[4-byte length][JSON]` format) and counts the `generation-chunk` text
+  and tool-call arguments.
+- **Storage.** It keeps `{ fixedTokens, messageTokens, replyTokens,
+  requestBytes, model, at }` in memory, keyed by the signed-in user and a **chat session id**.
   The client makes the id when the panel mounts, and a Hashbrown provider
   middleware sends it as an `X-Chat-Session` header, next to
   `authFetchMiddleware`. A new panel (for example after signing in again)
   is a new session. Entries expire after a few hours.
 - **The endpoint.** `GET /api/chat/context/:sessionId` (auth, own sessions
   only) returns the latest reading and the model's window. The client calls
-  it on each idle transition. The windows come from a table next to
-  `CHAT_MODEL` in `chat-config.ts`.
+  it on each idle transition. The windows come from a table on the server
+  (`MODEL_CONTEXT_WINDOWS`), so only one side needs updating for a new
+  model.
 - **An estimate,** shown with *≈*. It should land within about 5% of
   OpenAI's own `prompt_tokens`, checked once by hand (see Testing).
+- **The chat panel's own provider.** The panel gets its own
+  `HashbrownProvider` (`ChatSessionProvider`), which adds the session
+  header. The smart-home dialogs' structured completions stay on the app's
+  provider, send no session id, and so don't overwrite the chat's
+  reading.
 
-**Where it lives:** a `useChatContextUsage(isWorking)` hook and a
+**Where it lives:** a `useChatContextUsage(sessionId, isWorking)` hook and a
 `ContextMeter` component in `client/src/app/chat/`. The panel renders it.
 The Draft Game page's structured completions (H1) don't have a
 conversation, so they don't need one.
@@ -608,7 +624,7 @@ conversation, so they don't need one.
 | # | Milestone | Depends on |
 | --- | --- | --- |
 | H0 ✅ | Decisions above confirmed. Chat panel split into tool hooks, new system prompt skeleton, shared game schema and mix presets, `/api/chat` body limit. No visible change. Built 2026-11-21, see [H0: what was built](#h0-what-was-built). | — |
-| H0b | **Chat context indicator**: token counting in `ChatController`, `X-Chat-Session` middleware, `GET /api/chat/context/:sessionId`, `useChatContextUsage` and `ContextMeter`. See [Context indicator](#context-indicator). Before H1, so long pastes are visible from the start. | H0 |
+| H0b ✅ | **Chat context indicator**: token counting in `ChatController`, `X-Chat-Session` middleware, `GET /api/chat/context/:sessionId`, `useChatContextUsage` and `ContextMeter`. See [Context indicator](#context-indicator). Before H1, so long pastes are visible from the start. Built 2026-11-21, see [H0b: what was built](#h0b-what-was-built). | H0 |
 | H1 | **Single game creation**: `ContentSource`, `ContentDraft`, draft endpoints, `createGameWithQuestions`, the **Draft Game** button, drafts list and `GameDraftEditor` page (`useStructuredCompletion`), the card-slot check at Start, Duplicate and remix of games, and `asking-for-games.md`. | H0 |
 | H1b | **Single games from the chat**: `proposeGame` / `reviseGameDraft` / `getMyDrafts`, the `GameDraft` card, `OpenGame` / `OpenDraft`. | H1 |
 | H2 | **Library chapters (study only)**: `Book`, `Chapter`, the `Sense` collection, async `BookContentService`, shared `kogsChapterV1Schema`, `findSenses` / `proposeChapter` / `ChapterDraft` / `OpenYallaChapter`, open books in YALLA, **Save as library chapter**, remix and archive. | H1 (drafts) |
@@ -668,22 +684,62 @@ Not done in H0:
   from `@hashbrownai/react`, and `RichMessage.tsx`'s `JsonValue` children.
   H0 adds no new errors.
 
+### H0b: what was built
+
+Built 2026-11-21.
+
+- **Server** (`server/src/chat/`):
+  - `chat-context.ts`: `countRequestTokens()` (pure), `FrameReader`,
+    `ReplyTokenCounter`, `MODEL_CONTEXT_WINDOWS` and `CHAT_BODY_LIMIT_BYTES`
+    (which `main.ts` now uses).
+  - `chat-context.service.ts`: the latest reading per user and session, in
+    memory, kept for 6 hours and at most 1,000 sessions.
+  - `chat-context.controller.ts`: `GET /api/chat/context/:sessionId`
+    (`AuthGuard`, 404 for no reading, someone else's session or a
+    malformed id).
+  - `chat.controller.ts`: counts through `transformRequestOptions` and the
+    streamed frames, only for requests with an `X-Chat-Session` header.
+  - Dependency: `gpt-tokenizer` 4.1.0.
+- **Client** (`client/src/app/chat/`):
+  - `ChatSessionProvider`: the panel's own `HashbrownProvider`, with a
+    session id made on mount and sent as `X-Chat-Session`. Wraps
+    `RichChatPanel` in `app.tsx`.
+  - `useChatContextUsage`: fetches the reading on each working → idle
+    change. A slow answer from an earlier turn can't replace a newer one.
+  - `ContextMeter`: the bar, label and tooltip under Send.
+- **Accuracy**, measured against `gpt-4.1` on 2026-11-21:
+  - **Real-shaped request** (a 2.3k-token system prompt, four tools, a UI
+    response schema, a tool call and its result): **within 0.3%** of
+    OpenAI's `prompt_tokens`. Checked by replaying the exact request the
+    server sent.
+  - **Tools:** within 3%.
+  - **Large response schemas:** within about 5%.
+  - **Plain messages:** within 2 tokens.
+  - **Counting tools and schemas as raw JSON**, the first version, was
+    5–75% over.
+- **Changed from the design:** before the first answer there's no reading
+  (see above), instead of the system prompt and tools.
+- **Not checked:** the meter on screen. It needs the dev server restarted
+  with this build. The API side was checked end to end against a
+  separately run server.
+
 ### Acceptance — H0b
 
-- [ ] The context reading appears under the chat input, and before the first
-      message it shows the system prompt and tools.
+- [ ] The context reading appears under the chat input. Before the first
+      answer it says it's counted after the first answer. *(Built; check on
+      screen.)*
 - [ ] It changes only when the AI has finished answering and the chat is
       waiting for input (also after **Stop**), not during streaming or
-      between tool-call rounds.
-- [ ] A turn with tool calls is counted in full: the tool calls, their
+      between tool-call rounds. *(Built; check on screen.)*
+- [x] A turn with tool calls is counted in full: the tool calls, their
       results and the final reply.
 - [ ] Pasting a long passage moves the reading visibly. The bar goes amber
       at 50% and red at 80% of whichever is closer, the model window or the
-      1 MB body limit.
-- [ ] One user can't read another user's session (`404`), and a guest gets
-      `401`.
-- [ ] Checked once by hand against OpenAI's reported `prompt_tokens` for the
-      same request: within about 5%.
+      1 MB body limit. *(Built; check on screen.)*
+- [x] One user can't read another user's session (`404`), and a guest gets
+      `401` (`AuthGuard`).
+- [x] Checked once by hand against OpenAI's reported `prompt_tokens` for the
+      same request: within about 5% (0.3%).
 
 ### Acceptance — H1
 

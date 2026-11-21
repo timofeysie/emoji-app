@@ -2,7 +2,10 @@ import { Body, Controller, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { Chat } from '@hashbrownai/core';
 import { HashbrownOpenAI } from '@hashbrownai/openai';
-import { requireAuth } from './auth';
+import { requireAuth, type AuthedRequest } from './auth';
+import { countRequestTokens, ReplyTokenCounter, type OpenAiChatRequest, type RequestTokenCount } from './chat/chat-context';
+import { ChatContextService } from './chat/chat-context.service';
+import { CHAT_SESSION_HEADER, CHAT_SESSION_ID } from './chat/chat-session';
 
 function runAuth(req: Request, res: Response): Promise<boolean> {
   return new Promise((resolve) => {
@@ -35,8 +38,16 @@ function messageContentSize(content: unknown): number {
   return JSON.stringify(content ?? '').length;
 }
 
+/** The chat panel's session id, or null (other Hashbrown hooks send none). */
+function chatSessionOf(req: Request): string | null {
+  const value = req.headers[CHAT_SESSION_HEADER];
+  return typeof value === 'string' && CHAT_SESSION_ID.test(value) ? value : null;
+}
+
 @Controller('api')
 export class ChatController {
+  constructor(private readonly chatContext: ChatContextService) {}
+
   @Post('chat')
   async chat(
     @Body() completionParams: Chat.Api.CompletionCreateParams,
@@ -141,17 +152,47 @@ export class ChatController {
         throw new Error('OPENAI_API_KEY is not set');
       }
 
+      // Context indicator (docs/hashbrown/creating-games-with-hashbrown.md):
+      // count the request exactly as it goes to OpenAI, then the reply.
+      const sessionId = chatSessionOf(req);
+      const userSub = (req as AuthedRequest).auth?.sub;
+      let requestCount: RequestTokenCount | null = null;
+      let requestModel = '';
+      const replyCounter = new ReplyTokenCounter();
+
       const response = HashbrownOpenAI.stream.text({
         apiKey: openAiApiKey,
         request: completionParams,
+        transformRequestOptions: (options) => {
+          if (sessionId && userSub) {
+            requestCount = countRequestTokens(options as OpenAiChatRequest);
+            requestModel = String(options.model);
+          }
+          return options;
+        },
       });
 
       res.header('Content-Type', 'application/octet-stream');
 
       let chunkCount = 0;
-      for await (const chunk of response) {
-        res.write(chunk);
-        chunkCount += 1;
+      try {
+        for await (const chunk of response) {
+          res.write(chunk);
+          chunkCount += 1;
+          if (requestCount) {
+            replyCounter.push(chunk);
+          }
+        }
+      } finally {
+        if (requestCount && sessionId && userSub) {
+          const contentLength = Number(req.headers['content-length']);
+          this.chatContext.record(userSub, sessionId, {
+            ...(requestCount as RequestTokenCount),
+            replyTokens: replyCounter.tokens,
+            model: requestModel,
+            requestBytes: contentLength > 0 ? contentLength : Buffer.byteLength(JSON.stringify(completionParams)),
+          });
+        }
       }
 
       const endTimestamp = new Date().toISOString();
