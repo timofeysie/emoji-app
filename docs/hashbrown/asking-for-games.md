@@ -8,7 +8,10 @@ plan behind it is [creating-games-with-hashbrown.md](creating-games-with-hashbro
 - **Draft Game page.** On **Games**, click **Draft Game**, then **New draft**.
   Paste the passage, pick a mix and the number of options, and click
   **Generate**. Your drafts are saved as you go, and you can keep several.
-- **Chat** (coming with H1b). Paste the passage and ask in your own words.
+- **Chat.** Paste the passage and ask in your own words. The chat shows the
+  draft as a card with **Create game**, **Discard** and **Open in Draft
+  Game**. Ask for changes (*"make question 4 harder"*) and the card updates.
+  The draft is the same one the Draft Game page lists.
 
 Nothing the AI writes is playable until you click **Create game**. Check the
 questions first: the AI can mark the wrong answer as correct, or write two
@@ -73,7 +76,9 @@ vocabulary mix are 7 vocabulary, 2 grammar and 3 comprehension.
 - Edit any text, click the circle next to an option to make it the correct
   one, move questions up and down, or add your own.
 - Red notes under a question are what stops the game being created: two
-  correct options, an option over 40 characters, a question over 120.
+  correct options, an option over 60 characters, a question over 120.
+  Short text reads better on the student screen, so shorten rather than
+  explain.
 - **Share** lists the draft under every referee's **Shared drafts**. They
   can edit it with you. Only you can create the game, unshare or delete it.
 - **Duplicate** on any game, yours or another referee's, starts a new draft

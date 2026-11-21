@@ -4,6 +4,7 @@ import { CHAT_MODEL } from '../chat/chat-config';
 import type { DraftQuestion, DraftSettings, LanguagePair } from './drafts-api';
 import { gameRecipe } from './game-authoring.prompt';
 import { gameDraftSchema, type GameDraftPayload } from './game-draft.schema';
+import { questionFocusValues, scaleMix, type MixCounts } from './question-mixes';
 
 /** What the Draft Game page asks the model for. */
 export type GenerationRequest =
@@ -39,6 +40,14 @@ const SYSTEM = [
   'Only ask about what the passage says or uses. Every correct answer must be clearly right, and every other option clearly wrong.',
 ].join('\n');
 
+/** A custom (chat) mix, read back from the draft's questions. Vocabulary when there are none. */
+function mixOf(settings: DraftSettings, questions: DraftQuestion[], total: number): string | MixCounts {
+  if (settings.mix !== 'custom') return settings.mix;
+  const counts: MixCounts = { comprehension: 0, vocabulary: 0, grammar: 0 };
+  for (const question of questions) counts[question.focus ?? 'vocabulary'] += 1;
+  return questionFocusValues.some((focus) => counts[focus] > 0) ? scaleMix(counts, total) : 'vocabulary';
+}
+
 function existingList(questions: DraftQuestion[]): string {
   return questions.map((question, i) => `${i + 1}. ${question.text}`).join('\n');
 }
@@ -69,14 +78,19 @@ export function generationMessage(request: GenerationRequest, context: Generatio
   } else if (request.kind === 'more') {
     task = [
       `Write ${request.count} more questions for this game.`,
-      gameRecipe({ mix: settings.mix, total: request.count, optionsPerQuestion, languages: names }),
+      gameRecipe({ mix: mixOf(settings, questions, request.count), total: request.count, optionsPerQuestion, languages: names }),
       `Don't repeat the game's questions so far:\n${existingList(questions)}`,
       'Put only the new questions in questions. Keep the title short.',
     ].join('\n\n');
   } else {
     task = [
       'Make a game from the passage.',
-      gameRecipe({ mix: settings.mix, total: settings.questionCount, optionsPerQuestion, languages: names }),
+      gameRecipe({
+        mix: mixOf(settings, questions, settings.questionCount),
+        total: settings.questionCount,
+        optionsPerQuestion,
+        languages: names,
+      }),
     ].join('\n\n');
   }
   return `${task}\n\n${languages}\n\nThe passage:\n"""\n${context.source}\n"""`;
@@ -86,7 +100,10 @@ export function generationMessage(request: GenerationRequest, context: Generatio
  * The options in a random order. Models put the correct answer first almost
  * every time (checked with gpt-4.1: 10 of 10), which players would learn.
  */
-export function shuffleOptions(output: GameDraftPayload, random: () => number = Math.random): GameDraftPayload {
+export function shuffleOptions<T extends { questions: Array<{ options: unknown[] }> }>(
+  output: T,
+  random: () => number = Math.random,
+): T {
   return {
     ...output,
     questions: output.questions.map((question) => {

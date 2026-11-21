@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, ArrowDown, ArrowUp, Circle, CircleCheck, Loader2, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
 import { Button } from '../shared/button';
+import { ExpandableTextField } from '../shared/ExpandableTextField';
 import { Input } from '../shared/input';
 import { Label } from '../shared/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../shared/select';
@@ -147,11 +148,15 @@ function SourcePane({
                 {mix.id === 'vocabulary' ? ' (default)' : ''}
               </SelectItem>
             ))}
+            {settings.mix === 'custom' && <SelectItem value="custom">Custom (from the chat)</SelectItem>}
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          {counts.vocabulary} vocabulary · {counts.grammar} grammar · {counts.comprehension} comprehension.{' '}
-          {QUESTION_MIXES.find((mix) => mix.id === settings.mix)?.description}.
+          {settings.mix === 'custom'
+            ? 'The counts asked for in the chat. Generating keeps the same proportions.'
+            : `${counts.vocabulary} vocabulary · ${counts.grammar} grammar · ${counts.comprehension} comprehension. ${
+                QUESTION_MIXES.find((mix) => mix.id === settings.mix)?.description
+              }.`}
         </p>
       </div>
 
@@ -284,14 +289,14 @@ function QuestionsPane({ content, onContentChange, settings, problems, readOnly,
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-3 rounded-lg border bg-background p-3">
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="draft-title">Game title</Label>
-        <Input
-          id="draft-title"
+        <Label>Game title</Label>
+        <ExpandableTextField
+          aria-label="Game title"
           placeholder="e.g. Story quiz: 토끼와 거북이"
           value={content.title}
           readOnly={readOnly}
           maxLength={GAME_LIMITS.maxTitleLength}
-          onChange={(event) => onContentChange({ ...content, title: event.target.value })}
+          onChange={(title) => onContentChange({ ...content, title })}
         />
         <p className="text-xs text-muted-foreground">The title goes to the LRS: never put a person’s name in it.</p>
       </div>
@@ -360,7 +365,9 @@ function QuestionsPane({ content, onContentChange, settings, problems, readOnly,
             onChange={(event) => setMoreCount(Math.max(1, Math.min(GAME_LIMITS.maxQuestions, Math.round(Number(event.target.value)) || 1)))}
           />
           <span className="text-xs text-muted-foreground">
-            {room > 0 ? `in the ${QUESTION_MIXES.find((mix) => mix.id === settings.mix)?.label.toLowerCase()} mix` : `${GAME_LIMITS.maxQuestions} is the most a game can have`}
+            {room > 0
+              ? `in the ${QUESTION_MIXES.find((mix) => mix.id === settings.mix)?.label.toLowerCase() ?? 'custom'} mix`
+              : `${GAME_LIMITS.maxQuestions} is the most a game can have`}
           </span>
         </div>
       )}
@@ -487,20 +494,22 @@ function QuestionEditor({
         </form>
       )}
 
-      <Input
+      {/* Never cut off: long text ends in "…" and expands on click or tap. */}
+      <ExpandableTextField
         aria-label={`Question ${index + 1}`}
         placeholder="The question"
         value={question.text}
         readOnly={readOnly}
-        onChange={(event) => onChange({ ...question, text: event.target.value })}
+        maxLength={GAME_LIMITS.maxPromptLength}
+        onChange={(text) => onChange({ ...question, text })}
       />
 
       <div className="flex flex-col gap-1">
         {question.options.map((option, o) => (
-          <div key={o} className="flex items-center gap-2">
+          <div key={o} className="flex items-start gap-2">
             <button
               type="button"
-              className={cn('shrink-0', option.isCorrect ? 'text-green-600' : 'text-muted-foreground', readOnly && 'cursor-default')}
+              className={cn('mt-2.5 shrink-0', option.isCorrect ? 'text-green-600' : 'text-muted-foreground', readOnly && 'cursor-default')}
               aria-label={option.isCorrect ? `Option ${SLOT_LABELS[o]} is correct` : `Mark option ${SLOT_LABELS[o] ?? o + 1} correct`}
               title={option.isCorrect ? 'Correct answer' : 'Mark as the correct answer'}
               disabled={readOnly}
@@ -508,19 +517,20 @@ function QuestionEditor({
             >
               {option.isCorrect ? <CircleCheck className="h-4 w-4" aria-hidden /> : <Circle className="h-4 w-4" aria-hidden />}
             </button>
-            <span className="w-4 shrink-0 text-xs font-semibold text-muted-foreground">{SLOT_LABELS[o] ?? '?'}</span>
-            <Input
+            <span className="mt-2.5 w-4 shrink-0 text-xs font-semibold text-muted-foreground">{SLOT_LABELS[o] ?? '?'}</span>
+            <ExpandableTextField
               aria-label={`Question ${index + 1}, option ${SLOT_LABELS[o] ?? o + 1}`}
-              className="h-8 text-sm"
+              className="min-w-0 flex-1"
               value={option.text}
               readOnly={readOnly}
-              onChange={(event) => setOption(o, event.target.value)}
+              maxLength={GAME_LIMITS.maxOptionLength}
+              onChange={(text) => setOption(o, text)}
             />
             {!readOnly && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 shrink-0"
+                className="mt-1 h-7 w-7 shrink-0"
                 aria-label={`Remove option ${SLOT_LABELS[o] ?? o + 1}`}
                 title="Remove option"
                 disabled={question.options.length <= GAME_LIMITS.minOptions}

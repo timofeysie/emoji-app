@@ -10,9 +10,14 @@ export const GAME_LIMITS = {
   minOptions: 2,
   /** A–E: needs a card group with an E card. */
   maxOptions: 5,
-  /** Characters, so questions fit the student view. Check against GamePlayView. */
+  /**
+   * Characters, so text fits the screens that show it. Set by the smallest
+   * screen: see "Text length and screens" in docs/hashbrown/creating-games-with-hashbrown.md
+   * before changing them.
+   */
   maxPromptLength: 120,
-  maxOptionLength: 40,
+  /** 40 until 2026-11-21: models went over it often, and the student view wraps options. */
+  maxOptionLength: 60,
   /** Characters of pasted text sent to the model. */
   maxSourceLength: 8000,
   maxTitleLength: 100,

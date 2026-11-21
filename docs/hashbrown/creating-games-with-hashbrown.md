@@ -1,7 +1,15 @@
 # Creating games with Hashbrown
 
-Status: **H0, H0b and H1 built** (2026-11-21): single game creation on the
-Draft Game page. H1b (the chat) is next. Added 2026-11-20, revised
+Status: **H0 to H1b built** (2026-11-21): single game creation on the
+Draft Game page and in the chat. H2 (library chapters) is next.
+
+> ⚠️ **Text length is a standing design issue.** How long a question or an
+> option can be depends on the smallest screen that shows it: student
+> view, referee view, chat card and, maybe later, the badges' 128×128
+> LCD. The limits are a guess that has only been checked against the code,
+> not on real screens. Read [Text length and screens](#text-length-and-screens)
+> before changing a limit, adding a screen, or showing game text somewhere
+> new. Added 2026-11-20, revised
 2026-11-21 with answers to the first round of open questions.
 
 A signed-in user pastes content, for example a few paragraphs of a Korean
@@ -79,7 +87,7 @@ need much less: their questions fit the existing `Question` and
 
 ## Decisions
 
-G1–G14 are this plan's design locks. ⚠️ marks the ones that leave a
+G1–G15 are this plan's design locks. ⚠️ marks the ones that leave a
 permanent mark in the LRS.
 
 | # | Decision | Why |
@@ -98,6 +106,7 @@ permanent mark in the LRS.
 | G12 | **Content is open by default.** Every signed-in user can see and play published books, chapters and games, and can **remix** them into their own copy. Only the owner edits the original. Remixes credit the source by title only, never by the referee's name. Drafts are private by default, and the owner can **share** one (G14). | Referees remix and share each other's work. Organisations (security.md D8) can narrow this later with a `visibility` field that already exists. |
 | G13 | **The pasted text is always kept as a `ContentSource`, but "make a game" doesn't save a chapter** unless the user asks. A game made from a source offers **Save as library chapter** later, which reuses the source. | Keeping the text costs little and means it never has to be pasted again. A chapter needs sense decisions, which is more work than a quick game should ask for. |
 | G14 | **Drafts can be shared (for now).** The owner clicks **Share** on a draft, and it appears in every signed-in user's **Shared drafts** list. Anyone signed in can open and edit a shared draft, and the `revision` check stops two people overwriting each other. Only the owner can accept, unshare or delete it. Anyone can **Duplicate** it into a draft of their own. | Lets referees build a game or chapter together before it's published. Private by default because a fresh draft holds pasted text that nobody has reviewed yet. Narrow it with organisations later (D8). |
+| G15 | **Length limits come from the smallest screen that shows the text.** One pair of numbers (`maxPromptLength`, `maxOptionLength`) is shared by the prompt, the editor and the server. Any new screen that shows question or option text must be checked against them, or get its own limits, before it ships. See [Text length and screens](#text-length-and-screens). | A question that doesn't fit is unplayable, or silently cut off. The AI only keeps to limits it's told, and the server is the only real guard (G3). |
 
 ---
 
@@ -175,9 +184,9 @@ rules for every mix:
   same passage, or the right word in the wrong form.
 - **Vocabulary questions** ask about words in the form the passage uses,
   and say what the dictionary form is in the explanation.
-- **Short text,** so it fits the student view and the referee panel:
-  prompts ≤ 120 characters, options ≤ 40. Check this against
-  `GamePlayView.tsx` before fixing the numbers.
+- **Short text,** so it fits the screens that show it: prompts ≤ 120
+  characters, options ≤ 60 (40 until 2026-11-21). See
+  [Text length and screens](#text-length-and-screens).
 - **Each question cites its sentence** (`sourceExcerpt`), shown in the draft
   for review only. It isn't saved on the question and doesn't go to the
   LRS.
@@ -208,6 +217,65 @@ chat's welcome message gives two of its examples. For instance:
   attached group is missing a slot ("question 3 uses E, but this card group
   has A–D"), and **Start** is blocked until it's fixed. The draft page shows
   a note when 5 is picked: *"needs a card group with an E card"*.
+
+### Text length and screens
+
+**Why it matters.** Every question and option is shown on some screen, and
+the smallest one decides what fits. The AI keeps to the limits it's told
+only most of the time, so the server enforces them (G3, G15). A limit
+that's too tight blocks good questions: models went over 40 characters for
+an option about once a game. A limit that's too loose gives text that
+wraps badly or is cut off on a small screen. A wrong answer the player
+can't read makes the round worthless, and its `answered` statement still
+goes to the LRS.
+
+**Limits now** (`GAME_LIMITS` in `client/src/app/game-authoring/game-limits.ts`
+and `GAME_DRAFT_LIMITS` in `server/src/content/game-draft.ts`, kept equal
+by `game-draft.spec.ts`):
+
+| Text | Limit | Notes |
+| --- | --- | --- |
+| Question prompt | 120 characters | |
+| Answer option | 60 characters | 40 until 2026-11-21. Raised because models went over 40 often, and the student view wraps options. |
+| Game title | 100 characters | Also goes to the LRS. |
+| Pasted passage | 8,000 characters | Not shown to players. It bounds the cost and the context. |
+
+**Where the text is shown**, and what's known about each screen:
+
+| Screen | Shows | What happens to long text | Checked |
+| --- | --- | --- | --- |
+| Student view (`GamePlayView.tsx`), on a projector, laptop or phone | Prompt as an `xl` heading; options in a 2-column grid (1 column on phones), `text-sm` | Wraps onto more lines. Nothing is cut off. | Code only (2026-11-21). Not seen on a phone or projector with 60-character Korean options. |
+| Student view, last round's result | Options with who picked them | Wraps. Player names are truncated. | Code only. |
+| Referee view (`GameDetailView` questions, guess chart) | Prompt and options | Wraps. | Code only. |
+| Draft Game page editor | Title, prompt and options in one-line fields | Ends in "…" with a ⌄. A click or tap expands the field to show and edit all of it, with a "52 / 120" count. ⌃, Enter, Escape or leaving the field collapses it (`shared/ExpandableTextField.tsx`). | Seen on screen: long questions used to be cut off with no way to read them (2026-11-21), which led to this rule. |
+| Chat `GameDraft` card | Prompt and the correct option | Wraps. The chat panel is the narrowest place, about 3/7 of a laptop screen. | Code only. |
+| Badges (Waveshare 1.44" LCD, 128×128 px, docs/hardware) | Today: no question or option text. `question.opened` sends only ids and the game title. | — | — |
+| LRS / Veracity | Prompt and options in the `choice` interaction | No practical limit. | — |
+
+**Character counts are a rough measure.** A Korean syllable is about twice
+the width of a Latin letter, so 60 Korean characters take far more room
+than 60 English ones. Emoji and combined characters count oddly too. If one
+language's text keeps overflowing, the fix is a limit by display width or
+by language, not a smaller number for everyone.
+
+**Rule: game text is never hidden.** Every screen either wraps the text, or
+cuts it off with an ellipsis that expands on click or tap
+(`ExpandableTextField`). A reviewer has to see every word of a question and
+its options before accepting them. Clipping text with no way to read it is
+a bug.
+
+**Before changing anything here:**
+- Change both limit files together. The spec fails otherwise.
+- Look at the student view on the smallest real screen in use, with the
+  longest allowed text, in Korean and in English, at 4 and 5 options.
+- **Showing game text on the badges** would need its own, much smaller
+  limits. A 128×128 screen fits roughly 16–20 Latin characters a line at a
+  readable size, and fewer Korean ones. Plan it as an option label or a
+  short form (`shortText`), not by cutting text off.
+- Any new screen for game text, such as a projector mode or a printed
+  sheet, gets a row in the table above.
+- **Existing games aren't re-checked.** Hand-made games
+  (`createQuestionSchema`) have no length limit at all.
 
 ### Hashbrown pieces
 
@@ -627,7 +695,7 @@ conversation, so they don't need one.
 | H0 ✅ | Decisions above confirmed. Chat panel split into tool hooks, new system prompt skeleton, shared game schema and mix presets, `/api/chat` body limit. No visible change. Built 2026-11-21, see [H0: what was built](#h0-what-was-built). | — |
 | H0b ✅ | **Chat context indicator**: token counting in `ChatController`, `X-Chat-Session` middleware, `GET /api/chat/context/:sessionId`, `useChatContextUsage` and `ContextMeter`. See [Context indicator](#context-indicator). Before H1, so long pastes are visible from the start. Built 2026-11-21, see [H0b: what was built](#h0b-what-was-built). | H0 |
 | H1 ✅ | **Single game creation**: `ContentSource`, `ContentDraft`, draft endpoints, `createGameWithQuestions`, the **Draft Game** button, drafts list and `GameDraftEditor` page (`useStructuredCompletion`), the card-slot check at Start, Duplicate and remix of games, and `asking-for-games.md`. Built 2026-11-21, see [H1: what was built](#h1-what-was-built). | H0 |
-| H1b | **Single games from the chat**: `proposeGame` / `reviseGameDraft` / `getMyDrafts`, the `GameDraft` card, `OpenGame` / `OpenDraft`. | H1 |
+| H1b ✅ | **Single games from the chat**: `proposeGame` / `reviseGameDraft` / `getMyDrafts`, the `GameDraft` card, `OpenGame` / `OpenDraft`. Built 2026-11-21, see [H1b: what was built](#h1b-what-was-built). | H1 |
 | H2 | **Library chapters (study only)**: `Book`, `Chapter`, the `Sense` collection, async `BookContentService`, shared `kogsChapterV1Schema`, `findSenses` / `proposeChapter` / `ChapterDraft` / `OpenYallaChapter`, open books in YALLA, **Save as library chapter**, remix and archive. | H1 (drafts) |
 | H3 | **Leitner on library chapters**: planner and generator on user books, book picker in `NewLeitnerGameDialog`, YALLA Exercises on user books, `createLeitnerGame` chat tool with dry-run plan. | H2 |
 | H4 | **Grammar learning objects**: the romanisation and slug rules, pattern registry, cloze generator, pattern tracks. | H3. Identity decided ([A4](#decided-grammar-pattern-identity-a4)). |
@@ -663,8 +731,9 @@ Built 2026-11-21.
   `gpt-4.1`). The smart-home dialogs keep their smaller models.
 - **Shared game authoring** (`client/src/app/game-authoring/`), not used yet:
   - `game-limits.ts`: 10 questions by default (max 20), 4 options by default
-    (2–5, slots A–E), prompt ≤ 120 and option ≤ 40 characters, pasted text
-    ≤ 8,000 characters
+    (2–5, slots A–E), prompt ≤ 120 and option ≤ 40 characters (options
+    raised to 60 after H1b, see [Text length and screens](#text-length-and-screens)),
+    pasted text ≤ 8,000 characters
   - `question-mixes.ts`: the presets (vocabulary is the default) and
     `scaleMix()`, which fits a mix to any total by largest remainder
   - `game-draft.schema.ts`: the Skillet `gameDraftSchema` for `proposeGame`
@@ -820,6 +889,78 @@ Not done:
   AI output by hand (Testing).
 - **A Playwright test** for draft → accept → play → export.
 
+### H1b: what was built
+
+Built 2026-11-21.
+
+- **Chat area** (`client/src/app/chat/game-authoring/`):
+  `useGameAuthoringChatArea`, second in the panel after the core area.
+  - Tools:
+    - `proposeGame`: the game, the mix, the option count and the
+      passage's first words
+    - `reviseGameDraft`: replace or remove questions by number, add
+      questions, retitle
+    - `getMyDrafts`
+    - `getGameDraft`
+  - Components:
+    - `GameDraft` (`GameDraftCard`)
+    - `OpenGame` and `OpenDraft`, which open the page once when rendered
+  - Prompt section: the mixes, the default recipe, the fix-problems rule,
+    "only the user creates the game", and three examples.
+- **Helpers** (`game-draft-tools.ts`):
+  - `findPassage()` finds the pasted text in the user's messages.
+  - `applyRevision()` applies a `reviseGameDraft` call.
+  - `mixMismatch()` checks a draft against its preset.
+- **Shared pieces:**
+  - `gameDraftQuestionSchema`, split out of `gameDraftSchema`
+  - `shuffleOptions()`, now generic
+  - `notifyDraftChanged()` / `useDraftChanged()`: a chat edit reloads open
+    `GameDraft` cards, and the Draft Game page if it has no unsaved edits
+  - a `custom` mix on the server, in the page's mix picker and in Generate
+    (which keeps the draft's proportions)
+- **Checked** with the composed system prompt, the tools as strict
+  functions and a UI response schema like Hashbrown's, on `gpt-4.1`. The
+  tool results were played back from the real helpers and server rules.
+  Three turns per run:
+  - **Pasting a story** gave one `proposeGame` call in the vocabulary mix
+    (6 / 2 / 2), 10 questions, 4 options, English text. The passage was
+    found and kept whole every time. Then a `<GameDraft>` card.
+  - **"Question 4 is too easy, make it about the grammar"** gave
+    `getGameDraft`, then `reviseGameDraft` replacing only question 4. The
+    other nine were unchanged.
+  - **"Now make a comprehension game … with five options"** gave a new
+    draft with 5 options and a note about the E card.
+  - **When the server returned problems** (an option over 40 characters),
+    the model fixed them with `reviseGameDraft` before showing the card.
+  - **The composed prompt** has no Hashbrown diagnostics. It has 10
+    examples, 12 tools and 7 components.
+  - **Lint, build and tests:** lint, the client build and all 453 server
+    tests pass. The client typecheck shows the same 4 errors as before.
+
+**Changed from the design:**
+
+- **`proposeGame` takes the passage's first words, not the passage.** The
+  handler finds the passage in the user's messages and keeps it as the
+  source. That keeps a long passage out of the tool call, and the text is
+  exactly what was pasted.
+- **The handlers check the mix.** In testing, "a comprehension game" came
+  back as 8, 9 or 10 comprehension questions in most runs, even with the
+  counts in the prompt and in the `mix` field. `proposeGame` now returns a
+  `mixProblem` naming the questions to replace and their kinds. With that,
+  3 runs out of 3 ended at 6 / 2 / 2. `reviseGameDraft` doesn't check the
+  mix, because a change the user asks for wins.
+- **The card doesn't edit.** The `GameDraft` card lists the questions and
+  answers with **Create game**, **Discard** (which deletes the draft) and
+  **Open in Draft Game**. Edits happen by asking the chat or on the page.
+- **`getGameDraft` was added, and `getGames` wasn't.** `getMyDrafts`
+  includes each accepted draft's `gameId`, which `OpenGame` needs.
+- **Options are shuffled** in the tool handlers, as on the page.
+- **No welcome message:** the panel doesn't have one. `asking-for-games.md`
+  has the examples.
+
+**Not checked:** the chat on screen: streaming, the card in the panel, and
+the triggers opening pages. It needs the dev server restarted.
+
 ### Acceptance — H0b
 
 - [ ] The context reading appears under the chat input. Before the first
@@ -873,11 +1014,15 @@ Not done:
 
 ### Acceptance — H1b
 
-- [ ] Pasting a passage in the chat gives a `GameDraft` card for the same
+- [x] Pasting a passage in the chat gives a `GameDraft` card for the same
       kind of draft, and *"make question 4 harder"* changes only question 4.
-- [ ] *"Make a comprehension game"* gives the comprehension mix.
+      *(Checked against `gpt-4.1` with the real prompt and tools; check on
+      screen.)*
+- [x] *"Make a comprehension game"* gives the comprehension mix. *(With
+      the `mixProblem` check: 3 runs out of 3.)*
 - [ ] **Open in Draft Game** opens the same draft in the page, and edits in
-      either place show in the other after a reload.
+      either place show in the other after a reload. *(Built: the page also
+      reloads by itself after a chat edit. Check on screen.)*
 
 ### Acceptance — H2
 
@@ -960,6 +1105,10 @@ Not done:
 - **Cost and abuse.** `/api/chat` is an OpenAI proxy for any signed-in
   user, and the Draft Game page makes generating easy. Cap the paste size,
   and consider a per-user daily limit before sharing beyond the pilot.
+- **Screen sizes and text length.** The limits (G15) are checked against
+  the code, not real screens, and badges may one day show text. See
+  [Text length and screens](#text-length-and-screens). Too tight and the AI's
+  questions are blocked. Too loose and players can't read them.
 - **Context growth.** Every chat request resends the whole conversation, so
   each turn costs more than the last. A long session with pasted passages
   and chapter-sized tool calls will reach the 1 MB body limit (H0) well
@@ -993,4 +1142,8 @@ Answered 2026-11-21 (now in Decisions and the sections above):
 | 7 | Remix credit | No referee name. A remix shows the source's title and a link (G12). |
 | 8 | Draft sharing | Yes, for now: the owner can share a draft for others to edit (G14). |
 
-No questions are open right now.
+Open:
+
+| # | Question | Notes |
+| --- | --- | --- |
+| 9 | Are 120 / 60 characters right for every screen? | Look at the student view on a phone and a projector with long Korean text. Decide whether limits should depend on display width or language. Decide whether badges will ever show text. See [Text length and screens](#text-length-and-screens). |

@@ -49,7 +49,7 @@ describe('game draft rules', () => {
     const problems = gameDraftProblems(
       draft([
         twoCorrect,
-        question('', 0, ['배', '배', '', 'x'.repeat(41)]),
+        question('', 0, ['배', '배', '', 'x'.repeat(61)]),
         question('Six options?', 0, ['a', 'b', 'c', 'd', 'e', 'f']),
         question('No correct one', -1),
       ]),
@@ -59,7 +59,7 @@ describe('game draft rules', () => {
       { path: 'questions.1.text', message: 'Question 2 has no text' },
       { path: 'questions.1.options.1', message: 'Question 2, option B repeats another option' },
       { path: 'questions.1.options.2', message: 'Question 2, option C is empty' },
-      { path: 'questions.1.options.3', message: 'Question 2, option D is longer than 40 characters' },
+      { path: 'questions.1.options.3', message: 'Question 2, option D is longer than 60 characters' },
       { path: 'questions.2.options', message: 'Question 3 has 6 options (2–5 allowed)' },
       { path: 'questions.3.options', message: 'Question 4 has 0 correct options (exactly 1 needed)' },
     ]);
@@ -90,6 +90,9 @@ describe('game draft rules', () => {
   it('defaults the settings to the vocabulary mix, 10 questions and 4 options', () => {
     expect(draftSettingsSchema.parse({})).toEqual({ mix: 'vocabulary', questionCount: 10, optionsPerQuestion: 4 });
     expect(draftSettingsSchema.safeParse({ optionsPerQuestion: 6 }).success).toBe(false);
+    // Counts the user gave in the chat.
+    expect(draftSettingsSchema.parse({ mix: 'custom' }).mix).toBe('custom');
+    expect(draftSettingsSchema.safeParse({ mix: 'mostly-verbs' }).success).toBe(false);
   });
 
   it('turns options into slots A, B, C, … in order, trimmed', () => {

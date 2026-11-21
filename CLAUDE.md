@@ -59,6 +59,7 @@ In development, Vite proxies `/api` to `localhost:3000`. In production, Express 
 
 `RichChatPanel.tsx` combines **chat areas** (`client/src/app/chat/`). Each area hook returns a `ChatArea` (tools, runtime functions, components, and a prompt section written with the `section` tag); `composePrompt` joins the sections into one `prompt`. Add a feature's chat support as a new area rather than growing the panel.
 - `useCoreChatArea`: who the assistant is, `Markdown` and `Card` components
+- `game-authoring/useGameAuthoringChatArea`: `proposeGame`, `reviseGameDraft`, `getMyDrafts`, `getGameDraft`, and the `GameDraft`, `OpenGame`, `OpenDraft` components. `proposeGame` gets only the passage's first words and finds the passage in the user's messages (`findPassage`); it returns `problems` and a `mixProblem` for the model to fix with `reviseGameDraft`
 - `useSmartHomeChatArea`: `getLights`, `getScenes`, `controlLight`, `deleteLight`, `deleteScene`, `createLight` (javascript runtime), `LightChat` and `AddScene` components
 - `useDomChatArea`: `setFormInputValue`, `clickButtonByText`, `selectOptionByText` — manipulate React form elements directly via DOM APIs, allowing the AI to fill forms and submit dialogs
 
@@ -66,7 +67,7 @@ The model is `CHAT_MODEL` in `chat/chat-config.ts`.
 
 The panel has its own `HashbrownProvider` (`chat/ChatSessionProvider.tsx`) that sends an `X-Chat-Session` id. `ChatController` counts each chat request and reply with `gpt-tokenizer` (`server/src/chat/chat-context.ts`), and the panel's `ContextMeter` reads `GET /api/chat/context/:sessionId` after each answer. Update `MODEL_CONTEXT_WINDOWS` there when changing `CHAT_MODEL`.
 
-**Game drafts** (docs/hashbrown/creating-games-with-hashbrown.md): the AI's output is only ever a draft until the owner clicks Create game. The server re-checks every draft with `gameDraftProblems()`, so keep its `GAME_DRAFT_LIMITS` equal to the client's `GAME_LIMITS` (a spec compares them). Generated options are shuffled in `useGameGeneration`, because models put the correct one first.
+**Game drafts** (docs/hashbrown/creating-games-with-hashbrown.md): the AI's output is only ever a draft until the owner clicks Create game. The server re-checks every draft with `gameDraftProblems()`, so keep its `GAME_DRAFT_LIMITS` equal to the client's `GAME_LIMITS` (a spec compares them). The length limits depend on the screens that show game text: read "Text length and screens" in that doc before changing a limit or showing game text somewhere new. Generated options are shuffled in `useGameGeneration`, because models put the correct one first.
 
 Tool arguments are validated with Hashbrown's schema system (`s.object`, `s.string`, etc.).
 

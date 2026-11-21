@@ -7,6 +7,7 @@ import { ContextMeter } from '../chat/ContextMeter';
 import { composePrompt, type PromptSection } from '../chat/prompt-sections';
 import { useSmartHomeChatArea } from '../chat/smart-home/useSmartHomeChatArea';
 import { useCoreChatArea } from '../chat/useCoreChatArea';
+import { useGameAuthoringChatArea } from '../chat/game-authoring/useGameAuthoringChatArea';
 import { useChatContextUsage } from '../chat/useChatContextUsage';
 import { useDomChatArea } from '../chat/useDomChatArea';
 import { Button } from './button';
@@ -15,8 +16,16 @@ import { ScrollArea } from './scrollarea';
 import { Textarea } from './textarea';
 
 export const RichChatPanel = () => {
+  // What the user typed, for tools that keep the pasted text (proposeGame).
+  const userTextsRef = useRef<string[]>([]);
+
   // Each area adds its tools, components and prompt section, in this order.
-  const areas = [useCoreChatArea(), useSmartHomeChatArea(), useDomChatArea()];
+  const areas = [
+    useCoreChatArea(),
+    useGameAuthoringChatArea(() => userTextsRef.current),
+    useSmartHomeChatArea(),
+    useDomChatArea(),
+  ];
 
   const runtime = useRuntime({
     functions: areas.flatMap((area) => area.runtimeFunctions ?? []),
@@ -40,6 +49,10 @@ export const RichChatPanel = () => {
     tools: [...areas.flatMap((area) => area.tools ?? []), toolJavaScript],
     components: areas.flatMap((area) => area.components ?? []),
   });
+
+  userTextsRef.current = messages.flatMap((message) =>
+    message.role === 'user' && typeof message.content === 'string' ? [message.content] : [],
+  );
 
   const isWorking = useMemo(() => {
     return isSending || isReceiving || isRunningToolCalls;

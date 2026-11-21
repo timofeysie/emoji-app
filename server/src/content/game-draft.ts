@@ -13,7 +13,7 @@ export const GAME_DRAFT_LIMITS = {
   minOptions: 2,
   maxOptions: 5,
   maxPromptLength: 120,
-  maxOptionLength: 40,
+  maxOptionLength: 60,
   maxSourceLength: 8000,
   maxTitleLength: 100,
 } as const;
@@ -21,6 +21,8 @@ export const GAME_DRAFT_LIMITS = {
 export const questionFocusValues = ['comprehension', 'vocabulary', 'grammar'] as const;
 /** The client's `QUESTION_MIXES` ids. */
 export const questionMixValues = ['vocabulary', 'balanced', 'comprehension', 'grammar'] as const;
+/** A draft's mix: a preset, or `custom` counts the user asked for in the chat. */
+export const draftMixValues = [...questionMixValues, 'custom'] as const;
 
 export const languagePairSchema = z
   .object({
@@ -40,7 +42,7 @@ export const sourceInputSchema = z
 
 export const draftSettingsSchema = z
   .object({
-    mix: z.enum(questionMixValues).default('vocabulary'),
+    mix: z.enum(draftMixValues).default('vocabulary'),
     questionCount: z.number().int().min(1).max(GAME_DRAFT_LIMITS.maxQuestions).default(GAME_DRAFT_LIMITS.defaultQuestions),
     optionsPerQuestion: z
       .number()

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { authFetch } from '../auth/authFetch';
 import type { QuestionFocus, QuestionMixId } from './question-mixes';
 
@@ -30,7 +31,8 @@ export type GameDraftContent = {
 };
 
 export type DraftSettings = {
-  mix: QuestionMixId;
+  /** `custom`: counts the user asked for in the chat. */
+  mix: QuestionMixId | 'custom';
   questionCount: number;
   optionsPerQuestion: number;
 };
@@ -101,7 +103,9 @@ export function listDrafts(shared: boolean): Promise<{ drafts: DraftSummary[] }>
 }
 
 export function createDraft(
-  body: { source?: { text: string; language: LanguagePair }; settings?: DraftSettings } | { fromGameId: string },
+  body:
+    | { source?: { text: string; language: LanguagePair }; settings?: DraftSettings; payload?: GameDraftContent }
+    | { fromGameId: string },
 ): Promise<{ draft: ContentDraft }> {
   return send('/api/content/drafts', { method: 'POST', body: JSON.stringify({ type: 'game', ...body }) });
 }
@@ -128,6 +132,26 @@ export function shareDraft(draftId: string, shared: boolean): Promise<DraftView>
 
 export function deleteDraft(draftId: string): Promise<{ ok: true }> {
   return send(`/api/content/drafts/${draftId}`, { method: 'DELETE' });
+}
+
+const DRAFT_CHANGED = 'emoji-app:draft-changed';
+
+/** Tells open cards and pages that a draft was saved elsewhere (e.g. by a chat tool). */
+export function notifyDraftChanged(draftId: string): void {
+  window.dispatchEvent(new CustomEvent(DRAFT_CHANGED, { detail: { draftId } }));
+}
+
+/** Calls `onChange` when `notifyDraftChanged` is called for this draft. */
+export function useDraftChanged(draftId: string, onChange: () => void): void {
+  const callback = useRef(onChange);
+  callback.current = onChange;
+  useEffect(() => {
+    const listener = (event: Event) => {
+      if ((event as CustomEvent<{ draftId: string }>).detail.draftId === draftId) callback.current();
+    };
+    window.addEventListener(DRAFT_CHANGED, listener);
+    return () => window.removeEventListener(DRAFT_CHANGED, listener);
+  }, [draftId]);
 }
 
 export function acceptDraft(draftId: string, revision: number): Promise<{ gameId: string; draft: ContentDraft }> {

@@ -12,6 +12,7 @@ import {
   getDraft,
   shareDraft,
   updateDraft,
+  useDraftChanged,
   type DraftSettings,
   type DraftView,
   type GameDraftContent,
@@ -119,6 +120,14 @@ export function GameDraftView() {
       cancelled = true;
     };
   }, [draftId, applyServerView]);
+
+  // The chat changed this draft: show it, unless there are edits here to save (they'll meet a 409).
+  useDraftChanged(draftId, () => {
+    if (changeCount.current !== savedCount.current || inFlight.current) return;
+    getDraft(draftId)
+      .then(applyServerView)
+      .catch(() => undefined);
+  });
 
   const save = useCallback(async (): Promise<boolean> => {
     window.clearTimeout(timer.current);
