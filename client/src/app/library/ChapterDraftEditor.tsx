@@ -527,6 +527,12 @@ function SenseField({
         </SelectContent>
       </Select>
       {found === null && sense.decision !== 'reuse' && <span className="text-muted-foreground">Look up senses to see existing ones.</span>}
+      {sense.decision === 'reuse' && !readOnly && (
+        <span className="text-orange-600" data-testid="sense-reused">
+          Reusing an existing sense, so practice counts toward the same progress. Change it if this word means something
+          else here.
+        </span>
+      )}
       {found !== null && found.length === 0 && sense.decision === 'new' && (
         <span className="text-muted-foreground">No book teaches this word yet.</span>
       )}

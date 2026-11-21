@@ -115,7 +115,7 @@ function SourcePane({
       <div className="grid grid-cols-2 gap-2">
         <LanguageSelect
           id="draft-target"
-          label="Learning"
+          label="Target language"
           value={language.target}
           options={TARGET_LANGUAGES}
           disabled={readOnly}
@@ -123,7 +123,7 @@ function SourcePane({
         />
         <LanguageSelect
           id="draft-native"
-          label="Learner speaks"
+          label="Native language"
           value={language.native}
           options={NATIVE_LANGUAGES}
           disabled={readOnly}

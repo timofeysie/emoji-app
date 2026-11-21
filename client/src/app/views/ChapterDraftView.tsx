@@ -224,6 +224,15 @@ export function ChapterDraftView({ draftId }: { draftId: string }) {
     [changed],
   );
 
+  // Once per draft: show the existing senses and default undecided words to them (reuse when there is one).
+  const lookedUpFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!view || lookedUpFor.current === view.draft.id) return;
+    lookedUpFor.current = view.draft.id;
+    const payload = view.draft.payload;
+    if (view.draft.status === 'draft' && payload && payload.vocabulary.length > 0) void lookUpSenses(payload);
+  }, [view, lookUpSenses]);
+
   const generation = useChapterGeneration((output) => {
     const next = fromModel(output, latest.current.content);
     setContent(next);

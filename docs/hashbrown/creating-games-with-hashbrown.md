@@ -1016,7 +1016,11 @@ Built 2026-11-21.
     picker: reuse one of the senses `findSenses` returned, or a new sense
     with a slug, a kind and **Confirmed**. **Look up senses** fills in a
     guess for every undecided word: the one sense sharing a meaning, or a
-    new unconfirmed sense for a word nobody teaches yet.
+    new unconfirmed sense for a word nobody teaches yet. *(Changed
+    2026-11-22: a word the registry has now defaults to reuse (the sense
+    sharing a meaning, else its first one), shown in orange as reused and
+    changeable, so it never blocks Publish. The lookup also runs when a
+    draft opens.)*
   - **Publish** opens the chapter in YALLA. An edit shows the published
     words locked.
   - **Save as library chapter** on a game made from a passage, and on its

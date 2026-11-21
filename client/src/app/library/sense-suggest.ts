@@ -2,10 +2,9 @@ import { emptyDecision, type FoundSense, type SenseDecision } from './library-ap
 
 /**
  * The editor's first guess at each word's sense (G7), as the sense registry
- * script guesses (`server/src/learning/sense-registry.ts`): reuse the one
- * sense that shares a meaning, add a new one for a word nobody has taught,
- * and leave the rest for the user. A new sense always needs the user's
- * confirmation before Publish.
+ * reuses an existing sense when the word has one, and adds a new one for a
+ * word nobody has taught. A new sense always needs the user's confirmation
+ * before Publish; a reused one doesn't.
  */
 
 /** `Test, exam ` → `['test', 'exam']`. Commas only, as the server. */
@@ -34,12 +33,15 @@ export function newSenseFor(word: string, gloss: string): SenseDecision {
   return { ...emptyDecision(), decision: 'new', newSense: senseSlug(gloss), kind: defaultKind(word) };
 }
 
+/**
+ * Reuse is the default whenever the registry has the word: the sense sharing
+ * a meaning, else its first sense. The editor says it's being reused, and the
+ * user can change it; publishing is never blocked on an undecided word that
+ * has a sense to reuse.
+ */
 export function suggestDecision(word: string, gloss: string, found: readonly FoundSense[]): SenseDecision {
   if (found.length === 0) return newSenseFor(word, gloss);
   const parts = new Set(glossParts(gloss));
-  const matches = found.filter((sense) => glossParts(sense.gloss).some((part) => parts.has(part)));
-  if (matches.length === 1) {
-    return { ...emptyDecision(), decision: 'reuse', reuseId: matches[0].id, kind: matches[0].kind === 'expression' ? 'expression' : 'lexeme' };
-  }
-  return emptyDecision();
+  const best = found.find((sense) => glossParts(sense.gloss).some((part) => parts.has(part))) ?? found[0];
+  return { ...emptyDecision(), decision: 'reuse', reuseId: best.id, kind: best.kind === 'expression' ? 'expression' : 'lexeme' };
 }
