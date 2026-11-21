@@ -21,6 +21,10 @@ async function bootstrap(): Promise<void> {
 
   const expressApp = express();
   expressApp.use(cors());
+  // The chat resends its whole history, which can hold chapter-sized tool calls
+  // (docs/hashbrown/creating-games-with-hashbrown.md). Parsed first, so the
+  // default 100 kB parser below skips it.
+  expressApp.use('/api/chat', express.json({ limit: '1mb' }));
   expressApp.use(express.json());
   expressApp.use(requestLoggingMiddleware);
 

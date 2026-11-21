@@ -21,7 +21,9 @@ grep -E 'image_uri|_enabled' infra/terraform/envs/staging/terraform.tfvars
 
 cd infra/terraform/envs/staging
 terraform apply
-terraform plan  
+terraform plan
+curl -s https://emoji-staging.kogs.link/api/version         # should be the new build
+curl -i -X POST https://emoji-staging.kogs.link/api/games   # should be 401
 ```
 
 From `develop` onto staging and then into `main`.

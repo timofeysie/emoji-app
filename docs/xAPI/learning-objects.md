@@ -1,7 +1,8 @@
 # Learning objects: parts, wholes and evidence
 
 Status: **architecture**, partly decided. Decisions **A1–A3** (below) are
-**adopted and built** (2026-10-23). Everything else is the agreed
+**adopted and built** (2026-10-23). **A4** (grammar-pattern identity) is
+decided (2026-11-21) but not built yet. Everything else is the agreed
 direction, built when the first feature needs it ([Can wait](#can-wait-no-permanent-footprint)).
 It extends the Leitner design in [`leitner-method.md`](./leitner-method.md)
 towards grammar, sentences, transfer and critical thinking.
@@ -24,6 +25,7 @@ items, generators, competency levels (`recall` → `recognise` → `apply` →
 | A1 | 2026-10-23 | **Learning-object identity is language-scoped.** IRI `{base}/lo/{language}/{kind}/{enc(word)}/{sense}`, id `ko/lexeme/시험/test`. Book, chapter and entry are provenance only: `grouping` (`{base}/content/{book}[/chNN]`) and a **book-qualified** `ext/source-ref` (`korean-language-book/ch27/vocabulary/1`). One sense registry per language (`ko-senses.json`), fed by every book. | `learning/learning-object.ts`, `sense-registry.ts`, `book-content.ts`; leitner-method.md L16 |
 | A2 | 2026-10-23 | **Evidence is `assessed` statements from day one.** Each tagged guess gives its `answered` statement plus one `assessed` statement per observation, object = the learning object, `context.statement` → the `answered` statement, extensions `aspect`, `role`, `strength`, `source-ref`, `game-kind`, `scorer`. ID = UUID v5 of `gameId:guessId:assessed:<LO IRI>:<aspect>:<scorer>`. The Leitner fold reads **only** `assessed`, and for now only `direct` observations. The verb is ours: `{base}/verbs/assessed`, display "was assessed on" (open question 6 settled). Today's only scorer is `choice-whole@1`. | `learning/observations.ts`, `xapi/statement-builder.ts`, `learning/leitner.ts`; leitner-method.md L17 |
 | A3 | 2026-10-23 | **The kind is in the IRI and the activity type.** Built kinds: `lexeme` (type `{base}/activity-types/lexeme-sense`) and `expression` (`{base}/activity-types/expression`). The registry stores the kind per sense; new senses default to `expression` when the word contains a space. Patterns, sentences and competencies get their id shapes when built. | `learning/learning-object.ts`; leitner-method.md L18 |
+| A4 | 2026-11-21 | **Grammar patterns are identified by a pattern registry, at the smallest teachable pattern.** Id `ko/grammar-pattern/<romanised-form>/<meaning-slug>` (e.g. `ko/grammar-pattern/a-eo-jida/become`), IRI `{base}/lo/ko/grammar-pattern/…`, activity type `{base}/activity-types/grammar-pattern`. A per-language pattern registry, like the sense registry, keeps the forms books write (`-아/어지다`, `~어지다`) as data. A book pattern such as `계속 더 … -아/어/여지네` lists the entries it teaches (`-아/어지다`, `-네`). Rejected: the book's text as identity (books never match) and book-scoped ids (break A1). The romanisation and meaning-slug rules are fixed when it's built, before any pilot statement. | Not built yet: `docs/hashbrown/creating-games-with-hashbrown.md` → H4 |
 
 Checked against Veracity (Strict API Mode) on `emojiapp-dev`, 2026-10-23:
 all three statement types accepted and returned unchanged, including the

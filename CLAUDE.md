@@ -48,15 +48,19 @@ In development, Vite proxies `/api` to `localhost:3000`. In production, Express 
 |------|---------|
 | `client/src/app/app.tsx` | Root component — HashbrownProvider, 7-col grid layout (4 content + 3 chat), routing |
 | `client/src/app/store/emoji-app.store.ts` | Zustand store — all CRUD actions for lights, scenes, scheduled scenes |
-| `client/src/app/shared/RichChatPanel.tsx` | AI chat panel — defines all Hashbrown tools the AI can call |
+| `client/src/app/shared/RichChatPanel.tsx` | AI chat panel — combines the chat areas into one `useUiChat` |
+| `client/src/app/chat/` | Chat areas: each `use…ChatArea()` hook returns its tools, components and prompt section |
+| `client/src/app/game-authoring/` | Shared game-draft schema, question mixes, limits and recipe prompt (docs/hashbrown) |
 | `server/src/main.ts` | Express server — `/api/chat` streaming endpoint + SPA static serving |
 
 ## Generative UI Pattern
 
-`RichChatPanel.tsx` defines tools (using `@hashbrownai/react`) that the AI model can invoke to interact with the app:
-- **State tools**: `getLights`, `getScenes` — read from Zustand store
-- **Action tools**: `controlLight`, `createLight`, `deleteLight`, `deleteScene` — dispatch Zustand actions
-- **DOM tools**: `setFormInputValue`, `clickButtonByText` — manipulate React form elements directly via DOM APIs, allowing the AI to fill forms and submit dialogs
+`RichChatPanel.tsx` combines **chat areas** (`client/src/app/chat/`). Each area hook returns a `ChatArea` (tools, runtime functions, components, and a prompt section written with the `section` tag); `composePrompt` joins the sections into one `prompt`. Add a feature's chat support as a new area rather than growing the panel.
+- `useCoreChatArea`: who the assistant is, `Markdown` and `Card` components
+- `useSmartHomeChatArea`: `getLights`, `getScenes`, `controlLight`, `deleteLight`, `deleteScene`, `createLight` (javascript runtime), `LightChat` and `AddScene` components
+- `useDomChatArea`: `setFormInputValue`, `clickButtonByText`, `selectOptionByText` — manipulate React form elements directly via DOM APIs, allowing the AI to fill forms and submit dialogs
+
+The model is `CHAT_MODEL` in `chat/chat-config.ts`.
 
 Tool arguments are validated with Hashbrown's schema system (`s.object`, `s.string`, etc.).
 
