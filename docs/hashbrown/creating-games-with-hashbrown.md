@@ -1,7 +1,8 @@
 # Creating games with Hashbrown
 
-Status: **H0 to H1b built** (2026-11-21): single game creation on the
-Draft Game page and in the chat. H2 (library chapters) is next.
+Status: **H0 to H2 built** (2026-11-21): single game creation on the
+Draft Game page and in the chat, and library chapters for study in YALLA.
+H3 (Leitner on library chapters) is next.
 
 > ⚠️ **Text length is a standing design issue.** How long a question or an
 > option can be depends on the smallest screen that shows it: student
@@ -696,7 +697,7 @@ conversation, so they don't need one.
 | H0b ✅ | **Chat context indicator**: token counting in `ChatController`, `X-Chat-Session` middleware, `GET /api/chat/context/:sessionId`, `useChatContextUsage` and `ContextMeter`. See [Context indicator](#context-indicator). Before H1, so long pastes are visible from the start. Built 2026-11-21, see [H0b: what was built](#h0b-what-was-built). | H0 |
 | H1 ✅ | **Single game creation**: `ContentSource`, `ContentDraft`, draft endpoints, `createGameWithQuestions`, the **Draft Game** button, drafts list and `GameDraftEditor` page (`useStructuredCompletion`), the card-slot check at Start, Duplicate and remix of games, and `asking-for-games.md`. Built 2026-11-21, see [H1: what was built](#h1-what-was-built). | H0 |
 | H1b ✅ | **Single games from the chat**: `proposeGame` / `reviseGameDraft` / `getMyDrafts`, the `GameDraft` card, `OpenGame` / `OpenDraft`. Built 2026-11-21, see [H1b: what was built](#h1b-what-was-built). | H1 |
-| H2 | **Library chapters (study only)**: `Book`, `Chapter`, the `Sense` collection, async `BookContentService`, shared `kogsChapterV1Schema`, `findSenses` / `proposeChapter` / `ChapterDraft` / `OpenYallaChapter`, open books in YALLA, **Save as library chapter**, remix and archive. | H1 (drafts) |
+| H2 ✅ | **Library chapters (study only)**: `Book`, `Chapter`, the `Sense` collection, async `BookContentService`, shared `kogsChapterV1Schema`, `findSenses` / `proposeChapter` / `ChapterDraft` / `OpenYallaChapter`, open books in YALLA, **Save as library chapter**, remix and archive. Built 2026-11-21, see [H2: what was built](#h2-what-was-built). | H1 (drafts) |
 | H3 | **Leitner on library chapters**: planner and generator on user books, book picker in `NewLeitnerGameDialog`, YALLA Exercises on user books, `createLeitnerGame` chat tool with dry-run plan. | H2 |
 | H4 | **Grammar learning objects**: the romanisation and slug rules, pattern registry, cloze generator, pattern tracks. | H3. Identity decided ([A4](#decided-grammar-pattern-identity-a4)). |
 | Later | A quick game from a library chapter (questions tagged, so they could count if class games ever join `countedGameKinds`). `org`/`private` visibility with organisations. The single create flow in `future-game-formats.md`, where "from pasted text" becomes a content-source option. | — |
@@ -961,6 +962,122 @@ Built 2026-11-21.
 **Not checked:** the chat on screen: streaming, the card in the panel, and
 the triggers opening pages. It needs the dev server restarted.
 
+### H2: what was built
+
+Built 2026-11-21.
+
+- **Server, chapter shape** (`content/kogs-chapter.ts`): `kogsChapterV1Schema`
+  replaces the partial copies in `yalla-content.ts` and
+  `sense-registry.ts`. All five built-in chapters parse with it, and the
+  YALLA and registry specs pass unchanged.
+- **Server, chapter rules** (`content/chapter-draft.ts`):
+  - the draft payload schema, `CHAPTER_DRAFT_LIMITS` (at least 6 and at
+    most 30 words, 5 patterns, 100 passage lines), equal to the client's
+    `library/chapter-limits.ts` (a spec compares them)
+  - `chapterDraftProblems()`: book, titles, passage, words (Korean, no `/`,
+    no word twice in one sense) and a sense decision per word. A new sense
+    needs an ASCII slug and the user's confirmation.
+  - `frozenChapterProblems()` (G8): an edit keeps every published word in
+    its place and sense, and every pattern
+  - `senseRegistryProblems()`: a reused sense must exist, a new one must not
+  - `publishedChapter()`: vocabulary `id` = index, so `sourceRef` is
+    `ch1/vocabulary/3`, plus `senseIds` and the new senses
+- **Server, models** (`persistence/models.ts`, `book.repository.ts`):
+  `Book` (`books`, unique slug, `visibility: 'open'`), `Chapter`
+  (`chapters`, unique per book, `content`, `senseIds`, `remixedFrom`,
+  `revision`, `archivedAt`) and `Sense` (`senses`, unique on language, word
+  and sense, with book-qualified `sources`). Publish and edit each write in
+  one transaction.
+- **Server, content** (`learning/book-content.service.ts`):
+  `BookContentService` loads user books asynchronously, against the
+  registry file merged with the `senses` collection (the file wins), and is
+  cleared on publish, edit and archive. `findSenses()` answers from both.
+  Built-in books still load synchronously through `getBookContent()`.
+- **Server, API:**
+  - `/api/content/drafts` takes `type: 'chapter'`: empty, from a paste,
+    `fromGameId` (Save as library chapter, reusing the kept source),
+    `fromChapter` (remix) or `editChapter` (owner only). PATCH checks the
+    payload against its type's schema. Accept publishes. The draft view
+    adds the owner's books and, for an edit, the frozen words.
+  - `GET /api/senses?words=…`, `GET /api/books/mine` and
+    `POST /api/books/:book/chapters/:chapter/archive` (`{ archived }`,
+    owner only), in `content/library.controller.ts`
+  - `/api/yalla/books…` (`yalla/yalla-library.service.ts`): the catalogue,
+    then the caller's books, then other open books, each with `owner`.
+    Archived chapters are hidden from others and still open by link.
+    Chapters carry `revision` and `remixedFrom` (titles only).
+- **Client, page** (`library/`, `views/ChapterDraftView.tsx`):
+  - **New chapter draft** on the drafts list, and chapter drafts open at
+    the same `/games/drafts/:id`
+  - `ChapterDraftEditor`: the book (one of yours, or a new one with a
+    suggested link name and the G9 warning), the passage, **Generate**,
+    and Passage / Vocabulary / Patterns tabs. Each word has a sense
+    picker: reuse one of the senses `findSenses` returned, or a new sense
+    with a slug, a kind and **Confirmed**. **Look up senses** fills in a
+    guess for every undecided word: the one sense sharing a meaning, or a
+    new unconfirmed sense for a word nobody teaches yet.
+  - **Publish** opens the chapter in YALLA. An edit shows the published
+    words locked.
+  - **Save as library chapter** on a game made from a passage, and on its
+    accepted draft
+- **Client, YALLA:** the books page groups **Books**, **Your library** and
+  **Shared by other referees**. A chapter page has **Remix**, and for the
+  owner **Edit** and **Archive** / **Unarchive**, with *"Remixed from
+  Title (Book)"*. Exercises on a library chapter say they're coming (H3).
+- **Client, chat** (`chat/library/useLibraryChatArea.ts`, third in the
+  panel): `getBooks`, `findSenses`, `proposeChapter`, `reviseChapterDraft`,
+  `getChapterDraft` and `remixChapter`, the `ChapterDraft` card (with
+  **Confirm N new senses**, **Publish**, **Open in Draft Game** and
+  **Discard**) and `OpenYallaChapter`. `proposeChapter` takes the
+  passage's first words, as `proposeGame` does, and returns
+  `problemsToFix` and `forTheUser` (the confirmations the model must leave
+  alone).
+- **Checked:**
+  - **Specs:** 30 new (chapter rules and freezing, the limits match, the
+    chapter routes, and publish → YALLA → remix → edit → archive against an
+    in-memory repository). All 483 server tests pass. Lint and the build
+    are clean, and the client typecheck shows the same 4 errors as before.
+  - **API, end to end** against a scratch database: a chapter with
+    unconfirmed senses is refused, then publishes as chapter 1 of a new
+    book, with `시험` reusing `ko/lexeme/시험/test` from the file. A second
+    publish is chapter 2. Re-adding `토끼/rabbit` as new is refused
+    ("reuse it"). A remix keeps all six ids and credits the source.
+    Built-in ch. 28 remixes with its swapped fields fixed, and can't be
+    edited. An edit refuses a reorder, then publishes a gloss fix and an
+    appended word (`ch1/vocabulary/6`). An archived chapter is hidden but
+    opens by link. Each sense's `sources` lists every chapter that uses it.
+
+**Changed from the design:**
+
+- **The sense decision is on each word** (`vocabulary[i].sense`), not a
+  separate `senses[]`, so reordering words in the editor can't separate a
+  word from its decision. It's flat (`decision`, `reuseId`, `newSense`,
+  `kind`, `confirmed`) for Skillet.
+- **A chapter stores its entries' learning objects** (`senseIds`). A
+  reused sense from the registry file has no source in a user book, so the
+  chapter is what maps `ch1/vocabulary/3` to its id. The `senses`
+  collection holds only new senses, and records sources for the ones it
+  has.
+- **Editing a published chapter** is an edit draft (`editChapter`), with
+  the G8 checks at save and at publish.
+- **Remixing works for built-in chapters too.** A remix drops
+  `appliedPatterns`, which the editor doesn't have.
+- **The YALLA content controller** looks the caller up without creating
+  a user, to mark their books. Book lists and chapter pages aren't cached
+  in the client any more, because books change while the app is open.
+- **The Leitner planner, progress, YALLA exercises and export** still call
+  the synchronous `getBookContent()`, so they only know built-in books.
+  Moving them to `BookContentService` is H3.
+
+**Not checked:**
+- **AI output.** The chapter recipe and `proposeChapter` haven't been run
+  against `gpt-4.1` yet: dictionary forms, sense reuse through
+  `findSenses`, and whether a long passage fits in one answer.
+- **The pages and the chat card on screen.** They need the dev server
+  restarted.
+- **Two real referees.** `DISABLE_AUTH` gives one identity. The specs
+  cover owner-only edits, archives and publishes.
+
 ### Acceptance — H0b
 
 - [ ] The context reading appears under the chat input. Before the first
@@ -1029,18 +1146,21 @@ the triggers opening pages. It needs the dev server restarted.
 - [ ] Asking to save a passage to a new book (or **Save as library chapter**
       on a game) gives a `ChapterDraft` with the passage, vocabulary
       (dictionary forms), patterns, and a sense decision per word. Making a
-      game alone saves no chapter.
-- [ ] Words already in the registry are offered as reuse. A new sense needs
-      the user's confirmation and gets an ASCII slug.
-- [ ] Publish creates the book, chapter 1 and the new senses. The chapter
+      game alone saves no chapter. *(Built; check against `gpt-4.1` and on
+      screen.)*
+- [x] Words already in the registry are offered as reuse. A new sense needs
+      the user's confirmation and gets an ASCII slug. *(Server rules end to
+      end; the editor's guesses and the chat still to check on screen.)*
+- [x] Publish creates the book, chapter 1 and the new senses. The chapter
       opens in YALLA for another signed-in user, with Dialog, Vocabulary
       and Patterns, and each vocabulary entry has its `learningObjectId`.
-- [ ] Another referee can remix the chapter into their own book. The remix
+      *(API end to end, and "another user" in specs; check on screen.)*
+- [x] Another referee can remix the chapter into their own book. The remix
       keeps the same learning-object ids and shows where it came from.
-- [ ] A published chapter's vocabulary can't be reordered or removed, and it
+- [x] A published chapter's vocabulary can't be reordered or removed, and it
       can be archived but not deleted. A second publish to the same book
       becomes chapter 2.
-- [ ] The built-in Korean book and its existing tests are unchanged.
+- [x] The built-in Korean book and its existing tests are unchanged.
 
 ### Acceptance — H3
 

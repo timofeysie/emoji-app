@@ -1,6 +1,7 @@
 import koreanSenses from '../games/content/ko-senses.json';
 import { findCatalogueBook } from './book-catalogue';
 import {
+  KOREAN,
   KOREAN_BOOK,
   learningObjectId,
   LearningObjectKey,
@@ -122,6 +123,43 @@ export function chapterLearningObjects(content: BookContent, chapter: string): L
     throw new UnregisteredSensesError(unregistered);
   }
   return [...objects.values()];
+}
+
+/**
+ * A user book (docs/hashbrown/creating-games-with-hashbrown.md → Feature 2):
+ * each published chapter stores its entries' learning objects
+ * (`senseIds[i]` for entry i), so a reused sense from any book or the
+ * registry file maps without a source in the file. `senses` is the merged
+ * registry (file plus DB layer).
+ */
+export function buildUserBookContent(
+  book: string,
+  language: string,
+  senses: ReadonlyMap<string, SenseEntry>,
+  chapters: ReadonlyArray<{ content: unknown; senseIds: readonly string[] }>,
+): BookContent {
+  const vocabularies = new Map<string, ChapterVocabulary>();
+  const senseBySourceRef = new Map<string, SenseEntry>();
+  for (const { content, senseIds } of chapters) {
+    const vocabulary = chapterVocabulary(content);
+    vocabularies.set(vocabulary.chapter, vocabulary);
+    vocabulary.entries.forEach((entry) => {
+      const index = Number(entry.sourceRef.split('/').pop());
+      const sense = senses.get(senseIds[index] ?? '');
+      if (sense) senseBySourceRef.set(entry.sourceRef, sense);
+    });
+  }
+  return { book, language, chapters: vocabularies, senseBySourceRef, senseById: senses };
+}
+
+/** Every sense in a language's committed registry file, by id (empty for a language without one). */
+export function fileSenses(language: string): ReadonlyMap<string, SenseEntry> {
+  return language === KOREAN ? getBookContent(KOREAN_BOOK).senseById : new Map();
+}
+
+/** Built-in books (`book-catalogue.ts`). User books load through `BookContentService`. */
+export function isBuiltInBook(book: string): boolean {
+  return loaders.has(book);
 }
 
 const loaders = new Map<string, () => BookContent>([

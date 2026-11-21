@@ -56,6 +56,13 @@ export class UserRepository {
     return toUserSummary(user);
   }
 
+  /** The user id for a Cognito `sub`, without creating one: null if they never used a referee route. */
+  async findIdByAuthProviderId(sub: string): Promise<string | null> {
+    const { User } = this.mongoService.getModels();
+    const user = await User.findOne({ authProviderId: sub }, { _id: 1 }).lean();
+    return user ? user._id.toString() : null;
+  }
+
   /**
    * Links the user to a player, or unlinks them (`null`).
    * @throws PlayerAlreadyLinkedError when another user practises as that player

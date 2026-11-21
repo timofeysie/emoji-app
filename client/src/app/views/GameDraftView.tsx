@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Check, ChevronLeft, Copy, ExternalLink, Gamepad2, Loader2, Share2, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink, Gamepad2, Loader2, Share2, Trash2 } from 'lucide-react';
 import { Button } from '../shared/button';
-import { cn } from '../shared/utils';
 import {
   acceptDraft,
   ASKING_FOR_GAMES_URL,
@@ -18,14 +17,16 @@ import {
   type GameDraftContent,
   type LanguagePair,
 } from '../game-authoring/drafts-api';
+import { BackToDrafts, SaveIndicator, type SaveState } from '../game-authoring/DraftPageBits';
 import { GameDraftEditor } from '../game-authoring/GameDraftEditor';
+import { SaveAsChapterButton } from '../library/SaveAsChapterButton';
+import { ChapterDraftView } from './ChapterDraftView';
 import { GAME_LIMITS } from '../game-authoring/game-limits';
 import { useGameGeneration, type GenerationRequest } from '../game-authoring/useGameGeneration';
 import type { GameDraftPayload } from '../game-authoring/game-draft.schema';
 
 const AUTOSAVE_MS = 800;
 
-type SaveState = 'saved' | 'unsaved' | 'saving' | 'error' | 'conflict';
 
 function emptyContent(): GameDraftContent {
   return { title: '', questions: [] };
@@ -287,6 +288,10 @@ export function GameDraftView() {
     );
   }
 
+  if (view.draft.type === 'chapter') {
+    return <ChapterDraftView draftId={draftId} />;
+  }
+
   const { draft } = view;
 
   return (
@@ -347,6 +352,7 @@ export function GameDraftView() {
               <Button size="sm" variant="outline" disabled={busyAction !== null} onClick={() => void onDuplicate(draft.resultGameId!)}>
                 <Copy aria-hidden /> Duplicate into a new draft
               </Button>
+              {view.source && <SaveAsChapterButton gameId={draft.resultGameId} />}
             </>
           )}
         </div>
@@ -433,35 +439,5 @@ export function GameDraftView() {
         </div>
       )}
     </div>
-  );
-}
-
-function BackToDrafts() {
-  const navigate = useNavigate();
-  return (
-    <Button variant="ghost" size="sm" className="-ml-2 mb-1" onClick={() => navigate('/games/drafts')}>
-      <ChevronLeft className="mr-1 h-4 w-4" aria-hidden /> Drafts
-    </Button>
-  );
-}
-
-function SaveIndicator({ state }: { state: SaveState }) {
-  const text: Record<SaveState, string> = {
-    saved: 'Saved',
-    unsaved: 'Unsaved changes',
-    saving: 'Saving…',
-    error: 'Not saved',
-    conflict: 'Changed elsewhere',
-  };
-  return (
-    <span
-      className={cn(
-        'ml-auto inline-flex items-center gap-1 text-xs',
-        state === 'saved' ? 'text-muted-foreground' : state === 'error' || state === 'conflict' ? 'text-destructive' : 'text-amber-700',
-      )}
-    >
-      {state === 'saving' ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : state === 'saved' ? <Check className="h-3 w-3" aria-hidden /> : null}
-      {text[state]}
-    </span>
   );
 }

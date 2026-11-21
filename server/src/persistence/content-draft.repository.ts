@@ -8,6 +8,9 @@ import { asObjectId } from './models';
 
 export type LanguagePair = { target: string; native: string };
 
+/** A chapter of a book, with its revision when copied or opened for editing. */
+export type ChapterRefRecord = { book: string; chapter: string; revision: number | null };
+
 export type ContentSourceRecord = {
   id: string;
   ownerUserId: string;
@@ -31,6 +34,11 @@ export type ContentDraftRecord = {
   lastEditedByUserId: string;
   resultGameId: string | null;
   remixedFromGameId: string | null;
+  /** Chapter drafts: the chapter published from it. */
+  resultChapter: ChapterRefRecord | null;
+  remixedFromChapter: ChapterRefRecord | null;
+  /** Chapter drafts: the owner's published chapter it changes (G8). */
+  editsChapter: ChapterRefRecord | null;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -39,13 +47,13 @@ export type ContentDraftRecord = {
 /** A row in the drafts list: no payload or source text. */
 export type ContentDraftSummary = Pick<
   ContentDraftRecord,
-  'id' | 'type' | 'title' | 'status' | 'shared' | 'resultGameId' | 'revision' | 'updatedAt'
-> & { questionCount: number; problemCount: number; mine: boolean };
+  'id' | 'type' | 'title' | 'status' | 'shared' | 'resultGameId' | 'resultChapter' | 'editsChapter' | 'revision' | 'updatedAt'
+> & { questionCount: number; vocabularyCount: number; problemCount: number; mine: boolean };
 
 /** The fields a draft write may change. */
 export type ContentDraftChanges = Partial<
   Pick<ContentDraftRecord, 'sourceId' | 'title' | 'payload' | 'settings' | 'problems' | 'shared'>
-> & { status?: 'accepted'; resultGameId?: string };
+> & { status?: 'accepted'; resultGameId?: string; resultChapter?: ChapterRefRecord };
 
 export function sourceChecksum(raw: string): string {
   return createHash('sha256').update(raw, 'utf8').digest('hex');
@@ -65,10 +73,17 @@ type LeanDraft = {
   lastEditedByUserId: Types.ObjectId;
   resultGameId?: Types.ObjectId | null;
   remixedFromGameId?: Types.ObjectId | null;
+  resultChapter?: ChapterRefRecord | null;
+  remixedFromChapter?: ChapterRefRecord | null;
+  editsChapter?: ChapterRefRecord | null;
   revision: number;
   createdAt: Date;
   updatedAt: Date;
 };
+
+function chapterRef(ref: ChapterRefRecord | null | undefined): ChapterRefRecord | null {
+  return ref ? { book: ref.book, chapter: ref.chapter, revision: ref.revision ?? null } : null;
+}
 
 function toDraftRecord(draft: LeanDraft): ContentDraftRecord {
   return {
@@ -89,15 +104,18 @@ function toDraftRecord(draft: LeanDraft): ContentDraftRecord {
     lastEditedByUserId: draft.lastEditedByUserId.toString(),
     resultGameId: draft.resultGameId ? draft.resultGameId.toString() : null,
     remixedFromGameId: draft.remixedFromGameId ? draft.remixedFromGameId.toString() : null,
+    resultChapter: chapterRef(draft.resultChapter),
+    remixedFromChapter: chapterRef(draft.remixedFromChapter),
+    editsChapter: chapterRef(draft.editsChapter),
     revision: draft.revision,
     createdAt: draft.createdAt.toISOString(),
     updatedAt: draft.updatedAt.toISOString(),
   };
 }
 
-function questionCountOf(payload: unknown): number {
-  const questions = (payload as { questions?: unknown } | null)?.questions;
-  return Array.isArray(questions) ? questions.length : 0;
+function countOf(payload: unknown, key: 'questions' | 'vocabulary'): number {
+  const items = (payload as Record<string, unknown> | null)?.[key];
+  return Array.isArray(items) ? items.length : 0;
 }
 
 /**
@@ -157,6 +175,8 @@ export class ContentDraftRepository {
     settings: DraftSettings;
     problems: DraftProblem[];
     remixedFromGameId?: string | null;
+    remixedFromChapter?: ChapterRefRecord | null;
+    editsChapter?: ChapterRefRecord | null;
   }): Promise<ContentDraftRecord> {
     const { ContentDraft } = this.mongoService.getModels();
     const created = await ContentDraft.create({
@@ -169,6 +189,8 @@ export class ContentDraftRepository {
       problems: input.problems,
       lastEditedByUserId: asObjectId(input.ownerUserId),
       remixedFromGameId: input.remixedFromGameId ? asObjectId(input.remixedFromGameId) : null,
+      remixedFromChapter: input.remixedFromChapter ?? null,
+      editsChapter: input.editsChapter ?? null,
     });
     return toDraftRecord(created.toObject() as unknown as LeanDraft);
   }
@@ -194,9 +216,12 @@ export class ContentDraftRepository {
         status: draft.status,
         shared: draft.shared,
         resultGameId: draft.resultGameId,
+        resultChapter: draft.resultChapter,
+        editsChapter: draft.editsChapter,
         revision: draft.revision,
         updatedAt: draft.updatedAt,
-        questionCount: questionCountOf(draft.payload),
+        questionCount: countOf(draft.payload, 'questions'),
+        vocabularyCount: countOf(draft.payload, 'vocabulary'),
         problemCount: draft.problems.length,
         mine: draft.ownerUserId === input.userId,
       };

@@ -1,6 +1,6 @@
-import { z } from 'zod';
+import { kogsChapterV1Schema, type KogsChapterV1 } from '../content/kogs-chapter';
 import { BOOK_CATALOGUE, findCatalogueBook, type CatalogueBook } from '../learning/book-catalogue';
-import { getBookContent, UnknownBookError, UnknownChapterError } from '../learning/book-content';
+import { getBookContent, UnknownBookError, UnknownChapterError, type BookContent } from '../learning/book-content';
 
 /**
  * Study content for YALLA (docs/yalla/implementation-plan.md §3): the whole
@@ -10,50 +10,7 @@ import { getBookContent, UnknownBookError, UnknownChapterError } from '../learni
  * learning object, so later milestones can join progress onto it.
  */
 
-const text = z.string().transform((value) => value.replace(/\s+/g, ' ').trim());
-const optionalText = text.optional().default('');
-
-const chapterSchema = z.object({
-  chapter: z.union([z.string(), z.number()]).transform(String),
-  titleTarget: optionalText,
-  titleNative: optionalText,
-  dialog: z
-    .array(
-      z.object({
-        speakerNameTarget: optionalText,
-        speakerNameNative: optionalText,
-        speechTarget: text,
-        speechNative: optionalText,
-      }),
-    )
-    .default([]),
-  patterns: z
-    .array(
-      z.object({
-        patternTarget: text,
-        patternNative: optionalText,
-        type: text.optional(),
-        exampleSentenceNativeTitle: optionalText,
-        exampleSentenceTarget: optionalText,
-        exampleSentenceNative: optionalText,
-        sampleSentences: z.array(z.object({ targetText: text, nativeText: optionalText })).default([]),
-        exercises: z.array(z.object({ exercise: text, answerKey: optionalText })).default([]),
-        appliedPatterns: z
-          .array(
-            z.object({
-              pattern: optionalText,
-              patternTargetText: text,
-              patternNativeText: optionalText,
-              patternNote: text.optional(),
-            }),
-          )
-          .default([]),
-      }),
-    )
-    .default([]),
-});
-
-type ParsedChapter = z.infer<typeof chapterSchema>;
+export type ParsedChapter = KogsChapterV1;
 
 export type ChapterSummary = { chapter: string; titleTarget: string; titleNative: string };
 
@@ -87,11 +44,11 @@ export type StudyChapter = ChapterSummary & {
 
 function parseChapters(entry: CatalogueBook): ParsedChapter[] {
   return entry.chapters
-    .map((raw) => chapterSchema.parse(raw))
+    .map((raw) => kogsChapterV1Schema.parse(raw))
     .sort((a, b) => Number(a.chapter) - Number(b.chapter));
 }
 
-function summarize(chapter: ParsedChapter): ChapterSummary {
+export function summarize(chapter: ParsedChapter): ChapterSummary {
   return { chapter: chapter.chapter, titleTarget: chapter.titleTarget, titleNative: chapter.titleNative };
 }
 
@@ -124,16 +81,28 @@ export function getStudyChapter(book: string, chapter: string): StudyChapter {
     throw new UnknownBookError(book);
   }
   const parsed = parseChapters(entry).find((candidate) => candidate.chapter === chapter);
-  const content = getBookContent(book);
-  const vocabulary = content.chapters.get(chapter);
-  if (!parsed || !vocabulary) {
+  if (!parsed) {
     throw new UnknownChapterError(book, chapter);
   }
+  const content = getBookContent(book);
 
+  return studyChapterFrom(parsed, content, { book, bookTitle: entry.title });
+}
+
+/** A parsed chapter with its vocabulary's learning objects, from the book's content registry. */
+export function studyChapterFrom(
+  parsed: ParsedChapter,
+  content: BookContent,
+  meta: { book: string; bookTitle: string },
+): StudyChapter {
+  const vocabulary = content.chapters.get(parsed.chapter);
+  if (!vocabulary) {
+    throw new UnknownChapterError(meta.book, parsed.chapter);
+  }
   return {
     ...summarize(parsed),
-    book,
-    bookTitle: entry.title,
+    book: meta.book,
+    bookTitle: meta.bookTitle,
     language: content.language,
     dialog: parsed.dialog,
     vocabulary: vocabulary.entries.map((vocab) => {

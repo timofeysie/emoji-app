@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 
-export type ChapterSummary = { chapter: string; titleTarget: string; titleNative: string };
+export type ChapterSummary = {
+  chapter: string;
+  titleTarget: string;
+  titleNative: string;
+  /** User books: hidden from others, shown to the owner (docs/hashbrown, Feature 2). */
+  archived?: boolean;
+};
+
+/** The built-in catalogue, the user's own books, or another referee's open book (G12). */
+export type BookOwner = 'built-in' | 'mine' | 'other';
 
 export type BookSummary = {
   book: string;
   title: string;
   language: string;
+  /** Absent on older servers: built-in. */
+  owner?: BookOwner;
   chapters: ChapterSummary[];
 };
 
@@ -49,6 +60,11 @@ export type StudyChapter = ChapterSummary & {
   dialog: DialogLine[];
   vocabulary: VocabularyEntry[];
   patterns: Pattern[];
+  owner?: BookOwner;
+  /** User chapters: bumped by each edit. */
+  revision?: number | null;
+  /** Credited by title only (G12). */
+  remixedFrom?: { book: string; chapter: string; bookTitle: string; chapterTitle: string } | null;
 };
 
 export class YallaRequestError extends Error {
@@ -73,8 +89,16 @@ export class YallaRequestError extends Error {
   }
 }
 
-/** Study content doesn't change while the app is open, so each content GET is fetched once. */
+/**
+ * Each content GET is fetched once. User books change when someone publishes,
+ * so the library clears this after a publish or an archive, and the books
+ * list isn't cached.
+ */
 const contentCache = new Map<string, Promise<unknown>>();
+
+export function clearYallaContentCache(): void {
+  contentCache.clear();
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await authFetch(`/api/yalla${path}`, init);

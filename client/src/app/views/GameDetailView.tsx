@@ -29,6 +29,7 @@ import { cn } from '../shared/utils';
 import { gameLogRef, logGameState } from '../shared/game-state-log';
 import { getWsUrl } from '../shared/ws-url';
 import { createDraft } from '../game-authoring/drafts-api';
+import { SaveAsChapterButton } from '../library/SaveAsChapterButton';
 import {
   PairGuessChart,
   type GuessChartData,
@@ -128,7 +129,13 @@ type GameDetail = {
   exportError?: string | null;
   exportAttemptedAt?: string | null;
   /** Made from a draft (docs/hashbrown). A duplicate credits its game by title only. */
-  origin?: { draftId: string; remixedFromGameId: string | null; remixedFromTitle: string | null } | null;
+  origin?: {
+    draftId: string;
+    /** The passage it was made from (G13): Save as library chapter reuses it. */
+    contentSourceId?: string | null;
+    remixedFromGameId: string | null;
+    remixedFromTitle: string | null;
+  } | null;
   createdAt: string;
   startedAt: string | null;
   endedAt: string | null;
@@ -942,7 +949,8 @@ export function GameDetailView() {
           <StateChip state={game.state} />
           {isLeitner && <LeitnerChip />}
           {!isLeitner && (
-            <span className="ml-auto">
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              {game.origin?.contentSourceId && <SaveAsChapterButton gameId={game.id} />}
               <DuplicateGameButton gameId={game.id} />
             </span>
           )}

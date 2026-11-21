@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText, Loader2, Plus } from 'lucide-react';
+import { BookPlus, ChevronLeft, FileText, Loader2, Plus } from 'lucide-react';
 import { Button } from '../shared/button';
 import { cn } from '../shared/utils';
 import { ASKING_FOR_GAMES_URL, createDraft, listDrafts, type DraftSummary } from '../game-authoring/drafts-api';
+import { createChapterDraft } from '../library/library-api';
 
 type Tab = 'mine' | 'shared';
 
@@ -17,7 +18,7 @@ export function GameDraftsView() {
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<'game' | 'chapter' | null>(null);
 
   const load = useCallback(async (which: Tab) => {
     setLoading(true);
@@ -36,15 +37,15 @@ export function GameDraftsView() {
     void load(tab);
   }, [load, tab]);
 
-  const onNewDraft = async () => {
-    setCreating(true);
+  const onNewDraft = async (type: 'game' | 'chapter') => {
+    setCreating(type);
     setError(null);
     try {
-      const { draft } = await createDraft({});
+      const { draft } = type === 'chapter' ? await createChapterDraft({}) : await createDraft({});
       navigate(`/games/drafts/${draft.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create the draft.');
-      setCreating(false);
+      setCreating(null);
     }
   };
 
@@ -56,13 +57,20 @@ export function GameDraftsView() {
         </Button>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-bold">Draft games</h1>
-          <Button onClick={() => void onNewDraft()} disabled={creating}>
-            {creating ? <Loader2 className="animate-spin" aria-hidden /> : <Plus aria-hidden />}
-            New draft
-          </Button>
+          <span className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => void onNewDraft('chapter')} disabled={creating !== null}>
+              {creating === 'chapter' ? <Loader2 className="animate-spin" aria-hidden /> : <BookPlus aria-hidden />}
+              New chapter draft
+            </Button>
+            <Button onClick={() => void onNewDraft('game')} disabled={creating !== null}>
+              {creating === 'game' ? <Loader2 className="animate-spin" aria-hidden /> : <Plus aria-hidden />}
+              New draft
+            </Button>
+          </span>
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Paste a passage and the AI drafts the questions. Nothing is playable until you click Create game.{' '}
+          Paste a passage and the AI drafts the questions, or a library chapter for YALLA. Nothing is playable until you
+          click Create game, and a chapter appears in YALLA only when you publish it.{' '}
           <a className="underline" href={ASKING_FOR_GAMES_URL} target="_blank" rel="noreferrer">
             Asking for games
           </a>
@@ -119,20 +127,27 @@ export function GameDraftsView() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-semibold">{draft.title || 'Untitled draft'}</span>
+                  {draft.type === 'chapter' && (
+                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-800">
+                      {draft.editsChapter ? 'chapter edit' : 'chapter'}
+                    </span>
+                  )}
                   <span
                     className={cn(
                       'rounded-full px-2 py-0.5 text-[11px] font-medium',
                       draft.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : 'bg-muted text-muted-foreground',
                     )}
                   >
-                    {draft.status === 'accepted' ? 'accepted' : 'draft'}
+                    {draft.status === 'accepted' ? (draft.type === 'chapter' ? 'published' : 'accepted') : 'draft'}
                   </span>
                   {draft.shared && tab === 'mine' && (
                     <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-800">shared</span>
                   )}
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">
-                  {draft.questionCount} question{draft.questionCount === 1 ? '' : 's'}
+                  {draft.type === 'chapter'
+                    ? `${draft.vocabularyCount} word${draft.vocabularyCount === 1 ? '' : 's'}`
+                    : `${draft.questionCount} question${draft.questionCount === 1 ? '' : 's'}`}
                   {draft.status === 'draft' && draft.problemCount > 0 && ` · ${draft.problemCount} to fix`}
                   {' · edited '}
                   {new Date(draft.updatedAt).toLocaleString()}

@@ -68,6 +68,19 @@ function useFormat(): [GameFormat, (format: GameFormat | null) => void] {
  */
 export function ExercisesSection() {
   const chapter = useStudyChapter();
+  // Library chapters are study-only until the planner reads user books (docs/hashbrown, H3).
+  if (chapter.owner === 'mine' || chapter.owner === 'other') {
+    return (
+      <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground" data-testid="library-exercises-later">
+        Exercises for library chapters are coming soon. For now, study the passage, vocabulary and patterns.
+      </p>
+    );
+  }
+  return <ChapterExercises />;
+}
+
+function ChapterExercises() {
+  const chapter = useStudyChapter();
   const progress = useChapterProgress();
   const playerId = useMeStore((state) => state.me?.player?.id ?? null);
   const [saved, setSaved] = useState<SavedSession | null>(null);

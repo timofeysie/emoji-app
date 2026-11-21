@@ -52,7 +52,9 @@ In development, Vite proxies `/api` to `localhost:3000`. In production, Express 
 | `client/src/app/chat/` | Chat areas: each `use…ChatArea()` hook returns its tools, components and prompt section |
 | `client/src/app/game-authoring/` | Game drafts (docs/hashbrown): Skillet schema, mixes, limits, recipe prompt, `drafts-api`, `useGameGeneration`, `GameDraftEditor` |
 | `client/src/app/views/GameDraftsView.tsx`, `GameDraftView.tsx` | Draft Game pages: `/games/drafts` and `/games/drafts/:draftId` |
-| `server/src/content/` | Draft rules (`game-draft.ts`, Zod + problems) and `/api/content/drafts` |
+| `client/src/app/library/` | Library chapters (H2): `kogs.chapter.v1` Skillet schema, recipe, `library-api`, `ChapterDraftEditor`, sense suggestions, YALLA Remix/Edit/Archive actions |
+| `server/src/content/` | Draft rules (`game-draft.ts`, `chapter-draft.ts`, `kogs-chapter.ts`), `/api/content/drafts`, `ChapterDraftsService`, `/api/senses` and `/api/books` |
+| `server/src/learning/book-content.service.ts` | Async book content: built-in JSON books plus user books from Mongo, against the sense file merged with the `senses` collection |
 | `server/src/main.ts` | Express server — `/api/chat` streaming endpoint + SPA static serving |
 
 ## Generative UI Pattern
@@ -60,6 +62,7 @@ In development, Vite proxies `/api` to `localhost:3000`. In production, Express 
 `RichChatPanel.tsx` combines **chat areas** (`client/src/app/chat/`). Each area hook returns a `ChatArea` (tools, runtime functions, components, and a prompt section written with the `section` tag); `composePrompt` joins the sections into one `prompt`. Add a feature's chat support as a new area rather than growing the panel.
 - `useCoreChatArea`: who the assistant is, `Markdown` and `Card` components
 - `game-authoring/useGameAuthoringChatArea`: `proposeGame`, `reviseGameDraft`, `getMyDrafts`, `getGameDraft`, and the `GameDraft`, `OpenGame`, `OpenDraft` components. `proposeGame` gets only the passage's first words and finds the passage in the user's messages (`findPassage`); it returns `problems` and a `mixProblem` for the model to fix with `reviseGameDraft`
+- `library/useLibraryChatArea`: `getBooks`, `findSenses`, `proposeChapter`, `reviseChapterDraft`, `getChapterDraft`, `remixChapter`, and the `ChapterDraft`, `OpenYallaChapter` components. Only when the user asks for a library chapter; new senses are confirmed by the user on the card, never by the model
 - `useSmartHomeChatArea`: `getLights`, `getScenes`, `controlLight`, `deleteLight`, `deleteScene`, `createLight` (javascript runtime), `LightChat` and `AddScene` components
 - `useDomChatArea`: `setFormInputValue`, `clickButtonByText`, `selectOptionByText` — manipulate React form elements directly via DOM APIs, allowing the AI to fill forms and submit dialogs
 
@@ -68,6 +71,8 @@ The model is `CHAT_MODEL` in `chat/chat-config.ts`.
 The panel has its own `HashbrownProvider` (`chat/ChatSessionProvider.tsx`) that sends an `X-Chat-Session` id. `ChatController` counts each chat request and reply with `gpt-tokenizer` (`server/src/chat/chat-context.ts`), and the panel's `ContextMeter` reads `GET /api/chat/context/:sessionId` after each answer. Update `MODEL_CONTEXT_WINDOWS` there when changing `CHAT_MODEL`.
 
 **Game drafts** (docs/hashbrown/creating-games-with-hashbrown.md): the AI's output is only ever a draft until the owner clicks Create game. The server re-checks every draft with `gameDraftProblems()`, so keep its `GAME_DRAFT_LIMITS` equal to the client's `GAME_LIMITS` (a spec compares them). The length limits depend on the screens that show game text: read "Text length and screens" in that doc before changing a limit or showing game text somewhere new. Generated options are shuffled in `useGameGeneration`, because models put the correct one first.
+
+**Library chapters** (same doc, Feature 2): a chapter draft publishes into a user `Book` as a `Chapter` (`kogs.chapter.v1` plus `senseIds`). Published vocabulary is frozen (G8): entries can be corrected or appended, never reordered or removed, because `sourceRef` (`ch1/vocabulary/3`) and sense ids reach the LRS. Keep `CHAPTER_DRAFT_LIMITS` equal to the client's `CHAPTER_LIMITS` (a spec compares them). The Leitner planner, progress and export still use the synchronous `getBookContent()` (built-in books only) until H3.
 
 Tool arguments are validated with Hashbrown's schema system (`s.object`, `s.string`, etc.).
 

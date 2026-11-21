@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { kogsChapterV1Schema } from '../content/kogs-chapter';
 import {
   chapterOfSourceRef,
   defaultKind,
@@ -53,17 +53,6 @@ export type ChapterVocabulary = {
 const HANGUL = /[ᄀ-ᇿ㄰-㆏가-힯]/;
 const MAX_SLUG_LENGTH = 40;
 
-const chapterSchema = z.object({
-  chapter: z.union([z.string(), z.number()]),
-  vocabulary: z.array(
-    z.object({
-      id: z.number().int().optional(),
-      targetLanguageText: z.string().min(1),
-      nativeLanguageText: z.string().min(1),
-    }),
-  ),
-});
-
 /** NFC, trimmed, inner whitespace collapsed: `보여  주다 ` → `보여 주다`. */
 export function normaliseWord(text: string): string {
   return text.normalize('NFC').trim().replace(/\s+/g, ' ');
@@ -94,7 +83,7 @@ export function senseSlug(gloss: string): string {
  * so reordering the file doesn't renumber entries.
  */
 export function chapterVocabulary(raw: unknown): ChapterVocabulary {
-  const parsed = chapterSchema.parse(raw);
+  const parsed = kogsChapterV1Schema.parse(raw);
   const chapter = String(parsed.chapter);
   const entries: VocabularyEntry[] = [];
   const problems: string[] = [];

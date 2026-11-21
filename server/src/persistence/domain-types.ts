@@ -35,9 +35,11 @@ export const gameNfcCardGroupAssignmentStatusValues = ['active', 'superseded', '
 export const slotLabelValues = ['A', 'B', 'C', 'D', 'E'] as const;
 /** Pasted text kept for AI drafting (docs/hashbrown/creating-games-with-hashbrown.md, G13). */
 export const contentSourceFormatValues = ['freeform-ai'] as const;
-/** `chapter` drafts come with H2. */
+/** `game`: a single class game (H1). `chapter`: a library chapter (H2). */
 export const contentDraftTypeValues = ['game', 'chapter'] as const;
 export const contentDraftStatusValues = ['draft', 'accepted'] as const;
+/** Who sees a user book (G12). `org` and `private` come with organisations (security.md D8). */
+export const bookVisibilityValues = ['open'] as const;
 /** How a game was made, when not by hand. */
 export const gameOriginKindValues = ['ai-draft'] as const;
 

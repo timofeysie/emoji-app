@@ -3,6 +3,11 @@ import { ChatController } from './chat.controller';
 import { ChatContextController } from './chat/chat-context.controller';
 import { ChatContextService } from './chat/chat-context.service';
 import { ContentDraftsController } from './content/content-drafts.controller';
+import { ChapterDraftsService } from './content/chapter-drafts.service';
+import { LibraryController } from './content/library.controller';
+import { BookContentService } from './learning/book-content.service';
+import { BookRepository } from './persistence/book.repository';
+import { YallaLibraryService } from './yalla/yalla-library.service';
 import { ContentDraftRepository } from './persistence/content-draft.repository';
 import { BadgesController } from './badges.controller';
 import { BadgeStateService } from './badge-state.service';
@@ -36,6 +41,7 @@ import { UserRepository } from './persistence/user.repository';
     ChatController,
     ChatContextController,
     ContentDraftsController,
+    LibraryController,
     BadgesController,
     GameFlowController,
     NfcCardsController,
@@ -53,6 +59,10 @@ import { UserRepository } from './persistence/user.repository';
   providers: [
     ChatContextService,
     ContentDraftRepository,
+    BookRepository,
+    BookContentService,
+    ChapterDraftsService,
+    YallaLibraryService,
     LearningProgressService,
     LeitnerPlanner,
     BadgeStateService,

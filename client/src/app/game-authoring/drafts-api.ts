@@ -50,6 +50,10 @@ export type ContentDraft = {
   shared: boolean;
   resultGameId: string | null;
   remixedFromGameId: string | null;
+  /** Chapter drafts (H2): the chapter published from it, the chapter it remixes, the chapter it edits. */
+  resultChapter: { book: string; chapter: string } | null;
+  remixedFromChapter: { book: string; chapter: string } | null;
+  editsChapter: { book: string; chapter: string } | null;
   revision: number;
   updatedAt: string;
   /** The caller owns it: only the owner shares, deletes or accepts (G14). */
@@ -69,9 +73,12 @@ export type DraftSummary = {
   status: 'draft' | 'accepted';
   shared: boolean;
   resultGameId: string | null;
+  resultChapter: { book: string; chapter: string } | null;
+  editsChapter: { book: string; chapter: string } | null;
   revision: number;
   updatedAt: string;
   questionCount: number;
+  vocabularyCount: number;
   problemCount: number;
   mine: boolean;
 };
@@ -80,7 +87,9 @@ export type DraftSummary = {
 export class DraftRequestError extends Error {
   constructor(
     readonly status: number,
-    readonly body: { error?: string; problems?: DraftProblem[]; details?: DraftProblem[] } & Partial<DraftView>,
+    readonly body: { error?: string; problems?: DraftProblem[]; details?: DraftProblem[] } & Partial<Omit<DraftView, 'draft'>> & {
+      draft?: DraftView['draft'];
+    },
   ) {
     super(body.error ?? `Server returned ${status}`);
   }

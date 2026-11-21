@@ -6,9 +6,11 @@ import {
   Schema,
   Types,
 } from 'mongoose';
+import { vocabularyKindValues } from '../learning/learning-object';
 import {
   assignmentReasonValues,
   badgeStatusValues,
+  bookVisibilityValues,
   contentDraftStatusValues,
   contentDraftTypeValues,
   contentSourceFormatValues,
@@ -418,6 +420,17 @@ const draftProblemSchema = new Schema(
   { _id: false },
 );
 
+/** A chapter of a book: `{ book: 'rabbit-stories-3f9a', chapter: '1' }`. */
+const chapterRefSchema = new Schema(
+  {
+    book: { type: String, required: true },
+    chapter: { type: String, required: true },
+    /** The chapter's revision when it was copied or opened for editing. */
+    revision: { type: Number, default: null },
+  },
+  { _id: false },
+);
+
 /**
  * Something the AI (or a person) is drafting, before it becomes playable
  * (G1). `payload` is validated by the server's draft schema for `type`, and
@@ -450,6 +463,12 @@ const contentDraftSchema = new Schema(
     resultGameId: { type: objectId, ref: 'Game', default: null },
     /** Duplicated from this game: recorded on the game made from it. */
     remixedFromGameId: { type: objectId, ref: 'Game', default: null },
+    /** Chapter drafts: the chapter made (or changed) on publish. */
+    resultChapter: { type: chapterRefSchema, default: null },
+    /** Chapter drafts: a remix of this chapter (G12). Copied to the published chapter. */
+    remixedFromChapter: { type: chapterRefSchema, default: null },
+    /** Chapter drafts: changes this published chapter of the owner's, which stays frozen (G8). */
+    editsChapter: { type: chapterRefSchema, default: null },
     /** Bumped by every write; a write against an older one is refused. */
     revision: { type: Number, required: true, default: 1 },
   },
@@ -457,6 +476,70 @@ const contentDraftSchema = new Schema(
 );
 contentDraftSchema.index({ ownerUserId: 1, updatedAt: -1 });
 contentDraftSchema.index({ shared: 1, updatedAt: -1 }, { partialFilterExpression: { shared: true } });
+
+/**
+ * A user's library book (docs/hashbrown/creating-games-with-hashbrown.md →
+ * Feature 2). Built-in books stay in `book-catalogue.ts`. The slug is in
+ * LRS IRIs, so it never changes once made (G9).
+ */
+const bookSchema = new Schema(
+  {
+    slug: { type: String, required: true, immutable: true },
+    title: { type: String, required: true, trim: true },
+    language: { type: languagePairSchema, required: true, immutable: true },
+    ownerUserId: { type: objectId, ref: 'User', required: true, immutable: true },
+    /** `open`: every signed-in user sees it (G12). `org` / `private` come with organisations. */
+    visibility: { type: String, required: true, enum: bookVisibilityValues, default: 'open' },
+    archivedAt: { type: Date, default: null },
+  },
+  { timestamps: true, collection: 'books' },
+);
+bookSchema.index({ slug: 1 }, { unique: true });
+
+/**
+ * A published chapter of a user book: `content` is `kogs.chapter.v1`, and
+ * `senseIds[i]` is vocabulary entry i's learning object. Vocabulary can be
+ * appended and corrected, never reordered or removed (G8), because
+ * `sourceRef` (`ch1/vocabulary/3`) goes to the LRS.
+ */
+const chapterSchema = new Schema(
+  {
+    bookSlug: { type: String, required: true, immutable: true },
+    chapter: { type: String, required: true, immutable: true },
+    content: { type: Schema.Types.Mixed, required: true },
+    senseIds: { type: [String], required: true },
+    sourceId: { type: objectId, ref: 'ContentSource', default: null },
+    remixedFrom: { type: chapterRefSchema, default: null },
+    publishedAt: { type: Date, required: true },
+    publishedByUserId: { type: objectId, ref: 'User', required: true },
+    revision: { type: Number, required: true, default: 1 },
+    /** Hidden from listings; still readable by link, because statements point at it. */
+    archivedAt: { type: Date, default: null },
+  },
+  { timestamps: true, collection: 'chapters' },
+);
+chapterSchema.index({ bookSlug: 1, chapter: 1 }, { unique: true });
+
+/**
+ * Senses users added (G7): a DB layer over the committed `ko-senses.json`,
+ * still language-scoped (A1). The id `language/kind/word/sense` is in LRS
+ * IRIs once used, so a row is never renamed or deleted.
+ */
+const senseSchema = new Schema(
+  {
+    language: { type: String, required: true, immutable: true },
+    /** `normaliseWord(target)`. */
+    word: { type: String, required: true, immutable: true },
+    sense: { type: String, required: true, immutable: true },
+    kind: { type: String, required: true, enum: vocabularyKindValues, immutable: true },
+    gloss: { type: String, required: true },
+    /** Book-qualified entries that teach it: `rabbit-stories-3f9a/ch1/vocabulary/3`. */
+    sources: { type: [String], default: [] },
+    createdByUserId: { type: objectId, ref: 'User', required: true, immutable: true },
+  },
+  { timestamps: { createdAt: true, updatedAt: false }, collection: 'senses' },
+);
+senseSchema.index({ language: 1, word: 1, sense: 1 }, { unique: true });
 
 export type User = InferSchemaType<typeof userSchema>;
 export type Badge = InferSchemaType<typeof badgeSchema>;
@@ -474,6 +557,9 @@ export type Guess = InferSchemaType<typeof guessSchema>;
 export type PairBinding = InferSchemaType<typeof pairBindingSchema>;
 export type ContentSource = InferSchemaType<typeof contentSourceSchema>;
 export type ContentDraft = InferSchemaType<typeof contentDraftSchema>;
+export type Book = InferSchemaType<typeof bookSchema>;
+export type Chapter = InferSchemaType<typeof chapterSchema>;
+export type Sense = InferSchemaType<typeof senseSchema>;
 
 export type UserDocument = HydratedDocument<User>;
 export type BadgeDocument = HydratedDocument<Badge>;
@@ -507,6 +593,9 @@ export type DbModels = {
   PairBinding: Model<PairBinding>;
   ContentSource: Model<ContentSource>;
   ContentDraft: Model<ContentDraft>;
+  Book: Model<Book>;
+  Chapter: Model<Chapter>;
+  Sense: Model<Sense>;
 };
 
 export function registerModels(connection: Connection): DbModels {
@@ -530,6 +619,9 @@ export function registerModels(connection: Connection): DbModels {
     PairBinding: connection.model('PairBinding', pairBindingSchema),
     ContentSource: connection.model('ContentSource', contentSourceSchema),
     ContentDraft: connection.model('ContentDraft', contentDraftSchema),
+    Book: connection.model('Book', bookSchema),
+    Chapter: connection.model('Chapter', chapterSchema),
+    Sense: connection.model('Sense', senseSchema),
   };
 }
 

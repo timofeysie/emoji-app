@@ -9,7 +9,7 @@ import { bookProgressPath, useLearnerProgress, type BookProgress } from './yalla
 /** `/yalla/books/:book`: the book's chapters, each with the linked player's pills. */
 export function YallaBookView() {
   const { book = '' } = useParams();
-  const { data, loading, error } = useYallaResource<BookSummary>(`/books/${encodeURIComponent(book)}`);
+  const { data, loading, error } = useYallaResource<BookSummary>(`/books/${encodeURIComponent(book)}`, { cache: false });
   const progress = useLearnerProgress<BookProgress>(bookProgressPath(book));
   const countsByChapter = new Map(progress.data?.chapters.map((item) => [item.chapter, item.byAspect]));
   const emptyReason =
@@ -25,6 +25,11 @@ export function YallaBookView() {
       {data && (
         <>
           <h1 className="text-2xl font-bold">{data.title}</h1>
+          {data.owner && data.owner !== 'built-in' && (
+            <p className="-mt-3 text-xs text-muted-foreground">
+              {data.owner === 'mine' ? 'Your library book' : 'A library book another referee shared'} · {data.book}
+            </p>
+          )}
           {progress.linked === false && <PractisingAs />}
           {progress.error && (
             <p className="text-xs text-muted-foreground" data-testid="progress-error">
@@ -46,7 +51,10 @@ export function YallaBookView() {
                   <div lang={data.language} className="truncate">
                     {item.titleTarget}
                   </div>
-                  <div className="truncate text-xs text-muted-foreground">{item.titleNative}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {item.titleNative}
+                    {item.archived && <span className="ml-2 rounded-full bg-amber-100 px-1.5 text-[11px] text-amber-900">archived</span>}
+                  </div>
                   <div className="mt-2">
                     <AspectPills compact counts={countsByChapter.get(item.chapter) ?? null} emptyReason={emptyReason} />
                   </div>

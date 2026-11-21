@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useOutletContext, useParams } from 'react-router-dom';
+import { ChapterLibraryActions } from '../library/ChapterLibraryActions';
 import { cn } from '../shared/utils';
 import { AspectPills, PendingExportNotice } from './AspectPills';
 import { PractisingAs } from './PractisingAs';
@@ -18,8 +19,10 @@ type ChapterContext = {
 /** `/yalla/books/:book/chapters/:chapter/*`: the chapter header and pills, then the chosen section. */
 export function YallaChapterView() {
   const { book = '', chapter = '' } = useParams();
-  const { data, loading, error } = useYallaResource<StudyChapter>(
+  const { data, loading, error, reload } = useYallaResource<StudyChapter>(
     `/books/${encodeURIComponent(book)}/chapters/${encodeURIComponent(chapter)}`,
+    // User chapters can be edited or archived; the built-in ones never change.
+    { cache: false },
   );
   const progress = useLearnerProgress<ChapterProgress>(chapterProgressPath(book, chapter));
   const [pillAspects, setPillAspects] = useState<readonly string[] | null>(null);
@@ -74,6 +77,7 @@ export function YallaChapterView() {
               </p>
             )}
             {progress.data && <PendingExportNotice pending={progress.data.pendingExport} />}
+            <ChapterLibraryActions chapter={data} onArchived={reload} />
           </header>
           <Outlet context={{ chapter: data, progress, setPillAspects } satisfies ChapterContext} />
         </>

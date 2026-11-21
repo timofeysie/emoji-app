@@ -8,6 +8,7 @@ import { composePrompt, type PromptSection } from '../chat/prompt-sections';
 import { useSmartHomeChatArea } from '../chat/smart-home/useSmartHomeChatArea';
 import { useCoreChatArea } from '../chat/useCoreChatArea';
 import { useGameAuthoringChatArea } from '../chat/game-authoring/useGameAuthoringChatArea';
+import { useLibraryChatArea } from '../chat/library/useLibraryChatArea';
 import { useChatContextUsage } from '../chat/useChatContextUsage';
 import { useDomChatArea } from '../chat/useDomChatArea';
 import { Button } from './button';
@@ -23,6 +24,7 @@ export const RichChatPanel = () => {
   const areas = [
     useCoreChatArea(),
     useGameAuthoringChatArea(() => userTextsRef.current),
+    useLibraryChatArea(() => userTextsRef.current),
     useSmartHomeChatArea(),
     useDomChatArea(),
   ];

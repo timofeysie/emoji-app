@@ -179,6 +179,8 @@ export function useGameAuthoringChatArea(userTexts: () => readonly string[]): Ch
         const [mine, shared] = await Promise.all([listDrafts(false), listDrafts(true)]);
         return [...mine.drafts, ...shared.drafts].slice(0, 30).map((draft) => ({
           draftId: draft.id,
+          // Chapter drafts: read them with getChapterDraft.
+          type: draft.type,
           title: draft.title || 'Untitled draft',
           status: draft.status,
           gameId: draft.resultGameId,

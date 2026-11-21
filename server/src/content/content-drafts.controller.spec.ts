@@ -2,6 +2,8 @@ import type { Response } from 'express';
 import type { ContentDraftRecord, ContentDraftRepository } from '../persistence/content-draft.repository';
 import type { GameDataRepository } from '../persistence/game-data.repository';
 import type { RefereeRequest } from '../referee.guard';
+import { emptyChapterPayload } from './chapter-draft';
+import type { ChapterDraftsService } from './chapter-drafts.service';
 import { ContentDraftsController } from './content-drafts.controller';
 import type { GameDraftPayload } from './game-draft';
 
@@ -58,6 +60,9 @@ function draftRecord(overrides: Partial<ContentDraftRecord> = {}): ContentDraftR
     lastEditedByUserId: OWNER,
     resultGameId: null,
     remixedFromGameId: null,
+    resultChapter: null,
+    remixedFromChapter: null,
+    editsChapter: null,
     revision: 3,
     createdAt: '2026-11-21T09:00:00.000Z',
     updatedAt: '2026-11-21T09:00:00.000Z',
@@ -82,9 +87,17 @@ describe('ContentDraftsController', () => {
     getGameForDraft: jest.fn(),
     deleteGame: jest.fn(),
   };
+  const chapters: jest.Mocked<Pick<ChapterDraftsService, 'problems' | 'publish' | 'copyChapter' | 'myBooks' | 'frozen'>> = {
+    problems: jest.fn(),
+    publish: jest.fn(),
+    copyChapter: jest.fn(),
+    myBooks: jest.fn(),
+    frozen: jest.fn(),
+  };
   const controller = new ContentDraftsController(
     drafts as unknown as ContentDraftRepository,
     games as unknown as GameDataRepository,
+    chapters as unknown as ChapterDraftsService,
   );
 
   const as = (userId: string) => ({ refereeUserId: userId }) as RefereeRequest;
@@ -140,9 +153,9 @@ describe('ContentDraftsController', () => {
       expect(body.draft.revision).toBe(1);
     });
 
-    it('refuses pasted text over 8,000 characters and chapter drafts (H2)', async () => {
+    it('refuses pasted text over 8,000 characters', async () => {
       expect((await call((res) => controller.createDraft({ type: 'game', source: { text: 'x'.repeat(8001) } }, res, as(OWNER)))).status).toBe(400);
-      expect((await call((res) => controller.createDraft({ type: 'chapter' }, res, as(OWNER)))).status).toBe(400);
+      expect((await call((res) => controller.createDraft({ type: 'chapter', source: { text: 'x'.repeat(8001) } }, res, as(OWNER)))).status).toBe(400);
     });
 
     it('duplicates any class game into a draft of the caller’s own, keeping its source', async () => {
@@ -299,5 +312,102 @@ describe('ContentDraftsController', () => {
     await call((res) => controller.listDrafts(undefined, res, as(OWNER)));
     await call((res) => controller.listDrafts('true', res, as(OWNER)));
     expect(drafts.listDrafts.mock.calls).toEqual([[{ userId: OWNER, shared: false }], [{ userId: OWNER, shared: true }]]);
+  });
+  it('shows problems under today’s rules, not the ones stored at the last save', async () => {
+    // Saved when options were limited to 40 characters; this one is 50.
+    const long = structuredClone(payload);
+    long.questions[0].options[0].text = 'a rabbit that runs very fast across the green hill';
+    drafts.getDraft.mockResolvedValue(
+      draftRecord({ payload: long, problems: [{ path: 'questions.0.options.0', message: 'Question 1, option A is longer than 40 characters' }] }),
+    );
+    drafts.getSource.mockResolvedValue(null);
+
+    const { status, body } = await call((res) => controller.getDraft(DRAFT_ID, res, as(OWNER)));
+
+    expect(status).toBe(200);
+    expect(body.draft.problems).toEqual([]);
+  });
+
+  describe('chapter drafts (H2)', () => {
+    const chapterProblems = [{ path: 'vocabulary', message: '0 vocabulary entries: at least 6 are needed' }];
+
+    beforeEach(() => {
+      chapters.problems.mockResolvedValue(chapterProblems);
+      chapters.myBooks.mockResolvedValue([]);
+      chapters.frozen.mockResolvedValue(null);
+      drafts.createDraft.mockImplementation(async (input) => draftRecord({ ...input, id: DRAFT_ID, revision: 1 } as Partial<ContentDraftRecord>));
+    });
+
+    it('starts an empty chapter draft from a paste, keeping the source', async () => {
+      drafts.ensureSource.mockResolvedValue(SOURCE_ID);
+      const { status } = await call((res) =>
+        controller.createDraft({ type: 'chapter', source: { text: '옛날 옛적에 토끼가 살았어요.' } }, res, as(OWNER)),
+      );
+
+      expect(status).toBe(201);
+      expect(drafts.createDraft).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'chapter', sourceId: SOURCE_ID, payload: null, problems: chapterProblems }),
+      );
+    });
+
+    it('Save as library chapter reuses the game’s kept source, and refuses a game with none', async () => {
+      games.getGameForDraft.mockResolvedValueOnce({ id: GAME_ID, title: 'Quiz', kind: 'class', contentSourceId: SOURCE_ID, questions: [] });
+      expect((await call((res) => controller.createDraft({ type: 'chapter', fromGameId: GAME_ID }, res, as(OTHER)))).status).toBe(201);
+      expect(drafts.createDraft).toHaveBeenCalledWith(expect.objectContaining({ ownerUserId: OTHER, sourceId: SOURCE_ID }));
+
+      games.getGameForDraft.mockResolvedValueOnce({ id: GAME_ID, title: 'Quiz', kind: 'class', contentSourceId: null, questions: [] });
+      expect((await call((res) => controller.createDraft({ type: 'chapter', fromGameId: GAME_ID }, res, as(OTHER)))).status).toBe(400);
+    });
+
+    it('a remix records where it came from; an edit records the chapter it changes', async () => {
+      const copy = { payload: { ...emptyChapterPayload(), titleTarget: '토끼' }, ref: { book: 'rabbit-1a2b', chapter: '1', revision: 2 }, sourceId: SOURCE_ID, frozen: null };
+      chapters.copyChapter.mockResolvedValue(copy as never);
+
+      await call((res) => controller.createDraft({ type: 'chapter', fromChapter: { book: 'rabbit-1a2b', chapter: '1' } }, res, as(OTHER)));
+      expect(chapters.copyChapter).toHaveBeenLastCalledWith({ book: 'rabbit-1a2b', chapter: '1' }, OTHER, 'remix');
+      expect(drafts.createDraft).toHaveBeenLastCalledWith(expect.objectContaining({ remixedFromChapter: copy.ref }));
+
+      await call((res) => controller.createDraft({ type: 'chapter', editChapter: { book: 'rabbit-1a2b', chapter: '1' } }, res, as(OWNER)));
+      expect(chapters.copyChapter).toHaveBeenLastCalledWith({ book: 'rabbit-1a2b', chapter: '1' }, OWNER, 'edit');
+      expect(drafts.createDraft).toHaveBeenLastCalledWith(expect.objectContaining({ editsChapter: copy.ref }));
+    });
+
+    it('checks a chapter payload against the chapter schema, not the game one', async () => {
+      drafts.getDraft.mockResolvedValue(draftRecord({ type: 'chapter', payload: null }));
+
+      const bad = await call((res) => controller.updateDraft(DRAFT_ID, { revision: 3, payload: payload }, res, as(OWNER)));
+      expect(bad.status).toBe(400);
+
+      drafts.updateDraft.mockImplementation(async (input) => draftRecord({ type: 'chapter', ...input.changes }));
+      const ok = await call((res) =>
+        controller.updateDraft(DRAFT_ID, { revision: 3, payload: { titleTarget: '토끼', titleNative: 'The rabbit' } }, res, as(OWNER)),
+      );
+      expect(ok.status).toBe(200);
+      expect(drafts.updateDraft).toHaveBeenCalledWith(
+        expect.objectContaining({ changes: expect.objectContaining({ title: 'The rabbit', problems: chapterProblems }) }),
+      );
+    });
+
+    it('publishes through the chapter service and marks the draft accepted', async () => {
+      drafts.getDraft.mockResolvedValue(draftRecord({ type: 'chapter' }));
+      chapters.publish.mockResolvedValue({ bookSlug: 'rabbit-1a2b', chapter: '2', revision: 1 } as never);
+      drafts.updateDraft.mockImplementation(async (input) => draftRecord({ type: 'chapter', ...input.changes }));
+
+      const { status, body } = await call((res) => controller.acceptDraft(DRAFT_ID, { revision: 3 }, res, as(OWNER)));
+
+      expect(status).toBe(201);
+      expect(body.chapter).toEqual({ book: 'rabbit-1a2b', chapter: '2', revision: 1 });
+      expect(games.createGameWithQuestions).not.toHaveBeenCalled();
+      expect(drafts.updateDraft).toHaveBeenCalledWith(
+        expect.objectContaining({ changes: { status: 'accepted', resultChapter: body.chapter, shared: false } }),
+      );
+    });
+
+    it('only the owner publishes a shared chapter draft', async () => {
+      drafts.getDraft.mockResolvedValue(draftRecord({ type: 'chapter', shared: true }));
+
+      expect((await call((res) => controller.acceptDraft(DRAFT_ID, { revision: 3 }, res, as(OTHER)))).status).toBe(403);
+      expect(chapters.publish).not.toHaveBeenCalled();
+    });
   });
 });
