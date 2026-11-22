@@ -30,26 +30,33 @@ export const EXT_INPUT_CHANNEL = `${XAPI_BASE_IRI}/ext/input-channel`;
 export const CHAPTER_TYPE = `${XAPI_BASE_IRI}/activity-types/chapter`;
 export const BOOK_TYPE = `${XAPI_BASE_IRI}/activity-types/book`;
 
-/**
- * Word-level kinds, as they appear in ids and IRIs. Patterns, sentences and
- * competencies get their own id shapes when they are built.
- */
+/** Word-level kinds, as they appear in ids and IRIs. */
 export const vocabularyKindValues = ['lexeme', 'expression'] as const;
 export type VocabularyKind = (typeof vocabularyKindValues)[number];
 
+/**
+ * Every kind (A3, A4). A grammar pattern's `word` is its romanised matching
+ * key (docs/yalla/grammar-learning-objects.md, GP3): `ko/grammar-pattern/a-eo-jida/become`.
+ * Sentences and competencies get their own id shapes when they are built.
+ */
+export const GRAMMAR_PATTERN = 'grammar-pattern';
+export const learningObjectKindValues = [...vocabularyKindValues, GRAMMAR_PATTERN] as const;
+export type LearningObjectKind = (typeof learningObjectKindValues)[number];
+
 /** Activity type per kind: `lexeme` is one word in one sense. */
-export const LEARNING_OBJECT_TYPES: Record<VocabularyKind, string> = {
+export const LEARNING_OBJECT_TYPES: Record<LearningObjectKind, string> = {
   lexeme: `${XAPI_BASE_IRI}/activity-types/lexeme-sense`,
   expression: `${XAPI_BASE_IRI}/activity-types/expression`,
+  'grammar-pattern': `${XAPI_BASE_IRI}/activity-types/grammar-pattern`,
 };
 
 export type LearningObjectKey = {
   /** ISO 639 code, e.g. `ko`. */
   language: string;
-  kind: VocabularyKind;
-  /** Normalised text, e.g. `보여 주다`. */
+  kind: LearningObjectKind;
+  /** Normalised text, e.g. `보여 주다`; for a grammar pattern, its ASCII form, e.g. `a-eo-jida`. */
   word: string;
-  /** Sense slug from the registry, e.g. `to-show`. */
+  /** Sense slug from the registry, e.g. `to-show`; for a grammar pattern, its meaning slug. */
   sense: string;
 };
 
@@ -59,8 +66,8 @@ const LO_PREFIX = `${XAPI_BASE_IRI}/lo/`;
 const CONTENT_PREFIX = `${XAPI_BASE_IRI}/content/`;
 const ID_PATTERN = /^([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/;
 
-function isKind(value: string): value is VocabularyKind {
-  return (vocabularyKindValues as readonly string[]).includes(value);
+function isKind(value: string): value is LearningObjectKind {
+  return (learningObjectKindValues as readonly string[]).includes(value);
 }
 
 function assertSlug(kind: string, value: string): void {
@@ -74,17 +81,19 @@ function assertKey(key: LearningObjectKey): void {
     throw new Error(`Invalid language '${key.language}': use a lower-case ISO 639 code, e.g. ko.`);
   }
   if (!isKind(key.kind)) {
-    throw new Error(`Invalid kind '${String(key.kind)}': use ${vocabularyKindValues.join(' or ')}.`);
+    throw new Error(`Invalid kind '${String(key.kind)}': use ${learningObjectKindValues.join(', ')}.`);
   }
   if (key.word.length === 0 || key.word.includes('/')) {
     throw new Error(`Invalid word '${key.word}': must be non-empty and contain no '/'.`);
   }
+  if (key.kind === GRAMMAR_PATTERN) assertSlug('pattern form', key.word);
   assertSlug('sense', key.sense);
 }
 
 function keyFromParts(language: string, kind: string, word: string, sense: string): LearningObjectKey | null {
   if (!LANGUAGE.test(language) || !isKind(kind) || !SLUG.test(sense)) return null;
   if (word.length === 0 || word.includes('/')) return null;
+  if (kind === GRAMMAR_PATTERN && !SLUG.test(word)) return null;
   return { language, kind, word, sense };
 }
 

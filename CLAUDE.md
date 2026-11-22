@@ -75,6 +75,8 @@ The panel has its own `HashbrownProvider` (`chat/ChatSessionProvider.tsx`) that 
 
 **Library chapters** (same doc, Feature 2): a chapter draft publishes into a user `Book` as a `Chapter` (`kogs.chapter.v1` plus `senseIds`). Published vocabulary is frozen (G8): entries can be corrected or appended, never reordered or removed, because `sourceRef` (`ch1/vocabulary/3`) and sense ids reach the LRS. Keep `CHAPTER_DRAFT_LIMITS` equal to the client's `CHAPTER_LIMITS` (a spec compares them). Anything that reads a book by slug (Leitner planner, progress, YALLA practice, export) goes through `BookContentService`, so it works for user books too (H3); the synchronous `getBookContent()` only knows built-in books.
 
+**Grammar patterns** (docs/yalla/grammar-learning-objects.md, H4): a pattern's id comes from its headword's normalised spelling key, romanised (`ko/grammar-pattern/a-eo-jida/become`), never typed. `patternKey`/`patternForm` (`server/src/learning/grammar-pattern.ts`) and the registry (`ko-patterns.json`, `pattern-registry.ts`) are permanent once pilot statements use them.
+
 Tool arguments are validated with Hashbrown's schema system (`s.object`, `s.string`, etc.).
 
 ## Tech Stack

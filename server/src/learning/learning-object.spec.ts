@@ -32,7 +32,18 @@ describe('learning-object ids and IRIs', () => {
     expect(LEARNING_OBJECT_TYPES).toEqual({
       lexeme: `${BASE}/activity-types/lexeme-sense`,
       expression: `${BASE}/activity-types/expression`,
+      'grammar-pattern': `${BASE}/activity-types/grammar-pattern`,
     });
+  });
+
+  it('takes a grammar pattern only with an ASCII form (A4, GP3)', () => {
+    expect(parseLearningObjectId('ko/grammar-pattern/a-eo-jida/become')).toEqual({
+      language: 'ko',
+      kind: 'grammar-pattern',
+      word: 'a-eo-jida',
+      sense: 'become',
+    });
+    expect(parseLearningObjectId('ko/grammar-pattern/아어지다/become')).toBeNull();
   });
 
   it('gives each sense of a homograph its own IRI', () => {
