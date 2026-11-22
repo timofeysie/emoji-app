@@ -98,17 +98,20 @@ export function termsOf(content: BookContent): { byChapter: Map<string, VocabTer
 export function patternsOf(content: BookContent): {
   bySourceRef: Map<string, BookPattern>;
   all: BookPattern[];
+  /** Distractor endings: the book's own patterns, then other books' (`distractorPatterns`). */
+  pool: BookPattern[];
   /** Book patterns sharing an entry with this one: never each other's distractors. */
   sameGrammar: (sourceRef: string) => Set<string>;
 } {
   const all = [...content.patterns.values()].flat();
+  const pool = [...all, ...content.distractorPatterns];
   const bySourceRef = new Map(all.map((pattern) => [pattern.sourceRef, pattern]));
   const entryIds = (sourceRef: string) => new Set(patternEntriesOf(content, sourceRef).map((entry) => entry.id));
   const sameGrammar = (sourceRef: string) => {
     const ids = entryIds(sourceRef);
-    return new Set(all.filter((other) => [...entryIds(other.sourceRef)].some((id) => ids.has(id))).map((other) => other.sourceRef));
+    return new Set(pool.filter((other) => [...entryIds(other.sourceRef)].some((id) => ids.has(id))).map((other) => other.sourceRef));
   };
-  return { bySourceRef, all, sameGrammar };
+  return { bySourceRef, all, pool, sameGrammar };
 }
 
 /** Whether `sourceRef` (a vocabulary entry or a book pattern) teaches the learning object. */
@@ -234,7 +237,7 @@ export class LeitnerPlanner {
     };
     const cloze = (object: PlanObject, rng = createRng(0)) => {
       const pattern = patternFor(object);
-      return clozeItem(pattern, patterns.all, patterns.sameGrammar(pattern.sourceRef), rng);
+      return clozeItem(pattern, patterns.pool, patterns.sameGrammar(pattern.sourceRef), rng);
     };
     const entryOf = (object: PlanObject) =>
       patternEntriesOf(content, object.sourceRef).find((entry) => entry.id === object.learningObjectId);

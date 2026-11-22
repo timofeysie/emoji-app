@@ -497,8 +497,10 @@ const bookSchema = new Schema(
 bookSchema.index({ slug: 1 }, { unique: true });
 
 /**
- * A published chapter of a user book: `content` is `kogs.chapter.v1`, and
- * `senseIds[i]` is vocabulary entry i's learning object. Vocabulary can be
+ * A published chapter of a user book: `content` is `kogs.chapter.v1`,
+ * `senseIds[i]` is vocabulary entry i's learning object, and `patternIds[i]`
+ * the grammar-pattern entries book pattern i teaches (H4c; empty for
+ * chapters published before). Vocabulary can be
  * appended and corrected, never reordered or removed (G8), because
  * `sourceRef` (`ch1/vocabulary/3`) goes to the LRS.
  */
@@ -508,6 +510,7 @@ const chapterSchema = new Schema(
     chapter: { type: String, required: true, immutable: true },
     content: { type: Schema.Types.Mixed, required: true },
     senseIds: { type: [String], required: true },
+    patternIds: { type: [[String]], default: [] },
     sourceId: { type: objectId, ref: 'ContentSource', default: null },
     remixedFrom: { type: chapterRefSchema, default: null },
     publishedAt: { type: Date, required: true },
@@ -541,6 +544,29 @@ const senseSchema = new Schema(
 );
 senseSchema.index({ language: 1, word: 1, sense: 1 }, { unique: true });
 
+/**
+ * Grammar patterns users added (docs/yalla/grammar-learning-objects.md, H4c):
+ * a DB layer over the committed `ko-patterns.json`. The id
+ * `language/grammar-pattern/form/meaning` is in LRS IRIs once used, so a row
+ * is never renamed or deleted. `spellings` grows as books link to it.
+ */
+const patternSchema = new Schema(
+  {
+    language: { type: String, required: true, immutable: true },
+    /** Romanised key of the headword: `a-eo-jida`. */
+    form: { type: String, required: true, immutable: true },
+    meaning: { type: String, required: true, immutable: true },
+    headword: { type: String, required: true, immutable: true },
+    gloss: { type: String, required: true },
+    spellings: { type: [String], default: [] },
+    /** Book-qualified book patterns that teach it: `rabbit-stories-3f9a/ch1/patterns/0`. */
+    sources: { type: [String], default: [] },
+    createdByUserId: { type: objectId, ref: 'User', required: true, immutable: true },
+  },
+  { timestamps: { createdAt: true, updatedAt: false }, collection: 'patterns' },
+);
+patternSchema.index({ language: 1, form: 1, meaning: 1 }, { unique: true });
+
 export type User = InferSchemaType<typeof userSchema>;
 export type Badge = InferSchemaType<typeof badgeSchema>;
 export type Game = InferSchemaType<typeof gameSchema>;
@@ -560,6 +586,7 @@ export type ContentDraft = InferSchemaType<typeof contentDraftSchema>;
 export type Book = InferSchemaType<typeof bookSchema>;
 export type Chapter = InferSchemaType<typeof chapterSchema>;
 export type Sense = InferSchemaType<typeof senseSchema>;
+export type GrammarPatternRow = InferSchemaType<typeof patternSchema>;
 
 export type UserDocument = HydratedDocument<User>;
 export type BadgeDocument = HydratedDocument<Badge>;
@@ -596,6 +623,7 @@ export type DbModels = {
   Book: Model<Book>;
   Chapter: Model<Chapter>;
   Sense: Model<Sense>;
+  Pattern: Model<GrammarPatternRow>;
 };
 
 export function registerModels(connection: Connection): DbModels {
@@ -622,6 +650,7 @@ export function registerModels(connection: Connection): DbModels {
     Book: connection.model('Book', bookSchema),
     Chapter: connection.model('Chapter', chapterSchema),
     Sense: connection.model('Sense', senseSchema),
+    Pattern: connection.model('Pattern', patternSchema),
   };
 }
 

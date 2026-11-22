@@ -74,12 +74,22 @@ export function bookPatternsOf(raw: unknown): BookPattern[] {
 const PLACEHOLDER = /^[A-Z]+$/;
 const PUNCTUATION = /[.?!,…]+$/;
 
-/** The words of the book pattern from its first `+` up to the next placeholder: `-(으)면 안 돼`. */
+/**
+ * The words of the book pattern from its first `+` up to the next
+ * placeholder: `-(으)면 안 돼`. Without a `+` (library chapters often write
+ * `-(으)면` or `V-(으)면`), from the first word that starts with `-` or `~`.
+ */
 function endingWords(patternTarget: string): string[] {
   const words = patternTarget.split(/\s+/).filter(Boolean);
   const plus = words.indexOf('+');
-  if (plus < 0) return [];
-  const rest = words.slice(plus + 1);
+  let rest: string[];
+  if (plus >= 0) {
+    rest = words.slice(plus + 1);
+  } else {
+    const first = words.findIndex((word) => /^(?:[AVN]{1,2})?[-~]/.test(word));
+    if (first < 0) return [];
+    rest = [words[first].replace(/^[AVN]{1,2}(?=[-~])/, ''), ...words.slice(first + 1)];
+  }
   const next = rest.findIndex((word) => PLACEHOLDER.test(word));
   return (next < 0 ? rest : rest.slice(0, next)).map((word) => word.replace(PUNCTUATION, '')).filter(Boolean);
 }
@@ -156,7 +166,8 @@ export function clozeSentences(pattern: BookPattern): Array<PatternSentence & { 
 
 /**
  * Distractors: the blanks of other book patterns, this chapter's first,
- * never one teaching the same grammar (`excluded`) or with the same text.
+ * then the book's, then other books' (book-qualified sourceRefs), never one
+ * teaching the same grammar (`excluded`) or with the same text.
  */
 function distractorsFor(
   pattern: BookPattern,
@@ -168,7 +179,13 @@ function distractorsFor(
   const chapter = pattern.sourceRef.split('/')[0];
   const candidates = pool.filter((other) => other.sourceRef !== pattern.sourceRef && !excluded.has(other.sourceRef));
   const texts: string[] = [];
-  for (const group of [candidates.filter((o) => o.sourceRef.startsWith(`${chapter}/`)), candidates.filter((o) => !o.sourceRef.startsWith(`${chapter}/`))]) {
+  const ownBook = (other: BookPattern) => /^ch[^/]+\//.test(other.sourceRef);
+  const groups = [
+    candidates.filter((o) => o.sourceRef.startsWith(`${chapter}/`)),
+    candidates.filter((o) => ownBook(o) && !o.sourceRef.startsWith(`${chapter}/`)),
+    candidates.filter((o) => !ownBook(o)),
+  ];
+  for (const group of groups) {
     for (const other of shuffle(group, rng)) {
       const blank = clozeSentences(other)[0]?.cloze.blank;
       if (blank && blank !== answer && !texts.includes(blank)) texts.push(blank);

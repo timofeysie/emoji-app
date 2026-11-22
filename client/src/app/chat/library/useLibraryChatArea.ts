@@ -1,10 +1,11 @@
 import { s } from '@hashbrownai/core';
 import { exposeComponent, useTool } from '@hashbrownai/react';
 import { DraftRequestError, notifyDraftChanged } from '../../game-authoring/drafts-api';
-import { chapterRecipe, SENSE_RULES } from '../../library/chapter-authoring.prompt';
-import { chapterProposalSchema, chapterWordWithSenseSchema } from '../../library/chapter-draft.schema';
+import { chapterRecipe, PATTERN_RULES, SENSE_RULES } from '../../library/chapter-authoring.prompt';
+import { chapterProposalSchema, chapterWordWithSenseSchema, patternWithEntriesSchema } from '../../library/chapter-draft.schema';
 import {
   createChapterDraft,
+  findPatterns,
   findSenses,
   getChapterDraft,
   suggestBookSlug,
@@ -59,32 +60,26 @@ function chapterForModel({ draft, chapter }: ChapterDraftView) {
             ? `new ${word.sense.newSense} (${word.sense.kind})${word.sense.confirmed ? ', confirmed' : ', waiting for the user'}`
             : 'undecided',
     })),
-    patterns: (content?.patterns ?? []).map((pattern, i) => ({ number: i + 1, pattern: pattern.patternTarget, meaning: pattern.patternNative })),
+    patterns: (content?.patterns ?? []).map((pattern, i) => ({
+      number: i + 1,
+      pattern: pattern.patternTarget,
+      meaning: pattern.patternNative,
+      teaches: pattern.entries.map((entry) =>
+        entry.decision === 'reuse'
+          ? `reuse ${entry.reuseId}`
+          : `new ${entry.headword} (${entry.meaning})${entry.confirmed ? ', confirmed' : ', waiting for the user'}`,
+      ),
+    })),
     ...splitProblems(draft.problems),
   };
 }
 
-const singlePatternSchema = s.object('A grammar pattern', {
-  patternTarget: s.string('The smallest teachable pattern'),
-  patternNative: s.string('What it means'),
-  type: s.string('"casual", "polite", "formal" or ""'),
-  exampleSentenceTarget: s.string('The passage sentence that uses it'),
-  exampleSentenceNative: s.string('Its translation'),
-  sampleSentences: s.array(
-    'Two new example sentences',
-    s.object('An example', { targetText: s.string('Target language'), nativeText: s.string('Translation') }),
-  ),
-  exercises: s.array(
-    'Two exercises',
-    s.object('An exercise', { exercise: s.string('In the learner\'s language'), answerKey: s.string('The answer') }),
-  ),
-});
-
 /**
  * Library chapters in the chat (docs/hashbrown/creating-games-with-hashbrown.md →
  * Feature 2, H2): only when the user asks (G13). The AI looks up senses
- * (`findSenses`), saves the chapter as a draft (`proposeChapter`) and shows
- * it with `<ChapterDraft>`. The user confirms new senses and publishes (G1, G7).
+ * (`findSenses`) and grammar patterns (`findPatterns`, H4c), saves the
+ * chapter as a draft (`proposeChapter`) and shows it with `<ChapterDraft>`.
+ * The user confirms new senses and patterns, and publishes (G1, G7, GP5).
  */
 export function useLibraryChatArea(userTexts: () => readonly string[]): ChatArea {
   const getBooks = useTool({
@@ -131,11 +126,31 @@ export function useLibraryChatArea(userTexts: () => readonly string[]): ChatArea
     deps: [],
   });
 
+  const findPatternsTool = useTool({
+    name: 'findPatterns',
+    description:
+      'Look up the grammar-pattern entries the registry already has for your patterns, by spelling. Call it before ' +
+      'proposeChapter. exact entries are the same pattern: reuse them all. contained entries are found inside it: reuse ' +
+      'the ones it teaches. problem means the spelling has no readable Korean pattern.',
+    schema: s.object('Patterns to look up', {
+      patterns: s.array('Up to 10 patterns, as you will write them in patternTarget', s.string('e.g. "VERB + -았/었더니"')),
+      language: s.string('ISO 639 code, e.g. "ko"'),
+    }),
+    handler: async (input) => {
+      try {
+        return await findPatterns(input.patterns, input.language.toLowerCase() || 'ko');
+      } catch (error) {
+        throw toolError(error);
+      }
+    },
+    deps: [],
+  });
+
   const proposeChapter = useTool({
     name: 'proposeChapter',
     description:
       'Save a library chapter you made from a passage the user pasted as a new draft. Returns the draftId, ' +
-      'problemsToFix (fix them with reviseChapterDraft) and forTheUser (new senses only the user can confirm). ' +
+      'problemsToFix (fix them with reviseChapterDraft) and forTheUser (new senses and patterns only the user can confirm). ' +
       'It never publishes: the user does that.',
     schema: s.object('A drafted chapter', {
       passageStart: s.string('The first 8 or so words of the passage, copied exactly from the user\'s message'),
@@ -185,10 +200,10 @@ export function useLibraryChatArea(userTexts: () => readonly string[]): ChatArea
       addWords: s.array('Words to add at the end', chapterWordWithSenseSchema),
       replacePatterns: s.array(
         'Patterns to replace',
-        s.object('A replacement', { number: s.number('The pattern\'s number (1-based)'), pattern: singlePatternSchema }),
+        s.object('A replacement', { number: s.number('The pattern\'s number (1-based)'), pattern: patternWithEntriesSchema }),
       ),
       removePatterns: s.array('Numbers of patterns to remove (1-based)', s.number('A pattern number')),
-      addPatterns: s.array('Patterns to add at the end', singlePatternSchema),
+      addPatterns: s.array('Patterns to add at the end', patternWithEntriesSchema),
     }),
     handler: async (input) => {
       const revision: ChapterRevision = {
@@ -258,7 +273,7 @@ export function useLibraryChatArea(userTexts: () => readonly string[]): ChatArea
   });
 
   return {
-    tools: [getBooks, findSensesTool, proposeChapter, reviseChapterDraft, getChapterDraftTool, remixChapter],
+    tools: [getBooks, findSensesTool, findPatternsTool, proposeChapter, reviseChapterDraft, getChapterDraftTool, remixChapter],
     components: [
       exposeComponent(ChapterDraftCard, {
         name: 'ChapterDraft',
@@ -289,19 +304,25 @@ export function useLibraryChatArea(userTexts: () => readonly string[]): ChatArea
          one of their own books (owner "mine") or a new book. With no book of
          their own, suggest a title for a new one (never a person's name) and use
          it unless they say otherwise.
-      2. Choose the words, then call findSenses with all of them at once.
-      3. Call proposeChapter with the chapter and a sense for every word.
+      2. Choose the words and patterns, then call findSenses with all the words
+         at once and findPatterns with all the patterns at once.
+      3. Call proposeChapter with the chapter, a sense for every word and the
+         entries every pattern teaches.
       4. Fix problemsToFix with reviseChapterDraft. Never try to fix forTheUser:
-         those are new senses only the user can confirm, on the card.
-      5. Show <ChapterDraft>. Say how many words reuse an existing sense and how
-         many are new, and that the user confirms new senses and clicks Publish.
-         Never say it is published until they have done that.
+         those are new senses and patterns only the user can confirm, on the card.
+      5. Show <ChapterDraft>. Say how many words and patterns reuse what other
+         books teach and how many are new, and that the user confirms the new
+         ones and clicks Publish. Never say it is published until they have
+         done that.
 
       The recipe:
       ${chapterRecipe()}
 
       Senses:
       ${SENSE_RULES}
+
+      Patterns:
+      ${PATTERN_RULES}
 
       To copy someone's chapter into the user's own book, call remixChapter and
       show the draft. To open a chapter, use <OpenYallaChapter>.
@@ -316,11 +337,14 @@ export function useLibraryChatArea(userTexts: () => readonly string[]): ChatArea
         <tool-call>findSenses</tool-call>
       </assistant>
       <assistant>
+        <tool-call>findPatterns</tool-call>
+      </assistant>
+      <assistant>
         <tool-call>proposeChapter</tool-call>
       </assistant>
       <assistant>
         <ui>
-          <Markdown>Here's the chapter for a new book, Rabbit stories: 12 words (4 reuse senses other books teach, 8 are new) and 2 patterns. Confirm the new senses, then click Publish.</Markdown>
+          <Markdown>Here's the chapter for a new book, Rabbit stories: 12 words (4 reuse senses other books teach, 8 are new) and 2 patterns (one reuses -(으)면, one is new). Confirm the new senses and pattern, then click Publish.</Markdown>
           <ChapterDraft draftId="draft id from proposeChapter" />
         </ui>
       </assistant>

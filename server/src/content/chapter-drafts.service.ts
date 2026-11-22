@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { getBookContent, isBuiltInBook, type BookContent } from '../learning/book-content';
+import { getBookContent, isBuiltInBook, patternEntriesOf, type BookContent } from '../learning/book-content';
 import { findCatalogueBook } from '../learning/book-catalogue';
 import { BookContentService } from '../learning/book-content.service';
 import {
   BookRepository,
   BookSlugTakenError,
   ChapterChangedError,
+  PatternTakenError,
   SenseTakenError,
   type ChapterRecord,
 } from '../persistence/book.repository';
@@ -14,6 +15,7 @@ import {
   chapterAsDraft,
   chapterDraftPayloadSchema,
   chapterDraftProblems,
+  patternRegistryProblems,
   publishedChapter,
   senseRegistryProblems,
   targetLanguageOf,
@@ -44,6 +46,7 @@ function frozenOf(record: ChapterRecord): FrozenChapter {
     words: content.vocabulary.map((entry) => entry.targetLanguageText),
     senseIds: record.senseIds,
     patternCount: content.patterns.length,
+    patternIds: content.patterns.map((_, i) => record.patternIds[i] ?? []),
   };
 }
 
@@ -95,6 +98,8 @@ export class ChapterDraftsService {
       }),
       // A remix goes into a book of the remixer's, chosen in the draft.
       { bookSlug: purpose === 'edit' ? ref.book : '', language },
+      // Each pattern keeps the entries it teaches, from the file or the chapter's `patternIds`.
+      parsed.patterns.map((_, i) => patternEntriesOf(content, `ch${ref.chapter}/patterns/${i}`).map((entry) => entry.id)),
     );
     return {
       payload,
@@ -110,9 +115,11 @@ export class ChapterDraftsService {
     const problems = chapterDraftProblems(payload, frozen);
     if (!payload) return problems;
     if (!frozen) problems.push(...(await this.bookProblems(payload, draft.ownerUserId)));
+    const language = targetLanguageOf(payload);
     if (this.books.isAvailable()) {
-      problems.push(...senseRegistryProblems(payload, await this.content.registry(targetLanguageOf(payload))));
+      problems.push(...senseRegistryProblems(payload, await this.content.registry(language)));
     }
+    problems.push(...patternRegistryProblems(payload, (await this.content.patterns(language)).byId));
     return problems;
   }
 
@@ -159,6 +166,10 @@ export class ChapterDraftsService {
         // The registry is stale: the next check sees the sense that was added.
         this.content.clear(payload.bookSlug.trim() || payload.newBook.slug.trim(), language.target);
         throw new ChapterDraftError(409, error.message, [{ path: 'vocabulary', message: error.message }]);
+      }
+      if (error instanceof PatternTakenError) {
+        this.content.clear(payload.bookSlug.trim() || payload.newBook.slug.trim(), language.target);
+        throw new ChapterDraftError(409, error.message, [{ path: 'patterns', message: error.message }]);
       }
       if (error instanceof BookSlugTakenError) {
         throw new ChapterDraftError(409, error.message, [{ path: 'newBook.slug', message: error.message }]);

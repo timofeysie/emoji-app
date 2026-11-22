@@ -18,10 +18,20 @@ const sensesQuerySchema = z.object({
     .pipe(z.array(z.string().max(100)).min(1).max(60)),
 });
 
+const patternsQuerySchema = z.object({
+  language: z.string().regex(/^[a-z]{2,3}$/).default('ko'),
+  /** Repeated: `spelling=-아/어지다&spelling=-네`. Spellings contain commas, so not one list. */
+  spelling: z
+    .union([z.string(), z.array(z.string())])
+    .transform((value) => [...new Set((Array.isArray(value) ? value : [value]).map((spelling) => spelling.trim()).filter(Boolean))])
+    .pipe(z.array(z.string().max(300)).min(1).max(10)),
+});
+
 /**
  * Library chapters (docs/hashbrown/creating-games-with-hashbrown.md →
- * Feature 2): the sense lookup the AI and the editor use before deciding a
- * word's sense (G7), the caller's books, and archiving. Reading books is
+ * Feature 2): the sense and grammar-pattern lookups the AI and the editor
+ * use before deciding a word's sense (G7) or a pattern's entries (GP5), the
+ * caller's books, and archiving. Reading books is
  * YALLA's (`/api/yalla/books`).
  */
 @Controller('api')
@@ -41,6 +51,17 @@ export class LibraryController {
       return;
     }
     res.status(200).json({ words: await this.content.findSenses(parsed.data.language, parsed.data.words) });
+  }
+
+  /** `?spelling=-아/어지다&spelling=…`: each book pattern's matching registry entries (docs/yalla/grammar-learning-objects.md). */
+  @Get('patterns')
+  async findPatterns(@Query() query: unknown, @Res() res: Response): Promise<void> {
+    const parsed = patternsQuerySchema.safeParse(query);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Send spelling=… once per pattern (1–10 patterns)' });
+      return;
+    }
+    res.status(200).json({ patterns: await this.content.findPatterns(parsed.data.language, parsed.data.spelling) });
   }
 
   @Get('books/mine')

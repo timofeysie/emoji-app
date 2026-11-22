@@ -15,6 +15,7 @@ import type { ChapterDraftOutput } from '../library/chapter-draft.schema';
 import {
   emptyChapterContent,
   emptyDecision,
+  findPatterns,
   findSenses,
   getChapterDraft,
   publishChapterDraft,
@@ -22,8 +23,10 @@ import {
   yallaChapterPath,
   type ChapterDraftContent,
   type ChapterDraftView as ChapterDraftData,
+  type FoundPatterns,
   type FoundSense,
 } from '../library/library-api';
+import { suggestEntries } from '../library/pattern-suggest';
 import { suggestDecision } from '../library/sense-suggest';
 import { useChapterGeneration } from '../library/useChapterGeneration';
 
@@ -37,7 +40,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Network error: could not reach the server.';
 }
 
-/** The model's chapter, keeping the book choice. Words start undecided until senses are looked up. */
+/** The model's chapter, keeping the book choice. Words and patterns start undecided until they are looked up. */
 function fromModel(output: ChapterDraftOutput, current: ChapterDraftContent): ChapterDraftContent {
   return {
     ...current,
@@ -50,6 +53,7 @@ function fromModel(output: ChapterDraftOutput, current: ChapterDraftContent): Ch
       ...pattern,
       sampleSentences: pattern.sampleSentences.map((sample) => ({ ...sample })),
       exercises: pattern.exercises.map((exercise) => ({ ...exercise })),
+      entries: [],
     })),
   };
 }
@@ -68,6 +72,7 @@ export function ChapterDraftView({ draftId }: { draftId: string }) {
   const [sourceText, setSourceText] = useState('');
   const [language, setLanguage] = useState<LanguagePair>({ target: 'ko', native: 'en' });
   const [senses, setSenses] = useState<ReadonlyMap<string, FoundSense[]>>(new Map());
+  const [patternMatches, setPatternMatches] = useState<ReadonlyMap<string, FoundPatterns>>(new Map());
   const [lookingUp, setLookingUp] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [conflict, setConflict] = useState<ChapterDraftData | null>(null);
@@ -193,26 +198,43 @@ export function ChapterDraftView({ draftId }: { draftId: string }) {
     };
   }, [save]);
 
-  /** Looks up the words' existing senses and fills in a guess for every undecided word. */
-  const lookUpSenses = useCallback(
+  /**
+   * Looks up the words' existing senses and the patterns' registry entries,
+   * and fills in a guess for every undecided word and unlinked pattern.
+   */
+  const lookUp = useCallback(
     async (base?: ChapterDraftContent) => {
       const current = base ?? latest.current.content;
+      const target = current.language?.target ?? latest.current.language.target;
       setLookingUp(true);
       try {
-        const found = await findSenses(
-          current.vocabulary.map((word) => word.targetLanguageText),
-          current.language?.target ?? latest.current.language.target,
-        );
+        const [found, patterns] = await Promise.all([
+          findSenses(current.vocabulary.map((word) => word.targetLanguageText), target),
+          findPatterns(current.patterns.map((pattern) => pattern.patternTarget), target),
+        ]);
         const byWord = new Map(found.map((entry) => [entry.word, entry.senses]));
+        const bySpelling = new Map(patterns.map((entry) => [entry.spelling, entry]));
         setSenses(byWord);
+        setPatternMatches(bySpelling);
         const vocabulary = current.vocabulary.map((word) => {
           const options = byWord.get(word.targetLanguageText.trim());
           return word.sense.decision === 'undecided' && options
             ? { ...word, sense: suggestDecision(word.targetLanguageText, word.nativeLanguageText, options) }
             : word;
         });
-        if (vocabulary.some((word, i) => word !== current.vocabulary[i])) {
-          setContent((now) => ({ ...now, vocabulary }));
+        const linked = current.patterns.map((pattern) => {
+          if (pattern.entries.length > 0) return pattern;
+          const entries = suggestEntries(pattern, bySpelling.get(pattern.patternTarget.trim()));
+          return entries.length > 0 ? { ...pattern, entries } : pattern;
+        });
+        const wordsChanged = vocabulary.some((word, i) => word !== current.vocabulary[i]);
+        const patternsChanged = linked.some((pattern, i) => pattern !== current.patterns[i]);
+        if (wordsChanged || patternsChanged) {
+          setContent((now) => ({
+            ...now,
+            vocabulary: wordsChanged ? vocabulary : now.vocabulary,
+            patterns: patternsChanged ? linked : now.patterns,
+          }));
           changed();
         }
       } catch (error) {
@@ -224,20 +246,20 @@ export function ChapterDraftView({ draftId }: { draftId: string }) {
     [changed],
   );
 
-  // Once per draft: show the existing senses and default undecided words to them (reuse when there is one).
+  // Once per draft: show the existing senses and patterns, and default undecided ones to them (reuse when there is one).
   const lookedUpFor = useRef<string | null>(null);
   useEffect(() => {
     if (!view || lookedUpFor.current === view.draft.id) return;
     lookedUpFor.current = view.draft.id;
     const payload = view.draft.payload;
-    if (view.draft.status === 'draft' && payload && payload.vocabulary.length > 0) void lookUpSenses(payload);
-  }, [view, lookUpSenses]);
+    if (view.draft.status === 'draft' && payload && (payload.vocabulary.length > 0 || payload.patterns.length > 0)) void lookUp(payload);
+  }, [view, lookUp]);
 
   const generation = useChapterGeneration((output) => {
     const next = fromModel(output, latest.current.content);
     setContent(next);
     changed();
-    void lookUpSenses(next);
+    void lookUp(next);
   });
 
   if (loadError) {
@@ -386,7 +408,8 @@ export function ChapterDraftView({ draftId }: { draftId: string }) {
         books={view.chapter?.books ?? []}
         frozen={frozen}
         senses={senses}
-        onLookUpSenses={() => void lookUpSenses()}
+        patternMatches={patternMatches}
+        onLookUp={() => void lookUp()}
         lookingUp={lookingUp}
         problems={problems}
         readOnly={readOnly}

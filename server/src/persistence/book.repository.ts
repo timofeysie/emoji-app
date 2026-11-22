@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { ClientSession } from 'mongoose';
 import { Types } from 'mongoose';
-import type { NewSense } from '../content/chapter-draft';
+import type { BuiltChapter } from '../content/chapter-draft';
 import type { KogsChapterV1 } from '../content/kogs-chapter';
+import { patternKey } from '../learning/grammar-pattern';
 import type { VocabularyKind } from '../learning/learning-object';
+import type { StoredPattern } from '../learning/pattern-registry';
 import type { ChapterRefRecord, LanguagePair } from './content-draft.repository';
 import { asObjectId } from './models';
 import { MongoService } from './mongo.service';
@@ -23,6 +25,8 @@ export type ChapterRecord = {
   chapter: string;
   content: KogsChapterV1;
   senseIds: string[];
+  /** Book pattern i's grammar-pattern entries (H4c); empty before. */
+  patternIds: string[][];
   sourceId: string | null;
   remixedFrom: ChapterRefRecord | null;
   publishedAt: string;
@@ -43,6 +47,13 @@ export type SenseRecord = {
 export class SenseTakenError extends Error {
   constructor(public readonly senseId: string) {
     super(`The sense ${senseId} was added meanwhile: reuse it.`);
+  }
+}
+
+/** A new grammar pattern `(language, form, meaning)` was added by someone else meanwhile. */
+export class PatternTakenError extends Error {
+  constructor(public readonly patternId: string) {
+    super(`The grammar pattern ${patternId} was added meanwhile: reuse it.`);
   }
 }
 
@@ -71,6 +82,7 @@ type LeanChapter = {
   chapter: string;
   content: KogsChapterV1;
   senseIds: string[];
+  patternIds?: string[][];
   sourceId?: Types.ObjectId | null;
   remixedFrom?: ChapterRefRecord | null;
   publishedAt: Date;
@@ -96,6 +108,7 @@ function toChapter(chapter: LeanChapter): ChapterRecord {
     chapter: chapter.chapter,
     content: chapter.content,
     senseIds: [...chapter.senseIds],
+    patternIds: (chapter.patternIds ?? []).map((ids) => [...ids]),
     sourceId: chapter.sourceId ? chapter.sourceId.toString() : null,
     remixedFrom: chapter.remixedFrom
       ? { book: chapter.remixedFrom.book, chapter: chapter.remixedFrom.chapter, revision: chapter.remixedFrom.revision ?? null }
@@ -164,16 +177,32 @@ export class BookRepository {
     }));
   }
 
+  /** Grammar patterns users added, and the spellings and sources books gave them (H4c). */
+  async listPatterns(language: string): Promise<StoredPattern[]> {
+    const { Pattern } = this.mongoService.getModels();
+    const rows = await Pattern.find({ language }).lean();
+    return rows.map((row) => ({
+      language: row.language,
+      form: row.form,
+      meaning: row.meaning,
+      headword: row.headword,
+      gloss: row.gloss,
+      spellings: [...(row.spellings ?? [])],
+      sources: [...(row.sources ?? [])],
+    }));
+  }
+
   /**
    * Publishes a new chapter in one transaction: the book (when new), the
-   * chapter with the next number, the new senses, and each sense's source.
-   * @throws BookSlugTakenError, SenseTakenError
+   * chapter with the next number, the new senses and grammar patterns, and
+   * each one's source.
+   * @throws BookSlugTakenError, SenseTakenError, PatternTakenError
    */
   async publishChapter(input: {
     book: { slug: string; isNew: boolean; title: string; language: LanguagePair };
     ownerUserId: string;
     /** Called with the chapter number, which is only known inside the transaction. */
-    build: (chapter: string) => { content: KogsChapterV1; senseIds: string[]; newSenses: NewSense[] };
+    build: (chapter: string) => BuiltChapter;
     sourceId: string | null;
     remixedFrom: ChapterRefRecord | null;
   }): Promise<ChapterRecord> {
@@ -207,6 +236,7 @@ export class BookRepository {
             chapter,
             content: built.content,
             senseIds: built.senseIds,
+            patternIds: built.patternIds,
             sourceId: input.sourceId ? asObjectId(input.sourceId) : null,
             remixedFrom: input.remixedFrom,
             publishedAt: new Date(),
@@ -216,6 +246,7 @@ export class BookRepository {
         { session },
       );
       await this.writeSenses(input.book.slug, chapter, built, input.ownerUserId, 0, session);
+      await this.writePatterns(input.book.slug, chapter, built, input.ownerUserId, session);
       return toChapter(created.toObject() as unknown as LeanChapter);
     });
   }
@@ -223,15 +254,15 @@ export class BookRepository {
   /**
    * Replaces a published chapter's content with an edit (G8: the caller has
    * checked that its vocabulary only grew). Senses for the appended entries
-   * are added in the same transaction.
-   * @throws ChapterChangedError, SenseTakenError
+   * and new grammar patterns are added in the same transaction.
+   * @throws ChapterChangedError, SenseTakenError, PatternTakenError
    */
   async updateChapter(input: {
     bookSlug: string;
     chapter: string;
     revision: number;
     ownerUserId: string;
-    built: { content: KogsChapterV1; senseIds: string[]; newSenses: NewSense[] };
+    built: BuiltChapter;
   }): Promise<ChapterRecord> {
     const { Chapter } = this.mongoService.getModels();
     return this.withTransaction(async (session) => {
@@ -240,11 +271,15 @@ export class BookRepository {
       const published = current.senseIds.length;
       const updated = await Chapter.findOneAndUpdate(
         { bookSlug: input.bookSlug, chapter: input.chapter, revision: input.revision },
-        { $set: { content: input.built.content, senseIds: input.built.senseIds, publishedAt: new Date() }, $inc: { revision: 1 } },
+        {
+          $set: { content: input.built.content, senseIds: input.built.senseIds, patternIds: input.built.patternIds, publishedAt: new Date() },
+          $inc: { revision: 1 },
+        },
         { returnDocument: 'after', session },
       ).lean();
       if (!updated) throw new ChapterChangedError();
       await this.writeSenses(input.bookSlug, input.chapter, input.built, input.ownerUserId, published, session);
+      await this.writePatterns(input.bookSlug, input.chapter, input.built, input.ownerUserId, session);
       return toChapter(updated as unknown as LeanChapter);
     });
   }
@@ -263,7 +298,7 @@ export class BookRepository {
   private async writeSenses(
     bookSlug: string,
     chapter: string,
-    built: { senseIds: string[]; newSenses: NewSense[] },
+    built: Pick<BuiltChapter, 'senseIds' | 'newSenses'>,
     ownerUserId: string,
     from: number,
     session: ClientSession,
@@ -296,6 +331,67 @@ export class BookRepository {
         { $addToSet: { sources: `${bookSlug}/ch${chapter}/vocabulary/${i}` } },
         { session },
       );
+    }
+  }
+
+  /**
+   * New grammar patterns, then each book pattern as a source of its DB
+   * entries. A book pattern that teaches one entry also gives it its
+   * spelling (GP4), so the next book that writes it the same way matches.
+   * A combination's spelling isn't kept: one of its entries may be in the
+   * file, and a match on the others alone would mislead. Entries in the
+   * registry file keep their file: `$addToSet` without upsert leaves them
+   * alone. Idempotent, so an edit writes every pattern again.
+   */
+  private async writePatterns(
+    bookSlug: string,
+    chapter: string,
+    built: Pick<BuiltChapter, 'content' | 'patternIds' | 'newPatterns'>,
+    ownerUserId: string,
+    session: ClientSession,
+  ): Promise<void> {
+    const { Pattern } = this.mongoService.getModels();
+    for (const pattern of built.newPatterns) {
+      try {
+        await Pattern.create(
+          [
+            {
+              language: pattern.language,
+              form: pattern.form,
+              meaning: pattern.meaning,
+              headword: pattern.headword,
+              gloss: pattern.gloss,
+              createdByUserId: asObjectId(ownerUserId),
+            },
+          ],
+          { session },
+        );
+      } catch (error) {
+        if (isDuplicateKey(error)) throw new PatternTakenError(pattern.id);
+        throw error;
+      }
+    }
+    for (let i = 0; i < built.patternIds.length; i++) {
+      const spelling = built.content.patterns[i]?.patternTarget ?? '';
+      let readable = built.patternIds[i].length === 1;
+      try {
+        if (readable) patternKey(spelling);
+      } catch {
+        readable = false;
+      }
+      for (const id of built.patternIds[i]) {
+        const [language, , form, meaning] = id.split('/');
+        await Pattern.updateOne(
+          { language, form, meaning },
+          {
+            $addToSet: {
+              sources: `${bookSlug}/ch${chapter}/patterns/${i}`,
+              ...(readable ? { spellings: spelling } : {}),
+            },
+          },
+          { session },
+        );
+      }
     }
   }
 

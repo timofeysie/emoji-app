@@ -46,6 +46,12 @@ export type BookContent = {
   patterns: ReadonlyMap<string, BookPattern[]>;
   /** The language's pattern registry: which entries each book pattern teaches. */
   patternIndex: PatternIndex;
+  /**
+   * Other books' patterns, book-qualified (`korean-language-book/ch27/patterns/0`),
+   * as cloze distractors after the book's own: a user book with a few
+   * patterns has too few endings of its own.
+   */
+  distractorPatterns: readonly BookPattern[];
 };
 
 function patternsByChapter(rawChapters: readonly unknown[]): Map<string, BookPattern[]> {
@@ -115,6 +121,7 @@ export function buildBookContent(
     senseById,
     patterns: patternsByChapter(rawChapters),
     patternIndex: filePatterns(registry.language),
+    distractorPatterns: [],
   };
 }
 
@@ -129,15 +136,20 @@ export function describeLearningObject(
   return pattern ? { word: pattern.headword, gloss: pattern.gloss, kind: GRAMMAR_PATTERN } : null;
 }
 
-/** The registry entries a book pattern teaches (`ch27/patterns/0`), in registry order. */
+/**
+ * The registry entries a book pattern teaches, in registry order (a user
+ * book: in the order the chapter links them). `sourceRef` is this book's
+ * (`ch27/patterns/0`) or book-qualified (a distractor from another book).
+ */
 export function patternEntriesOf(content: BookContent, sourceRef: string): readonly GrammarPattern[] {
-  return content.patternIndex.bySource.get(`${content.book}/${sourceRef}`) ?? [];
+  const qualified = parseQualifiedSourceRef(sourceRef) ? sourceRef : `${content.book}/${sourceRef}`;
+  return content.patternIndex.bySource.get(qualified) ?? [];
 }
 
 /**
  * The chapter's grammar-pattern learning objects (docs/yalla/grammar-learning-objects.md),
  * one per registry entry, in pattern order. A book pattern with no linked
- * entry teaches nothing yet (user books until H4c).
+ * entry teaches nothing (a user chapter published before H4c).
  */
 export function chapterPatternObjects(content: BookContent, chapter: string): LearningObject[] {
   const objects = new Map<string, LearningObject>();
@@ -198,30 +210,42 @@ export function chapterLearningObjects(content: BookContent, chapter: string): L
 /**
  * A user book (docs/hashbrown/creating-games-with-hashbrown.md → Feature 2):
  * each published chapter stores its entries' learning objects
- * (`senseIds[i]` for entry i), so a reused sense from any book or the
- * registry file maps without a source in the file. `senses` is the merged
- * registry (file plus DB layer).
+ * (`senseIds[i]` for entry i, `patternIds[i]` for book pattern i), so a
+ * reused sense or pattern from any book or the registry file maps without a
+ * source in the file. `senses` and `patternIndex` are the merged registries
+ * (file plus DB layer).
  */
 export function buildUserBookContent(
   book: string,
   language: string,
   senses: ReadonlyMap<string, SenseEntry>,
-  chapters: ReadonlyArray<{ content: unknown; senseIds: readonly string[] }>,
+  chapters: ReadonlyArray<{ content: unknown; senseIds: readonly string[]; patternIds?: ReadonlyArray<readonly string[]> }>,
+  patternIndex: PatternIndex = filePatterns(language),
 ): BookContent {
   const vocabularies = new Map<string, ChapterVocabulary>();
   const senseBySourceRef = new Map<string, SenseEntry>();
   const patterns = new Map<string, BookPattern[]>();
-  for (const { content, senseIds } of chapters) {
+  const bySource = new Map(patternIndex.bySource);
+  for (const { content, senseIds, patternIds = [] } of chapters) {
     const vocabulary = chapterVocabulary(content);
     vocabularies.set(vocabulary.chapter, vocabulary);
-    patterns.set(vocabulary.chapter, bookPatternsOf(content));
+    const bookPatterns = bookPatternsOf(content);
+    patterns.set(vocabulary.chapter, bookPatterns);
     vocabulary.entries.forEach((entry) => {
       const index = Number(entry.sourceRef.split('/').pop());
       const sense = senses.get(senseIds[index] ?? '');
       if (sense) senseBySourceRef.set(entry.sourceRef, sense);
     });
+    bookPatterns.forEach((pattern, i) => {
+      const entries = (patternIds[i] ?? []).flatMap((id) => patternIndex.byId.get(id) ?? []);
+      bySource.set(`${book}/${pattern.sourceRef}`, entries);
+    });
   }
-  // Their book patterns aren't linked to registry entries until H4c, so they teach no patterns yet.
+  // The built-in book of the language lends its endings as distractors.
+  const lender = language === KOREAN ? getBookContent(KOREAN_BOOK) : null;
+  const distractorPatterns = lender
+    ? [...lender.patterns.values()].flat().map((pattern) => ({ ...pattern, sourceRef: `${lender.book}/${pattern.sourceRef}` }))
+    : [];
   return {
     book,
     language,
@@ -229,7 +253,8 @@ export function buildUserBookContent(
     senseBySourceRef,
     senseById: senses,
     patterns,
-    patternIndex: filePatterns(language),
+    patternIndex: { ...patternIndex, bySource },
+    distractorPatterns,
   };
 }
 

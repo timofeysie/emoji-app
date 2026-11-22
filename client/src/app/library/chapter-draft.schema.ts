@@ -8,8 +8,10 @@ const dialogLineSchema = s.object('One line of the passage', {
   speechNative: s.string('Its translation into the learner\'s language'),
 });
 
-const patternSchema = s.object('A grammar pattern the passage uses', {
-  patternTarget: s.string('The smallest teachable pattern, e.g. "-았/었더니"'),
+const patternFields = {
+  patternTarget: s.string(
+    'The smallest teachable pattern as the passage uses it, after what it attaches to, e.g. "VERB + -았/었더니" or "ADJECTIVE + -아/어/여지네"',
+  ),
   patternNative: s.string('What it means or does, e.g. "when I did …, (I found that) …"'),
   type: s.string('"casual", "polite" or "formal", or "" if it doesn\'t apply'),
   exampleSentenceTarget: s.string('The passage sentence that uses it, exactly as written'),
@@ -25,6 +27,23 @@ const patternSchema = s.object('A grammar pattern the passage uses', {
       answerKey: s.string('The answer in the target language'),
     }),
   ),
+};
+
+const patternSchema = s.object('A grammar pattern the passage uses', patternFields);
+
+/** One registry entry a pattern teaches (GP5), as the chat writes it after `findPatterns`. */
+export const patternEntrySchema = s.object('A grammar entry the pattern teaches', {
+  decision: s.enumeration('reuse an entry from findPatterns, or new when none teaches this grammar', ['reuse', 'new']),
+  reuseId: s.string('reuse: the id from findPatterns, e.g. ko/grammar-pattern/a-eo-jida/become; new: ""'),
+  headword: s.string('new: the smallest pattern in dictionary style, e.g. "-아/어/여지다"; reuse: ""'),
+  meaning: s.string('new: an ASCII slug of its first English meaning, e.g. "become"; reuse: ""'),
+  gloss: s.string('new: what it means, e.g. "gets to be, becomes"; reuse: ""'),
+});
+
+/** A pattern with the entries it teaches, as the chat's `proposeChapter` and `reviseChapterDraft` take it. */
+export const patternWithEntriesSchema = s.object('A grammar pattern the passage uses', {
+  ...patternFields,
+  entries: s.array('The grammar it teaches: usually one entry, two for a combination like -아/어지네 (-아/어지다 and -네)', patternEntrySchema),
 });
 
 /** One word, without a sense: the Draft Game page matches senses itself. */
@@ -62,12 +81,14 @@ export const chapterDraftSchema = s.object('A library chapter made from a passag
   vocabulary: s.array('The words to teach, in the order the passage uses them', chapterWordSchema),
 });
 
-/** What the chat's `proposeChapter` takes: the same chapter, each word with its sense. */
+/** What the chat's `proposeChapter` takes: the same chapter, each word with its sense and each pattern with its entries. */
 export const chapterProposalSchema = s.object('A library chapter made from a passage', {
   ...chapterFields,
   vocabulary: s.array('The words to teach, in the order the passage uses them', chapterWordWithSenseSchema),
+  patterns: s.array('The grammar patterns to teach', patternWithEntriesSchema),
 });
 
 export type ChapterDraftOutput = s.Infer<typeof chapterDraftSchema>;
 export type ChapterProposalOutput = s.Infer<typeof chapterProposalSchema>;
 export type ChapterWordWithSense = s.Infer<typeof chapterWordWithSenseSchema>;
+export type PatternWithEntries = s.Infer<typeof patternWithEntriesSchema>;

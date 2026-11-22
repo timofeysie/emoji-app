@@ -184,6 +184,31 @@ describe('Leitner on a library chapter', () => {
     expect(tracks.find((track) => track.learningObjectId === 'ko/lexeme/시험/test')).toMatchObject({ aspect: 'reading', level: 1 });
   });
 
+  it('asks the library chapter’s patterns as usage clozes on their linked entries (H4c)', async () => {
+    const { status } = await createGame({ aspects: ['usage'], count: 10, seed: 2 });
+
+    expect(status).toBe(201);
+    const questions = games.createLeitnerGame.mock.calls[0][0].questions;
+    expect(questions.map((question: Json) => [question.learning.learningObjectId, question.learning.sourceRef])).toEqual([
+      ['ko/grammar-pattern/at-eot-eoyo/did-polite', 'ch1/patterns/0'],
+      ['ko/grammar-pattern/eu-myeon/if', 'ch1/patterns/1'],
+    ]);
+    const ifWhen = questions[1];
+    expect(ifWhen.learning).toMatchObject({ book: BOOK, aspect: 'usage', target: '-(으)면', native: 'if, when' });
+    expect(ifWhen.text).toBe('토끼가 자___ 거북이가 이겨요. (If the rabbit sleeps, the turtle wins.)');
+    // Two patterns of its own aren't enough endings: the built-in book lends the rest, never another -(으)면.
+    const options = ifWhen.answerOptions.map((option: Json) => option.text);
+    expect(options).toHaveLength(4);
+    expect(ifWhen.answerOptions.filter((option: Json) => option.isCorrect).map((option: Json) => option.text)).toEqual(['면']);
+    expect(options.filter((text: string) => text === '면')).toHaveLength(1);
+
+    const chapter = await progress.forChapter(PLAYER, { book: BOOK, chapter: '1', scope: 'chapter', aspects: ['usage'], now: new Date(NOW) });
+    expect(chapter.tracks.map((track) => [track.learningObjectId, track.word])).toEqual([
+      ['ko/grammar-pattern/at-eot-eoyo/did-polite', '-았/었어요'],
+      ['ko/grammar-pattern/eu-myeon/if', '-(으)면'],
+    ]);
+  });
+
   it('a wrong learning object for the user book’s sourceRef is refused', async () => {
     const req = { auth: { sub: 'sub-1', username: 'mia' } } as AuthedRequest;
     const res = createResponseMock();

@@ -68,38 +68,160 @@ export function patternId(language: string, headword: string, meaning: string): 
   return learningObjectId({ language, kind: GRAMMAR_PATTERN, word: patternForm(headword), sense: meaning });
 }
 
-/** @throws on a duplicate id, a malformed source or an unreadable spelling */
-export function buildPatternIndex(raw: unknown): PatternIndex {
-  const registry = patternRegistrySchema.parse(raw);
+function indexPatterns(language: string, patterns: readonly GrammarPattern[], strict: boolean): PatternIndex {
   const byId = new Map<string, GrammarPattern>();
   const byKey = new Map<string, GrammarPattern[]>();
   const bySource = new Map<string, GrammarPattern[]>();
-  for (const entry of registry.patterns) {
-    const pattern: GrammarPattern = {
-      ...entry,
-      id: patternId(registry.language, entry.headword, entry.meaning),
-      language: registry.language,
-      form: patternForm(entry.headword),
-      key: patternKey(entry.headword),
-    };
+  for (const pattern of patterns) {
     if (byId.has(pattern.id)) throw new Error(`Two pattern entries have the id ${pattern.id}: give one another meaning.`);
     byId.set(pattern.id, pattern);
-    for (const key of new Set([entry.headword, ...entry.spellings].map(patternKey))) {
-      byKey.set(key, [...(byKey.get(key) ?? []), pattern]);
+    const keys = new Set<string>();
+    for (const spelling of [pattern.headword, ...pattern.spellings]) {
+      try {
+        keys.add(patternKey(spelling));
+      } catch (error) {
+        if (strict) throw error;
+      }
     }
-    for (const source of entry.sources) {
+    for (const key of keys) byKey.set(key, [...(byKey.get(key) ?? []), pattern]);
+    for (const source of pattern.sources) {
       if (!parseQualifiedSourceRef(source)?.sourceRef.includes('/patterns/')) {
+        if (!strict) continue;
         throw new Error(`Pattern ${pattern.id} has a source that isn't a book pattern: '${source}'.`);
       }
       bySource.set(source, [...(bySource.get(source) ?? []), pattern]);
     }
   }
-  return { language: registry.language, byId, byKey, bySource };
+  return { language, byId, byKey, bySource };
+}
+
+/** @throws on a duplicate id, a malformed source or an unreadable spelling */
+export function buildPatternIndex(raw: unknown): PatternIndex {
+  const registry = patternRegistrySchema.parse(raw);
+  return indexPatterns(
+    registry.language,
+    registry.patterns.map((entry) => ({
+      ...entry,
+      id: patternId(registry.language, entry.headword, entry.meaning),
+      language: registry.language,
+      form: patternForm(entry.headword),
+      key: patternKey(entry.headword),
+    })),
+    true,
+  );
+}
+
+/** An entry users added (the `patterns` collection), or extra spellings and sources of one. */
+export type StoredPattern = {
+  language: string;
+  form: string;
+  meaning: string;
+  headword: string;
+  gloss: string;
+  spellings: readonly string[];
+  sources: readonly string[];
+};
+
+/**
+ * The file's entries plus the ones users added (H4c). The file wins on a
+ * clash, but a stored row's spellings and sources are added to it. A stored
+ * row whose headword no longer gives its form is skipped: its id is fixed.
+ * `extraSpellings` are spellings seen in books (`계속 더 … -아/어/여지네` →
+ * both entries it teaches), so the next book that writes it the same way
+ * matches them all.
+ */
+export function mergePatterns(
+  file: PatternIndex,
+  stored: readonly StoredPattern[],
+  extraSpellings: ReadonlyArray<{ id: string; spelling: string }> = [],
+): PatternIndex {
+  const merged = new Map<string, GrammarPattern>();
+  for (const pattern of file.byId.values()) {
+    merged.set(pattern.id, { ...pattern, spellings: [...pattern.spellings], sources: [...pattern.sources] });
+  }
+  const addAll = (into: string[], values: readonly string[]) => {
+    for (const value of values) if (!into.includes(value)) into.push(value);
+  };
+  for (const row of stored) {
+    if (row.language !== file.language) continue;
+    let id: string;
+    let key: string;
+    try {
+      id = patternId(row.language, row.headword, row.meaning);
+      key = patternKey(row.headword);
+    } catch {
+      continue;
+    }
+    if (patternForm(row.headword) !== row.form) continue;
+    const existing = merged.get(id);
+    if (existing) {
+      addAll(existing.spellings, row.spellings);
+      addAll(existing.sources, row.sources);
+    } else {
+      merged.set(id, {
+        id,
+        language: row.language,
+        form: row.form,
+        key,
+        meaning: row.meaning,
+        headword: row.headword,
+        gloss: row.gloss,
+        spellings: [...row.spellings],
+        sources: [...row.sources],
+      });
+    }
+  }
+  for (const { id, spelling } of extraSpellings) {
+    const pattern = merged.get(id);
+    if (pattern && spelling.trim()) addAll(pattern.spellings, [spelling.trim()]);
+  }
+  return indexPatterns(file.language, [...merged.values()], false);
 }
 
 /** Entries a spelling matches by key (GP2): reuse one by default, the user may change it. */
 export function matchPatterns(index: PatternIndex, spelling: string): readonly GrammarPattern[] {
   return index.byKey.get(patternKey(spelling)) ?? [];
+}
+
+export type PatternMatches = {
+  /** The spelling's key, or null when it can't be read (`problem` says why). */
+  key: string | null;
+  problem: string | null;
+  /** Entries with the same key: reuse them by default (several for a combination seen before). */
+  exact: readonly GrammarPattern[];
+  /** Entries whose key is inside it (`-아/어지다` and `-네` in `-아/어/여지네`): suggestions only. */
+  contained: readonly GrammarPattern[];
+};
+
+/** A key's stem for "contained" matching: no spaces, and a dictionary `다` dropped (`아/어지다` → `아/어지`). */
+function keyStem(key: string): string {
+  const compact = key.replace(/ /g, '');
+  return compact.length > 1 && compact.endsWith('다') ? compact.slice(0, -1) : compact;
+}
+
+/**
+ * What the editor and the AI offer for a book pattern
+ * (docs/yalla/grammar-learning-objects.md → Matching at authoring time):
+ * exact matches, then entries found inside it. A one-syllable stem (`네`,
+ * `면`) only counts at the end of a token, where an ending is.
+ */
+export function findPatternMatches(index: PatternIndex, spelling: string): PatternMatches {
+  let key: string;
+  try {
+    key = patternKey(spelling);
+  } catch (error) {
+    return { key: null, problem: error instanceof Error ? error.message : String(error), exact: [], contained: [] };
+  }
+  const exact = index.byKey.get(key) ?? [];
+  const compact = key.replace(/ /g, '');
+  const tokens = key.split(' ');
+  const contained = [...index.byId.values()].filter((pattern) => {
+    if (exact.includes(pattern)) return false;
+    const stem = keyStem(pattern.key);
+    if (stem === compact) return false;
+    return stem.length === 1 ? tokens.some((token) => token.endsWith(stem)) : compact.includes(stem);
+  });
+  return { key, problem: null, exact, contained };
 }
 
 let korean: PatternIndex | null = null;

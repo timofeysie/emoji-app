@@ -8,12 +8,16 @@ export const CHAPTER_LIMITS = {
   minVocabulary: 6,
   maxVocabulary: 30,
   maxPatterns: 5,
+  /** Registry entries one book pattern teaches (`-아/어지다` + `-네`). */
+  maxPatternEntries: 3,
   maxDialogLines: 100,
   maxTitleLength: 100,
   maxWordLength: 40,
   maxGlossLength: 120,
   maxSenseSlugLength: 40,
   maxBookSlugLength: 48,
+  maxPatternHeadwordLength: 60,
+  maxPatternGlossLength: 120,
 } as const;
 
 /** What the AI is asked for: about 10–15 words and 2–3 patterns. */

@@ -11,6 +11,7 @@ import {
   yallaChapterPath,
   type ChapterDraftView,
   type ChapterWord,
+  type PatternDecision,
 } from '../../library/library-api';
 
 const SHOWN = 8;
@@ -28,11 +29,30 @@ function SenseLabel({ word }: { word: ChapterWord }) {
   return <span className="text-destructive">no sense yet</span>;
 }
 
+function EntryLabel({ entry }: { entry: PatternDecision }) {
+  if (entry.decision === 'reuse') return <span className="text-muted-foreground">reuses {entry.reuseId}</span>;
+  return (
+    <span className={entry.confirmed ? 'text-emerald-700' : 'text-amber-700'}>
+      new pattern {entry.headword} ({entry.meaning}){entry.confirmed ? ' ✓' : ''}
+    </span>
+  );
+}
+
+/** `Confirm 3 new senses and 1 new pattern`. */
+function confirmLabel(senses: number, patterns: number): string {
+  const parts = [
+    senses > 0 ? `${senses} new sense${senses === 1 ? '' : 's'}` : '',
+    patterns > 0 ? `${patterns} new pattern${patterns === 1 ? '' : 's'}` : '',
+  ].filter(Boolean);
+  return `Confirm ${parts.join(' and ')}`;
+}
+
 /**
  * A library chapter draft in the chat (docs/hashbrown/creating-games-with-hashbrown.md →
- * Feature 2): the book, the words with their sense decisions, the problems,
- * and Confirm new senses / Publish / Open in Draft Game / Discard. Only a
- * person confirms new senses (G7) and publishes (G1).
+ * Feature 2): the book, the words with their sense decisions, the patterns
+ * with the grammar they teach, the problems, and Confirm new senses and
+ * patterns / Publish / Open in Draft Game / Discard. Only a person confirms
+ * them (G7, GP5) and publishes (G1).
  */
 export function ChapterDraftCard({ draftId }: { draftId: string }) {
   const navigate = useNavigate();
@@ -73,7 +93,10 @@ export function ChapterDraftCard({ draftId }: { draftId: string }) {
   const content = draft.payload;
   const words = content?.vocabulary ?? [];
   const shown = showAll ? words : words.slice(0, SHOWN);
-  const unconfirmed = words.filter((word) => word.sense.decision === 'new' && !word.sense.confirmed).length;
+  const patterns = content?.patterns ?? [];
+  const unconfirmedSenses = words.filter((word) => word.sense.decision === 'new' && !word.sense.confirmed).length;
+  const unconfirmedPatterns = patterns.flatMap((pattern) => pattern.entries).filter((entry) => entry.decision === 'new' && !entry.confirmed).length;
+  const unconfirmed = unconfirmedSenses + unconfirmedPatterns;
   const bookName = draft.editsChapter
     ? `${draft.editsChapter.book}, chapter ${draft.editsChapter.chapter}`
     : content?.bookSlug
@@ -106,6 +129,10 @@ export function ChapterDraftCard({ draftId }: { draftId: string }) {
           vocabulary: content.vocabulary.map((word) =>
             word.sense.decision === 'new' ? { ...word, sense: { ...word.sense, confirmed: true } } : word,
           ),
+          patterns: content.patterns.map((pattern) => ({
+            ...pattern,
+            entries: pattern.entries.map((entry) => (entry.decision === 'new' ? { ...entry, confirmed: true } : entry)),
+          })),
         },
       });
       setView(next);
@@ -161,6 +188,29 @@ export function ChapterDraftCard({ draftId }: { draftId: string }) {
           {showAll ? 'Show fewer' : `Show all ${words.length}`}
         </button>
       )}
+      {patterns.length > 0 && (
+        <ul className="flex flex-col gap-0.5 text-sm">
+          {patterns.map((pattern, i) => (
+            <li key={i} className="flex flex-wrap items-baseline gap-x-2">
+              <span className="text-xs font-semibold text-muted-foreground">P{i + 1}.</span>
+              <span lang={content?.language?.target ?? 'ko'}>{pattern.patternTarget}</span>
+              <span className="text-xs text-muted-foreground">{pattern.patternNative}</span>
+              <span className="text-[11px]">
+                {pattern.entries.length === 0 ? (
+                  <span className="text-destructive">teaches nothing yet</span>
+                ) : (
+                  pattern.entries.map((entry, j) => (
+                    <span key={j}>
+                      {j > 0 && ' + '}
+                      <EntryLabel entry={entry} />
+                    </span>
+                  ))
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {draft.status === 'draft' && draft.problems.length > 0 && (
         <ul className="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
@@ -185,7 +235,7 @@ export function ChapterDraftCard({ draftId }: { draftId: string }) {
             {draft.mine && unconfirmed > 0 && (
               <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void onConfirmAll()}>
                 {busy === 'confirm' && <Loader2 className="animate-spin" aria-hidden />}
-                Confirm {unconfirmed} new sense{unconfirmed === 1 ? '' : 's'}
+                {confirmLabel(unconfirmedSenses, unconfirmedPatterns)}
               </Button>
             )}
             {draft.mine && (
@@ -218,7 +268,7 @@ export function ChapterDraftCard({ draftId }: { draftId: string }) {
       </div>
       {draft.mine && unconfirmed > 0 && (
         <p className="text-[11px] text-muted-foreground">
-          New senses become permanent learning objects once used. Check them here or in the Draft Game page first.
+          New senses and patterns become permanent learning objects once used. Check them here or in the Draft Game page first.
         </p>
       )}
     </div>

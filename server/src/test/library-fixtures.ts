@@ -1,6 +1,7 @@
 import {
   BookSlugTakenError,
   ChapterChangedError,
+  PatternTakenError,
   SenseTakenError,
   type BookRecord,
   type BookRepository,
@@ -8,7 +9,8 @@ import {
   type SenseRecord,
 } from '../persistence/book.repository';
 import type { ContentDraftRecord } from '../persistence/content-draft.repository';
-import { chapterDraftPayloadSchema, type ChapterDraftPayload } from '../content/chapter-draft';
+import { chapterDraftPayloadSchema, type BuiltChapter, type ChapterDraftPayload } from '../content/chapter-draft';
+import type { StoredPattern } from '../learning/pattern-registry';
 
 export const OWNER = '000000000000000000000001';
 export const OTHER = '000000000000000000000002';
@@ -18,6 +20,26 @@ export function memoryBooks() {
   const books: BookRecord[] = [];
   const chapters: ChapterRecord[] = [];
   const senses: SenseRecord[] = [];
+  const patterns: Array<StoredPattern & { spellings: string[]; sources: string[] }> = [];
+  /** As the repository: new entries, then each book pattern as a source (and, alone, its spelling) of DB entries. */
+  const writePatterns = (book: string, chapter: string, built: BuiltChapter) => {
+    for (const pattern of built.newPatterns) {
+      if (patterns.some((row) => row.form === pattern.form && row.meaning === pattern.meaning)) throw new PatternTakenError(pattern.id);
+      const { language, form, meaning, headword, gloss } = pattern;
+      patterns.push({ language, form, meaning, headword, gloss, spellings: [], sources: [] });
+    }
+    built.patternIds.forEach((ids, i) => {
+      for (const id of ids) {
+        const [, , form, meaning] = id.split('/');
+        const row = patterns.find((candidate) => candidate.form === form && candidate.meaning === meaning);
+        if (!row) continue;
+        const source = `${book}/ch${chapter}/patterns/${i}`;
+        if (!row.sources.includes(source)) row.sources.push(source);
+        const spelling = built.content.patterns[i].patternTarget;
+        if (ids.length === 1 && !row.spellings.includes(spelling)) row.spellings.push(spelling);
+      }
+    });
+  };
   const repo = {
     isAvailable: () => true,
     listBooks: async () => [...books],
@@ -26,6 +48,7 @@ export function memoryBooks() {
     getChapter: async (slug: string, chapter: string) =>
       chapters.find((row) => row.bookSlug === slug && row.chapter === chapter) ?? null,
     listSenses: async (language: string) => senses.filter((sense) => sense.language === language),
+    listPatterns: async (language: string) => patterns.filter((pattern) => pattern.language === language),
     publishChapter: async (input: Parameters<BookRepository['publishChapter']>[0]) => {
       if (input.book.isNew) {
         if (books.some((book) => book.slug === input.book.slug)) throw new BookSlugTakenError(input.book.slug);
@@ -50,12 +73,14 @@ export function memoryBooks() {
         chapter,
         content: built.content,
         senseIds: built.senseIds,
+        patternIds: built.patternIds,
         sourceId: input.sourceId,
         remixedFrom: input.remixedFrom,
         publishedAt: new Date().toISOString(),
         revision: 1,
         archivedAt: null,
       };
+      writePatterns(input.book.slug, chapter, built);
       chapters.push(record);
       return record;
     },
@@ -65,7 +90,13 @@ export function memoryBooks() {
       for (const sense of input.built.newSenses) {
         senses.push({ language: sense.language, word: sense.word, sense: sense.sense, kind: sense.kind, gloss: sense.gloss, sources: [] });
       }
-      Object.assign(record, { content: input.built.content, senseIds: input.built.senseIds, revision: record.revision + 1 });
+      writePatterns(input.bookSlug, input.chapter, input.built);
+      Object.assign(record, {
+        content: input.built.content,
+        senseIds: input.built.senseIds,
+        patternIds: input.built.patternIds,
+        revision: record.revision + 1,
+      });
       return record;
     },
     setChapterArchived: async (slug: string, chapter: string, archived: boolean) => {
@@ -74,7 +105,7 @@ export function memoryBooks() {
       return record ?? null;
     },
   };
-  return { repo: repo as unknown as BookRepository, books, chapters, senses };
+  return { repo: repo as unknown as BookRepository, books, chapters, senses, patterns };
 }
 
 export const story: Array<[string, string, string]> = [
@@ -101,7 +132,25 @@ export function storyPayload(book: Partial<Pick<ChapterDraftPayload, 'bookSlug' 
         sense: kind === 'reuse' ? { decision: 'reuse', reuseId: value } : { decision: 'new', newSense: value, confirmed: true },
       };
     }),
-    patterns: [{ patternTarget: '-았/었어요', patternNative: 'past tense, polite' }],
+    patterns: [
+      {
+        // A new entry: the chapter adds it to the `patterns` collection.
+        patternTarget: 'VERB + -았/었어요',
+        patternNative: 'did (polite past)',
+        exampleSentenceTarget: '토끼와 거북이가 경주를 했어요.',
+        exampleSentenceNative: 'The rabbit and the turtle had a race.',
+        sampleSentences: [{ targetText: '토끼가 낮잠을 잤어요.', nativeText: 'The rabbit took a nap.' }],
+        entries: [{ decision: 'new', headword: '-았/었어요', meaning: 'did-polite', gloss: 'did (polite past)', confirmed: true }],
+      },
+      {
+        // In the registry file (ch. 26 and 30): reused.
+        patternTarget: '-(으)면',
+        patternNative: 'if, when',
+        exampleSentenceTarget: '토끼가 자면 거북이가 이겨요.',
+        exampleSentenceNative: 'If the rabbit sleeps, the turtle wins.',
+        entries: [{ decision: 'reuse', reuseId: 'ko/grammar-pattern/eu-myeon/if' }],
+      },
+    ],
   });
 }
 

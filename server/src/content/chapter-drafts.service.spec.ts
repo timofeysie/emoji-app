@@ -39,7 +39,12 @@ describe('ChapterDraftsService with YALLA', () => {
       ['ch1/vocabulary/4', 'ko/lexeme/언덕/hill'],
       ['ch1/vocabulary/5', 'ko/lexeme/낮잠/nap'],
     ]);
-    expect(study.patterns[0].patternTarget).toBe('-았/었어요');
+    expect(study.patterns[0].patternTarget).toBe('VERB + -았/었어요');
+    // The new pattern is added once; the reused one stays in the file.
+    expect(memory.patterns).toEqual([
+      expect.objectContaining({ form: 'at-eot-eoyo', meaning: 'did-polite', headword: '-았/었어요', sources: ['rabbit-stories-1a2b/ch1/patterns/0'] }),
+    ]);
+    expect(memory.chapters[0].patternIds).toEqual([['ko/grammar-pattern/at-eot-eoyo/did-polite'], ['ko/grammar-pattern/eu-myeon/if']]);
 
     const books = await yalla.listBooks(OTHER);
     expect(books.map((book) => [book.book, book.owner])).toEqual([
@@ -64,6 +69,12 @@ describe('ChapterDraftsService with YALLA', () => {
           ? { ...entry, sense: { ...entry.sense, decision: 'reuse', reuseId: `ko/lexeme/${entry.targetLanguageText}/${entry.sense.newSense}` } }
           : entry,
       ),
+      patterns: again.patterns.map((pattern) => ({
+        ...pattern,
+        entries: pattern.entries.map((entry) =>
+          entry.decision === 'new' ? { decision: 'reuse', reuseId: `ko/grammar-pattern/at-eot-eoyo/${entry.meaning}` } : entry,
+        ),
+      })),
     });
     expect(await service.publish(draftOf(reusing), OWNER)).toMatchObject({ chapter: '2' });
   });
@@ -81,6 +92,7 @@ describe('ChapterDraftsService with YALLA', () => {
 
     expect(copy.payload.bookSlug).toBe('');
     expect(copy.payload.vocabulary.map((entry) => entry.sense.reuseId)).toEqual(memory.chapters[0].senseIds);
+    expect(copy.payload.patterns.map((pattern) => pattern.entries.map((entry) => entry.reuseId))).toEqual(memory.chapters[0].patternIds);
 
     const remix = chapterDraftPayloadSchema.parse({ ...copy.payload, newBook: { title: 'My remixes', slug: 'my-remixes-9f9f' } });
     await service.publish(draftOf(remix, { ownerUserId: OTHER, remixedFromChapter: copy.ref }), OTHER);
@@ -88,6 +100,7 @@ describe('ChapterDraftsService with YALLA', () => {
     const study = await yalla.getStudyChapter('my-remixes-9f9f', '1', OTHER);
     expect(study.owner).toBe('mine');
     expect(study.vocabulary.map((entry) => entry.learningObjectId)).toEqual(memory.chapters[0].senseIds);
+    expect(memory.chapters[1].patternIds).toEqual(memory.chapters[0].patternIds);
     expect(study.remixedFrom).toEqual({
       book: 'rabbit-stories-1a2b',
       chapter: '1',
@@ -102,6 +115,14 @@ describe('ChapterDraftsService with YALLA', () => {
     expect(copy.payload.vocabulary.length).toBeGreaterThan(5);
     expect(copy.payload.vocabulary.every((entry) => /[가-힯]/.test(entry.targetLanguageText))).toBe(true);
     expect(copy.payload.vocabulary.every((entry) => entry.sense.decision === 'reuse')).toBe(true);
+    // Its patterns keep the registry file's links (GP5), combinations included.
+    expect(copy.payload.patterns[0].entries.map((entry) => entry.reuseId)).toEqual([
+      'ko/grammar-pattern/a-eo-jida/become',
+      'ko/grammar-pattern/ne/noticing',
+    ]);
+    expect(await service.problems(copy.payload, { ownerUserId: OWNER, editsChapter: null })).not.toContainEqual(
+      expect.objectContaining({ path: expect.stringMatching(/^patterns/) }),
+    );
     await expect(service.copyChapter({ book: KOREAN_BOOK, chapter: '28' }, OWNER, 'edit')).rejects.toBeInstanceOf(ChapterDraftError);
   });
 
@@ -126,6 +147,12 @@ describe('ChapterDraftsService with YALLA', () => {
     expect(study.vocabulary[1]).toMatchObject({ gloss: 'rabbit, bunny', learningObjectId: 'ko/lexeme/토끼/rabbit' });
     expect(study.vocabulary[6]).toMatchObject({ sourceRef: 'ch1/vocabulary/6', learningObjectId: 'ko/lexeme/이기다/to-win' });
 
+    // A published pattern keeps its entries; another can be added to it.
+    const unlinked = chapterDraftPayloadSchema.parse({ ...appended, patterns: appended.patterns.map((pattern) => ({ ...pattern, entries: [] })) });
+    expect(await service.problems(unlinked, { ownerUserId: OWNER, ...edits })).toContainEqual(
+      expect.objectContaining({ path: 'patterns.0.entries', message: expect.stringContaining('published links stay') }),
+    );
+
     const reordered = chapterDraftPayloadSchema.parse({ ...appended, vocabulary: [...appended.vocabulary].reverse() });
     expect((await service.problems(reordered, { ownerUserId: OWNER, editsChapter: copy.ref })).length).toBeGreaterThan(0);
   });
@@ -148,5 +175,24 @@ describe('ChapterDraftsService with YALLA', () => {
       { word: '토끼', senses: [{ id: 'ko/lexeme/토끼/rabbit', gloss: 'rabbit', kind: 'lexeme', from: 'library' }] },
       { word: '없는말', senses: [] },
     ]);
+  });
+
+  it('finds grammar patterns by key: the file, the built-in book’s combinations and the library', async () => {
+    await publishStory();
+    const found = await content.findPatterns('ko', ['A-아/어지다', '계속 더 ADJECTIVE + -아/어/여지네', 'VERB + -았/었어요', '-아/어/여지네요', 'VERB']);
+    const ids = (list: Array<{ id: string }>) => list.map((pattern) => pattern.id);
+
+    expect(ids(found[0].exact)).toEqual(['ko/grammar-pattern/a-eo-jida/become']);
+    expect(found[0].exact[0]).toMatchObject({ headword: '-아/어/여지다', from: 'registry' });
+    // A spelling the built-in book uses for a combination matches all its entries.
+    expect(ids(found[1].exact)).toEqual(['ko/grammar-pattern/a-eo-jida/become', 'ko/grammar-pattern/ne/noticing']);
+    // The library chapter recorded its spelling on the entry it added.
+    expect(found[2].exact).toEqual([
+      { id: 'ko/grammar-pattern/at-eot-eoyo/did-polite', headword: '-았/었어요', gloss: 'did (polite past)', from: 'library' },
+    ]);
+    // A conjugated form isn't an exact match, but what it contains is suggested (a contraction like 졌 isn't found).
+    expect(found[3].exact).toEqual([]);
+    expect(ids(found[3].contained)).toContain('ko/grammar-pattern/a-eo-jida/become');
+    expect(found[4]).toMatchObject({ key: null, problem: expect.stringContaining('no Korean'), exact: [], contained: [] });
   });
 });

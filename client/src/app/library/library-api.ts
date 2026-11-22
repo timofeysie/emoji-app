@@ -5,7 +5,8 @@ import { DraftRequestError, type ContentDraft, type DraftView, type LanguagePair
 /**
  * Library chapters (docs/hashbrown/creating-games-with-hashbrown.md →
  * Feature 2): chapter drafts on the same `/api/content/drafts` as game
- * drafts, the sense lookup, the user's books and archiving. Reading books
+ * drafts, the sense and grammar-pattern lookups, the user's books and
+ * archiving. Reading books
  * and chapters is YALLA's (`yalla/yalla-api.ts`).
  */
 
@@ -19,6 +20,25 @@ export type SenseDecision = {
   /** `new`: the gloss; the entry's first meaning when empty. */
   newGloss: string;
   /** `new`: checked by the user (G7). */
+  confirmed: boolean;
+};
+
+/**
+ * One grammar-pattern entry a book pattern teaches (docs/yalla/grammar-learning-objects.md,
+ * GP5): reuse one, or a new one the user confirms. Its id comes from the
+ * headword and meaning on the server, never typed.
+ */
+export type PatternDecision = {
+  decision: 'reuse' | 'new';
+  /** `reuse`: e.g. `ko/grammar-pattern/a-eo-jida/become`. */
+  reuseId: string;
+  /** `new`: the smallest teachable pattern, e.g. `-아/어/여지다`. */
+  headword: string;
+  /** `new`: an English slug, e.g. `become`. */
+  meaning: string;
+  /** `new`: e.g. `gets to be, becomes`. */
+  gloss: string;
+  /** `new`: checked by the user. */
   confirmed: boolean;
 };
 
@@ -39,6 +59,8 @@ export type ChapterPattern = {
   exampleSentenceNative: string;
   sampleSentences: Array<{ targetText: string; nativeText: string }>;
   exercises: Array<{ exercise: string; answerKey: string }>;
+  /** The registry entries it teaches (H4c). */
+  entries: PatternDecision[];
 };
 
 /** The server's `chapterDraftPayloadSchema`. */
@@ -59,7 +81,15 @@ export type ChapterRef = { book: string; chapter: string; revision?: number | nu
 export type MyBook = { slug: string; title: string; chapterCount: number };
 
 /** An edit's published words and patterns, which must stay (G8). */
-export type FrozenChapter = { book: string; chapter: string; words: string[]; senseIds: string[]; patternCount: number };
+export type FrozenChapter = {
+  book: string;
+  chapter: string;
+  words: string[];
+  senseIds: string[];
+  patternCount: number;
+  /** Each published pattern's entries: they stay, others can be added. */
+  patternIds: string[][];
+};
 
 export type ChapterDraftView = Omit<DraftView, 'draft'> & {
   draft: Omit<ContentDraft, 'payload'> & { payload: ChapterDraftContent | null };
@@ -67,6 +97,18 @@ export type ChapterDraftView = Omit<DraftView, 'draft'> & {
 };
 
 export type FoundSense = { id: string; gloss: string; kind: string; from: 'registry' | 'library' };
+
+export type FoundPattern = { id: string; headword: string; gloss: string; from: 'registry' | 'library' };
+
+/** A book pattern's matches: `exact` (same key) to reuse, `contained` (inside it) as suggestions. */
+export type FoundPatterns = {
+  spelling: string;
+  key: string | null;
+  /** Why the spelling can't be read, e.g. no Korean in it. */
+  problem: string | null;
+  exact: FoundPattern[];
+  contained: FoundPattern[];
+};
 
 export function emptyDecision(): SenseDecision {
   return { decision: 'undecided', reuseId: '', newSense: '', kind: 'lexeme', newGloss: '', confirmed: false };
@@ -136,6 +178,15 @@ export async function findSenses(words: readonly string[], language = 'ko'): Pro
   if (unique.length === 0) return [];
   const params = new URLSearchParams({ language, words: unique.slice(0, 60).join(',') });
   return (await send<{ words: Array<{ word: string; senses: FoundSense[] }> }>(`/api/senses?${params}`)).words;
+}
+
+/** Each book pattern's matching registry entries (GP2). */
+export async function findPatterns(spellings: readonly string[], language = 'ko'): Promise<FoundPatterns[]> {
+  const unique = [...new Set(spellings.map((spelling) => spelling.trim()).filter(Boolean))].slice(0, 10);
+  if (unique.length === 0) return [];
+  const params = new URLSearchParams({ language });
+  for (const spelling of unique) params.append('spelling', spelling);
+  return (await send<{ patterns: FoundPatterns[] }>(`/api/patterns?${params}`)).patterns;
 }
 
 export function myBooks(): Promise<{ books: MyBook[] }> {

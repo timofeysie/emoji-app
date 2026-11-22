@@ -1,12 +1,15 @@
 import { randomBytes } from 'crypto';
 import { z } from 'zod';
+import { PatternSpellingError, patternForm } from '../learning/grammar-pattern';
 import {
+  GRAMMAR_PATTERN,
   KOREAN_BOOK,
   learningObjectId,
   parseLearningObjectId,
   vocabularyKindValues,
   type VocabularyKind,
 } from '../learning/learning-object';
+import { patternId } from '../learning/pattern-registry';
 import { normaliseWord } from '../learning/sense-registry';
 import type { DraftProblem } from './game-draft';
 import { languagePairSchema } from './game-draft';
@@ -15,8 +18,10 @@ import type { KogsChapterV1 } from './kogs-chapter';
 /**
  * Library chapter drafts (docs/hashbrown/creating-games-with-hashbrown.md →
  * Feature 2). A draft holds a `kogs.chapter.v1` chapter plus what publishing
- * needs: the book it goes in and a sense decision per vocabulary entry
- * (G7: reuse an existing sense, or a new one the user confirms). The client's
+ * needs: the book it goes in, a sense decision per vocabulary entry (G7:
+ * reuse an existing sense, or a new one the user confirms) and the
+ * grammar-pattern entries each book pattern teaches (H4c, GP5: the same
+ * reuse-or-new choice). The client's
  * `library/chapter-limits.ts` repeats `CHAPTER_DRAFT_LIMITS`; a spec keeps
  * them equal.
  */
@@ -25,12 +30,16 @@ export const CHAPTER_DRAFT_LIMITS = {
   minVocabulary: 6,
   maxVocabulary: 30,
   maxPatterns: 5,
+  /** Registry entries one book pattern teaches (`-아/어지다` + `-네`). */
+  maxPatternEntries: 3,
   maxDialogLines: 100,
   maxTitleLength: 100,
   maxWordLength: 40,
   maxGlossLength: 120,
   maxSenseSlugLength: 40,
   maxBookSlugLength: 48,
+  maxPatternHeadwordLength: 60,
+  maxPatternGlossLength: 120,
 } as const;
 
 /** A user book's slug can't take a built-in book's. */
@@ -58,6 +67,31 @@ export const senseDecisionSchema = z
   .strict();
 
 export type SenseDecision = z.infer<typeof senseDecisionSchema>;
+
+export const patternDecisionValues = ['reuse', 'new'] as const;
+
+/**
+ * One registry entry a book pattern teaches (docs/yalla/grammar-learning-objects.md,
+ * GP5). Flat, like the sense decision. A new entry's id comes from its
+ * headword and meaning (GP3), never typed.
+ */
+export const patternDecisionSchema = z
+  .object({
+    decision: z.enum(patternDecisionValues),
+    /** `reuse`: an existing entry, e.g. `ko/grammar-pattern/a-eo-jida/become`. */
+    reuseId: z.string().max(200).default(''),
+    /** `new`: the smallest teachable pattern, default style `-아/어/여지다`. */
+    headword: z.string().max(100).default(''),
+    /** `new`: the English meaning slug, e.g. `become`. */
+    meaning: z.string().max(100).default(''),
+    /** `new`: what it means, e.g. `gets to be, becomes`. */
+    gloss: z.string().max(300).default(''),
+    /** `new`: the user has checked it. Publishing needs it. */
+    confirmed: z.boolean().default(false),
+  })
+  .strict();
+
+export type PatternDecision = z.infer<typeof patternDecisionSchema>;
 
 const field = (max: number) => z.string().max(max).default('');
 
@@ -112,6 +146,8 @@ export const chapterDraftPayloadSchema = z
               .array(z.object({ exercise: field(500), answerKey: field(500) }).strict())
               .max(10)
               .default([]),
+            /** The registry entries it teaches (H4c). */
+            entries: z.array(patternDecisionSchema).max(10).default([]),
           })
           .strict(),
       )
@@ -131,6 +167,8 @@ export type FrozenChapter = ChapterRef & {
   words: string[];
   senseIds: string[];
   patternCount: number;
+  /** Each published pattern's entries: they stay, others can be added. */
+  patternIds: string[][];
 };
 
 /** What the sense registry (JSON plus the DB layer) knows, for the checks that need it. */
@@ -174,6 +212,28 @@ export function resolvedSenseId(
     }
   }
   return null;
+}
+
+/** The entry's learning-object id, or null while invalid. */
+export function resolvedPatternId(decision: PatternDecision, language: string): string | null {
+  if (decision.decision === 'reuse') {
+    const id = decision.reuseId.trim();
+    const key = parseLearningObjectId(id);
+    return key && key.language === language && key.kind === GRAMMAR_PATTERN ? id : null;
+  }
+  try {
+    return patternId(language, decision.headword.trim(), decision.meaning.trim());
+  } catch {
+    return null;
+  }
+}
+
+/** Each book pattern's resolved entry ids, unresolved ones left out. */
+export function resolvedPatternIds(payload: ChapterDraftPayload): string[][] {
+  const language = targetLanguageOf(payload);
+  return payload.patterns.map((pattern) => [
+    ...new Set(pattern.entries.flatMap((decision) => resolvedPatternId(decision, language) ?? [])),
+  ]);
 }
 
 export function targetLanguageOf(payload: ChapterDraftPayload): string {
@@ -266,9 +326,55 @@ export function chapterDraftProblems(payload: ChapterDraftPayload | null, frozen
   if (payload.patterns.length > L.maxPatterns) add('patterns', `More than ${L.maxPatterns} patterns`);
   payload.patterns.forEach((pattern, i) => {
     if (!pattern.patternTarget.trim()) add(`patterns.${i}.patternTarget`, `Pattern ${i + 1} is empty`);
+    problems.push(...patternEntryProblems(pattern, i, language));
   });
 
   if (frozen) problems.push(...frozenChapterProblems(payload, frozen));
+  return problems;
+}
+
+/** A book pattern's entries (GP5): at least one, each a valid reuse or a confirmed new entry. */
+function patternEntryProblems(pattern: ChapterDraftPayload['patterns'][number], i: number, language: string): DraftProblem[] {
+  const L = CHAPTER_DRAFT_LIMITS;
+  const problems: DraftProblem[] = [];
+  const label = pattern.patternTarget.trim() ? `Pattern ${i + 1} (“${pattern.patternTarget.trim()}”)` : `Pattern ${i + 1}`;
+  const at = `patterns.${i}.entries`;
+  if (pattern.entries.length === 0) {
+    problems.push({ path: at, message: `${label}: link it to the grammar it teaches: reuse an entry or add a new one` });
+  }
+  if (pattern.entries.length > L.maxPatternEntries) {
+    problems.push({ path: at, message: `${label} teaches more than ${L.maxPatternEntries} entries` });
+  }
+  const seen = new Set<string>();
+  pattern.entries.forEach((decision, j) => {
+    const add = (message: string) => problems.push({ path: `${at}.${j}`, message: `${label}: ${message}` });
+    if (decision.decision === 'reuse') {
+      if (!resolvedPatternId(decision, language)) add(`“${decision.reuseId}” isn’t a grammar pattern of this language`);
+    } else {
+      const headword = decision.headword.trim();
+      const meaning = decision.meaning.trim();
+      if (!headword) {
+        add('the new entry has no headword, e.g. -아/어/여지다');
+        return;
+      }
+      if (headword.length > L.maxPatternHeadwordLength) add(`the headword is longer than ${L.maxPatternHeadwordLength} characters`);
+      try {
+        patternForm(headword);
+      } catch (error) {
+        add(error instanceof PatternSpellingError ? error.message : `can’t read the headword “${headword}”`);
+        return;
+      }
+      if (!SLUG.test(meaning)) add('the new entry’s meaning must be lower-case ASCII letters, digits and hyphens, e.g. become');
+      else if (meaning.length > L.maxSenseSlugLength) add(`the new entry’s meaning is longer than ${L.maxSenseSlugLength} characters`);
+      const gloss = decision.gloss.trim();
+      if (!gloss) add(`the new entry “${headword}” has no gloss`);
+      else if (gloss.length > L.maxPatternGlossLength) add(`the gloss is longer than ${L.maxPatternGlossLength} characters`);
+      if (SLUG.test(meaning) && gloss && !decision.confirmed) add(`confirm the new pattern “${headword}” (${meaning})`);
+    }
+    const id = resolvedPatternId(decision, language);
+    if (id && seen.has(id)) add(`it links ${id} twice`);
+    if (id) seen.add(id);
+  });
   return problems;
 }
 
@@ -295,6 +401,16 @@ export function frozenChapterProblems(payload: ChapterDraftPayload, frozen: Froz
   if (payload.patterns.length < frozen.patternCount) {
     problems.push({ path: 'patterns', message: `The published chapter has ${frozen.patternCount} patterns: they can’t be removed` });
   }
+  const linked = resolvedPatternIds(payload);
+  frozen.patternIds.forEach((ids, i) => {
+    const missing = ids.filter((id) => !(linked[i] ?? []).includes(id));
+    if (i < payload.patterns.length && missing.length > 0) {
+      problems.push({
+        path: `patterns.${i}.entries`,
+        message: `Pattern ${i + 1} was published teaching ${missing.join(', ')}: published links stay, others can be added`,
+      });
+    }
+  });
   return problems;
 }
 
@@ -319,13 +435,42 @@ export function senseRegistryProblems(payload: ChapterDraftPayload, registry: Se
   return problems;
 }
 
+/** Checks against the pattern registry: reused entries exist, new ones don't yet. */
+export function patternRegistryProblems(payload: ChapterDraftPayload, registry: SenseLookup): DraftProblem[] {
+  const language = targetLanguageOf(payload);
+  const problems: DraftProblem[] = [];
+  payload.patterns.forEach((pattern, i) => {
+    pattern.entries.forEach((decision, j) => {
+      const id = resolvedPatternId(decision, language);
+      if (!id) return;
+      const path = `patterns.${i}.entries.${j}`;
+      if (decision.decision === 'reuse' && !registry.has(id)) {
+        problems.push({ path, message: `Pattern ${i + 1}: there is no grammar pattern ${id} to reuse` });
+      }
+      if (decision.decision === 'new' && registry.has(id)) {
+        problems.push({ path, message: `Pattern ${i + 1}: ${id} already exists; reuse it instead of adding it` });
+      }
+    });
+  });
+  return problems;
+}
+
+export type NewPattern = { language: string; form: string; meaning: string; headword: string; gloss: string; id: string };
+
 export type NewSense = { language: string; kind: VocabularyKind; word: string; sense: string; gloss: string; id: string };
 
-/** A publishable draft as stored: the chapter, each entry's sense, and the senses to add. */
-export function publishedChapter(
-  payload: ChapterDraftPayload,
-  chapter: string,
-): { content: KogsChapterV1; senseIds: string[]; newSenses: NewSense[] } {
+export type BuiltChapter = {
+  content: KogsChapterV1;
+  senseIds: string[];
+  newSenses: NewSense[];
+  /** Book pattern i's entries. */
+  patternIds: string[][];
+  /** Each new entry once, the first pattern's wording if two add it. */
+  newPatterns: NewPattern[];
+};
+
+/** A publishable draft as stored: the chapter, each entry's sense and pattern, and the ones to add. */
+export function publishedChapter(payload: ChapterDraftPayload, chapter: string): BuiltChapter {
   const language = targetLanguageOf(payload);
   const senseIds: string[] = [];
   const newSenses: NewSense[] = [];
@@ -372,7 +517,26 @@ export function publishedChapter(
       appliedPatterns: [],
     })),
   };
-  return { content, senseIds, newSenses };
+  const patternIds = resolvedPatternIds(payload);
+  const newPatterns = new Map<string, NewPattern>();
+  payload.patterns.forEach((pattern, i) => {
+    if (patternIds[i].length !== pattern.entries.length) throw new Error(`Pattern ${i + 1} has an unresolved entry`);
+    for (const decision of pattern.entries) {
+      if (decision.decision !== 'new') continue;
+      const id = resolvedPatternId(decision, language)!;
+      if (newPatterns.has(id)) continue;
+      const headword = decision.headword.trim();
+      newPatterns.set(id, {
+        language,
+        form: patternForm(headword),
+        meaning: decision.meaning.trim(),
+        headword,
+        gloss: decision.gloss.trim(),
+        id,
+      });
+    }
+  });
+  return { content, senseIds, newSenses, patternIds, newPatterns: [...newPatterns.values()] };
 }
 
 /** A published chapter back as a draft payload: for an edit (G8) or a remix (G12), keeping every sense. */
@@ -381,6 +545,8 @@ export function chapterAsDraft(
   /** The registry's reading of the vocabulary (swapped fields fixed), with each entry's sense. */
   vocabulary: ReadonlyArray<{ word: string; gloss: string; senseId: string | null }>,
   book: { bookSlug: string; language: { target: string; native: string } },
+  /** Book pattern i's entries, reused as they are. */
+  patternIds: ReadonlyArray<readonly string[]> = [],
 ): ChapterDraftPayload {
   return chapterDraftPayloadSchema.parse({
     bookSlug: book.bookSlug,
@@ -393,7 +559,7 @@ export function chapterAsDraft(
       nativeLanguageText: entry.gloss,
       sense: entry.senseId ? { decision: 'reuse', reuseId: entry.senseId } : { decision: 'undecided' },
     })),
-    patterns: content.patterns.map((pattern) => ({
+    patterns: content.patterns.map((pattern, i) => ({
       patternTarget: pattern.patternTarget,
       patternNative: pattern.patternNative,
       type: pattern.type ?? '',
@@ -401,6 +567,7 @@ export function chapterAsDraft(
       exampleSentenceNative: pattern.exampleSentenceNative,
       sampleSentences: pattern.sampleSentences.slice(0, 10),
       exercises: pattern.exercises.slice(0, 10),
+      entries: (patternIds[i] ?? []).map((id) => ({ decision: 'reuse', reuseId: id })),
     })),
   });
 }

@@ -1,10 +1,11 @@
-import type { ChapterProposalOutput, ChapterWordWithSense } from '../../library/chapter-draft.schema';
+import type { ChapterProposalOutput, ChapterWordWithSense, PatternWithEntries } from '../../library/chapter-draft.schema';
 import { CHAPTER_LIMITS } from '../../library/chapter-limits';
 import {
   emptyDecision,
   type ChapterDraftContent,
   type ChapterPattern,
   type ChapterWord,
+  type PatternDecision,
   type SenseDecision,
 } from '../../library/library-api';
 
@@ -27,11 +28,30 @@ export function wordFromModel(word: ChapterWordWithSense): ChapterWord {
   };
 }
 
-export function patternFromModel(pattern: ChapterProposalOutput['patterns'][number]): ChapterPattern {
+/** The model's pattern entry as the draft stores it. A new entry waits for the user's confirmation. */
+export function entryFromModel(entry: PatternWithEntries['entries'][number]): PatternDecision | null {
+  if (entry.decision === 'reuse' && entry.reuseId.trim()) {
+    return { decision: 'reuse', reuseId: entry.reuseId.trim(), headword: '', meaning: '', gloss: '', confirmed: false };
+  }
+  if (entry.decision === 'new' && entry.headword.trim()) {
+    return {
+      decision: 'new',
+      reuseId: '',
+      headword: entry.headword.trim(),
+      meaning: entry.meaning.trim().toLowerCase(),
+      gloss: entry.gloss.trim(),
+      confirmed: false,
+    };
+  }
+  return null;
+}
+
+export function patternFromModel(pattern: PatternWithEntries): ChapterPattern {
   return {
     ...pattern,
     sampleSentences: pattern.sampleSentences.map((sample) => ({ ...sample })),
     exercises: pattern.exercises.map((exercise) => ({ ...exercise })),
+    entries: pattern.entries.flatMap((entry) => entryFromModel(entry) ?? []),
   };
 }
 
@@ -52,13 +72,15 @@ export function chapterFromModel(
   };
 }
 
+const FOR_THE_USER = /confirm the new (sense|pattern)/;
+
 /** The draft's problems: the ones the model should fix, and the confirmations only the user can give. */
 export function splitProblems(problems: ReadonlyArray<{ path: string; message: string }>): {
   toFix: string[];
   forTheUser: string[];
 } {
-  const forTheUser = problems.filter((problem) => /confirm the new sense/.test(problem.message)).map((problem) => problem.message);
-  const toFix = problems.filter((problem) => !/confirm the new sense/.test(problem.message)).map((problem) => problem.message);
+  const forTheUser = problems.filter((problem) => FOR_THE_USER.test(problem.message)).map((problem) => problem.message);
+  const toFix = problems.filter((problem) => !FOR_THE_USER.test(problem.message)).map((problem) => problem.message);
   return { toFix, forTheUser };
 }
 

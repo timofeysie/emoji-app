@@ -62,8 +62,6 @@ about several learning objects, each moving only its own track?
 
 ---
 
-
-
 ## Recommendation in one paragraph
 
 Separate **what happened** from **what it shows**. Learning objects form
@@ -88,8 +86,6 @@ model* and *student model* map onto items, scorers and tracks here.
 
 ---
 
-
-
 ## The pipeline
 
 ```mermaid
@@ -108,26 +104,17 @@ flowchart LR
   Fold --> Planner[Next game]
 ```
 
-
-
-
 | ECD term       | Here                                                      | Today's equivalent                   |
 | -------------- | --------------------------------------------------------- | ------------------------------------ |
 | Student model  | Tracks: `(student, learning object, aspect)` with a state | `TrackState` (`learning/leitner.ts`) |
 | Task model     | Item + its targets                                        | A question with one `learning` tag   |
 | Evidence model | Scorer + attribution rules → observations                 | `result.success` on one statement    |
 
-
 ---
-
-
 
 ## 1. The learning-object graph
 
-
-
 ### Kinds
-
 
 | Kind              | Examples                                          | Usually atomic?              | Taught from                                            |
 | ----------------- | ------------------------------------------------- | ---------------------------- | ------------------------------------------------------ |
@@ -136,7 +123,6 @@ flowchart LR
 | `grammar-pattern` | `-아/어 주다` (do for someone), `-았/었더니`              | Yes                          | Chapter `patterns`                                     |
 | `sentence`        | `너무 많이 먹었더니 배 아파요`                                | No                           | Dialog lines, sample sentences, exercises              |
 | `competency`      | "Can describe cold and flu symptoms to a doctor"  | No: evidence from many items | Curriculum / teacher (`game-planning.md` → Competency) |
-
 
 Kinds are an open list, like aspects. The architecture only assumes that
 learning objects have a kind, an identity and optional parts.
@@ -190,7 +176,7 @@ built correctly.
 and entry are **provenance** (which the statements already carry as
 grouping and `source-ref`):
 
-```
+```txt
 {base}/lo/ko/lexeme/{enc(word)}/{sense}
 {base}/lo/ko/expression/{enc(phrase)}/{sense}
 {base}/lo/ko/pattern/{slug}
@@ -216,8 +202,6 @@ the student may already be at L1 or L2, which is correct.
 
 ---
 
-
-
 ## 2. Items declare their targets (the Q-matrix)
 
 An item lists what it tests. This generalises today's single
@@ -234,7 +218,6 @@ type ItemTarget = {
 
 How each response type supports attribution:
 
-
 | Response type                             | Hardware today? | What it can attribute                           | How                                                      |
 | ----------------------------------------- | --------------- | ----------------------------------------------- | -------------------------------------------------------- |
 | Multiple choice (cards A–D)               | ✅               | Whole; **parts too, if options are diagnostic** | Each option records which targets it gets right or wrong |
@@ -242,9 +225,6 @@ How each response type supports attribution:
 | Typed/free text                           | Later           | Parts                                           | Same alignment, plus normalisation (spacing, jamo)       |
 | Referee-judged (speaking, role-play)      | Phase 2         | Rubric criteria → parts or competencies         | Each checklist step names its target(s)                  |
 | Self-rating (confidence)                  | ✅ (A–D = 0–3)   | Whole, rated not scored                         | `leitner-method.md` → Confidence                         |
-
-
-
 
 ### Diagnostic options: part-level evidence on today's hardware
 
@@ -257,14 +237,12 @@ record it.
 Writing question, prompt "to show", targets: `expression 보여 주다`
 (whole), `lexeme 보이다` (span "보여"), `lexeme 주다` (span "주다"):
 
-
 | Option | Text  | Whole | 보이다 | 주다  |
 | ------ | ----- | ----- | --- | --- |
 | A      | 보여 주다 | ✓     | ✓   | ✓   |
 | B      | 보여 추다 | ✗     | ✓   | ✗   |
 | C      | 보혀 주다 | ✗     | ✗   | ✓   |
 | D      | 보 주다  | ✗     | ✗   | ✓   |
-
 
 A student who picks **B** gives evidence that they know `보여` but not
 `주다`. Picking **C** or **D** shows the reverse.
@@ -281,8 +259,6 @@ only. The meaning of `보여 주다` isn't "made of" the meaning of its
 parts in a way a choice can isolate.
 
 ---
-
-
 
 ## 3. Scoring and attribution
 
@@ -302,10 +278,7 @@ type Observation = {
 score(item: Item, response: Response): { observations: Observation[]; scorer: string /* 'choice-diagnostic@1' */ };
 ```
 
-
-
 ### Attribution rules (proposed defaults)
-
 
 | Situation                                                        | Whole         | Parts                                                                                             |
 | ---------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------- |
@@ -315,18 +288,13 @@ score(item: Item, response: Response): { observations: Observation[]; scorer: st
 | Ambiguous span (`보` for `보여`: wrong verb, or wrong conjugation?) | ✗ direct      | ✗ on the **narrowest** target that covers the error, if the scorer can justify it; otherwise none |
 | Referee rubric                                                   | Per criterion | Each criterion names its targets: met → ✓, not met → ✗                                            |
 
-
 Your `보 주다` example, as a sequencing or typed response:
-
 
 | Target                           | Span   | Expected | Got  | Observation                                                                                                                                                                                                              |
 | -------------------------------- | ------ | -------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `expression 보여 주다`               | whole  | 보여 주다    | 보 주다 | ✗ direct, `scaled` 0.5                                                                                                                                                                                                   |
 | `lexeme 주다`                      | [3, 5] | 주다       | 주다   | **✓ indirect**                                                                                                                                                                                                           |
 | `lexeme 보이다` / `pattern -아/어 주다` | [0, 2] | 보여       | 보    | ✗ on the narrowest justified target. `보` is the stem of `보다`, so the likely error is the conjugation, i.e. `보이다`. A rule decides this, and the rule is pedagogy, so it lives in the scorer, is tested, and is versioned. |
-
-
-
 
 ### Strength matters to the learner model
 
@@ -342,8 +310,6 @@ is never retired because it was part of something.
 pinned error.
 
 ---
-
-
 
 ## 4. Evidence in xAPI: `answered` plus `assessed`
 
@@ -401,8 +367,6 @@ response that produced it.
 - **No double counting.** Q1–Q6 reports built on `answered` are unchanged,
 because `assessed` is a different verb.
 
-
-
 ### Re-scoring
 
 Statements are permanent, but scorers will improve. The `answered`
@@ -419,14 +383,11 @@ Veracity's free tier.
 
 ---
 
-
-
 ## 5. The learner model per kind
 
 Tracks stay `(student, learning object, aspect)`, and the fold stays a
 pure function of observations. What changes is that **each kind of
 learning object can use its own strategy**:
-
 
 | Kind                         | Strategy                                                                                                                        | Why                                               |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
@@ -435,15 +396,12 @@ learning object can use its own strategy**:
 | `sentence`                   | Usually **not scheduled**: its parts are. Track it only if the sentence itself is the goal (a memorised dialog line).           | Sentences are the vehicle, not the target         |
 | `competency`                 | **Evidence accumulation**: N direct successes across ≥ M distinct contexts and levels (`apply`, `transfer`). No decay schedule. | Competencies are shown, not drilled               |
 
-
 `game-planning.md`'s `recall` → `recognise` → `apply` → `transfer` levels
 then become a property of **items and observations**: "this success was
 at `transfer` level". The competency strategy is a different fold over the
 same observations.
 
 ---
-
-
 
 ## 6. Grammar, transfer and critical thinking
 
@@ -466,12 +424,9 @@ symptoms" → competency ✓.
 
 ---
 
-
-
 ## 7. Authoring decompositions
 
 The source data has no decompositions. Options, from cheapest to richest:
-
 
 | Option                                                                                                  | Quality                                    | Effort                    | Fit                                        |
 | ------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------- | ------------------------------------------ |
@@ -486,8 +441,6 @@ for the same reason.
 
 ---
 
-
-
 ## Impact on the current Leitner work
 
 Leitner games are **deleted after export** (L10), so the stored `Question`
@@ -497,20 +450,17 @@ doing before the pilot starts and what can wait.
 
 ### Decided before pilot statements exist (done)
 
-
 | #   | Proposal                                                                                                                                                                                 | Cost now                                                                                                              | Cost later                                                                                                          |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | A1  | **Language-scoped learning-object IRIs** (`…/lo/ko/expression/…`), with book, chapter and entry as provenance only (they already are, as grouping and `source-ref`)                      | Small: change `learningObjectIri`, the fold's parser, and move the sense registry to language level                   | Every pilot statement keeps the book-scoped IRI forever, and the same word from two books splits into two tracks    |
 | A2  | **Emit** `assessed` **statements from day one**, even for today's single-target questions (one `assessed` per guess, `role: whole`, `strength: direct`). The fold reads `assessed` only. | Medium: the builder adds one statement per tagged guess, and the fold switches verb. The Step 1 smoke test is re-run. | Two evidence paths in the fold forever (tagged `answered` from the pilot, `assessed` after), or a voiding migration |
 | A3  | Learning-object **kind** in the IRI and activity type (`lexeme-sense`, `expression`)                                                                                                     | Trivial, alongside A1                                                                                                 | Re-typing activities later is messy                                                                                 |
 
-
 **Adopted 2026-10-23 and built before the first pilot game** (see
 [Decisions](#decisions)). The smoke-test statements in `emojiapp-dev`
 should be cleared before the pilot.
 
 ### Can wait (no permanent footprint)
-
 
 | Change                                                                         | When                                                     |
 | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
@@ -521,10 +471,7 @@ should be cleared before the pilot.
 | Per-kind learner-model strategies (pattern contexts, competency accumulation)  | With grammar and competency items                        |
 | Scorer registry, versioning, re-scoring script                                 | With the second scorer                                   |
 
-
 ---
-
-
 
 ## Risks and trade-offs
 
@@ -547,8 +494,6 @@ our own verb, documented, is the honest choice.
 
 ---
 
-
-
 ## Open questions
 
 1. **Granularity of** `보여 주다`: lexeme `보이다` + lexeme `주다`, or
@@ -565,8 +510,6 @@ our own verb, documented, is the honest choice.
 6. ~~**Verb name.**~~ `…/verbs/assessed` ("was assessed on"), adopted
   with A2. It's permanent now that the builder emits it.
 
-
-
 ## References
 
 - R. J. Mislevy, R. G. Almond, J. F. Lukas, *A Brief Introduction to
@@ -575,4 +518,3 @@ Evidence-Centered Design* (ETS, 2003): student, evidence and task models.
 skills they require, which `targets[]` is.
 - xAPI 1.0.3: `context.statement` (StatementRef), voiding, context
 activities.
-

@@ -4,6 +4,7 @@ import {
   CHAPTER_DRAFT_LIMITS,
   chapterDraftPayloadSchema,
   chapterDraftProblems,
+  patternRegistryProblems,
   publishedChapter,
   senseRegistryProblems,
   suggestBookSlug,
@@ -32,7 +33,13 @@ function draft(overrides: Partial<ChapterDraftInput> = {}) {
       nativeLanguageText: gloss,
       sense: { decision: 'new', newSense: gloss.replace(/^to /, 'to-').replace(/ /g, '-'), confirmed: true },
     })),
-    patterns: [{ patternTarget: '-았/었어요', patternNative: 'past tense' }],
+    patterns: [
+      {
+        patternTarget: '-았/었어요',
+        patternNative: 'past tense',
+        entries: [{ decision: 'new', headword: '-았/었어요', meaning: 'did-polite', gloss: 'did (polite past)', confirmed: true }],
+      },
+    ],
     ...overrides,
   });
 }
@@ -115,6 +122,7 @@ describe('chapterDraftProblems', () => {
       words: published.content.vocabulary.map((entry) => entry.targetLanguageText),
       senseIds: published.senseIds,
       patternCount: 1,
+      patternIds: published.patternIds,
     };
     // An edit draft reuses the published senses.
     const edit = (vocabulary: ReturnType<typeof draft>['vocabulary']) =>
@@ -148,6 +156,75 @@ describe('chapterDraftProblems', () => {
       expect(chapterDraftProblems(edit(vocabulary.slice(1)), frozen).map((p) => p.path)).toContain('vocabulary');
       expect(chapterDraftProblems({ ...edit(vocabulary), patterns: [] }, frozen).map((p) => p.path)).toEqual(['patterns']);
     });
+
+    it('keeps a published pattern’s entries, and can add others', () => {
+      const reused = { decision: 'reuse' as const, reuseId: 'ko/grammar-pattern/at-eot-yo/did-polite', headword: '', meaning: '', gloss: '', confirmed: false };
+      const pattern = edit(draft().vocabulary).patterns[0];
+      const swapped = { ...edit(draft().vocabulary), patterns: [{ ...pattern, entries: [{ ...reused, reuseId: 'ko/grammar-pattern/eu-myeon/if' }] }] };
+      const added = { ...edit(draft().vocabulary), patterns: [{ ...pattern, entries: [reused, { ...reused, reuseId: 'ko/grammar-pattern/eu-myeon/if' }] }] };
+
+      expect(frozen.patternIds).toEqual([['ko/grammar-pattern/at-eot-eoyo/did-polite']]);
+      expect(chapterDraftProblems(swapped, frozen).map((p) => p.message)).toEqual([
+        'Pattern 1 was published teaching ko/grammar-pattern/at-eot-eoyo/did-polite: published links stay, others can be added',
+      ]);
+      const keeps = { ...added, patterns: [{ ...pattern, entries: [{ ...reused, reuseId: frozen.patternIds[0][0] }, added.patterns[0].entries[1]] }] };
+      expect(chapterDraftProblems(keeps, frozen)).toEqual([]);
+    });
+  });
+});
+
+describe('pattern entries (H4c, GP5)', () => {
+  const entry = { decision: 'new', headword: '-았/었어요', meaning: 'did-polite', gloss: 'did (polite past)', confirmed: true } as const;
+  const withEntries = (entries: unknown[]) =>
+    draft({ patterns: [{ patternTarget: 'VERB + -았/었어요', patternNative: 'did', entries } as never] });
+  const messages = (entries: unknown[]) => chapterDraftProblems(withEntries(entries)).map((problem) => problem.message);
+
+  it('a book pattern needs at least one entry', () => {
+    expect(messages([])).toEqual([
+      'Pattern 1 (“VERB + -았/었어요”): link it to the grammar it teaches: reuse an entry or add a new one',
+    ]);
+  });
+
+  it('a new entry needs a readable headword, a meaning slug, a gloss and the user’s confirmation', () => {
+    expect(messages([{ ...entry, confirmed: false }])).toEqual(['Pattern 1 (“VERB + -았/었어요”): confirm the new pattern “-았/었어요” (did-polite)']);
+    expect(messages([{ ...entry, headword: 'VERB' }])[0]).toMatch(/Can't read the pattern 'VERB': it has no Korean in it/);
+    expect(messages([{ ...entry, meaning: 'Did!' }])[0]).toMatch(/meaning must be lower-case ASCII/);
+    expect(messages([{ ...entry, gloss: ' ' }])[0]).toMatch(/has no gloss/);
+  });
+
+  it('a reused entry must be a grammar pattern of the language, linked once', () => {
+    const reuse = { decision: 'reuse', reuseId: 'ko/grammar-pattern/eu-myeon/if' };
+    expect(messages([reuse])).toEqual([]);
+    expect(messages([{ ...reuse, reuseId: 'ko/lexeme/시험/test' }])[0]).toMatch(/isn’t a grammar pattern of this language/);
+    expect(messages([reuse, reuse])[0]).toMatch(/links ko\/grammar-pattern\/eu-myeon\/if twice/);
+  });
+
+  it('the registry check: a reused entry exists, a new one doesn’t yet', () => {
+    const registry = new Set(['ko/grammar-pattern/at-eot-eoyo/did-polite']);
+    const payload = withEntries([entry, { decision: 'reuse', reuseId: 'ko/grammar-pattern/ne/noticing' }]);
+
+    expect(patternRegistryProblems(payload, registry).map((problem) => problem.message)).toEqual([
+      'Pattern 1: ko/grammar-pattern/at-eot-eoyo/did-polite already exists; reuse it instead of adding it',
+      'Pattern 1: there is no grammar pattern ko/grammar-pattern/ne/noticing to reuse',
+    ]);
+  });
+
+  it('publishes each pattern’s entries, and a new entry once even if two patterns add it', () => {
+    const payload = draft({
+      patterns: [
+        { patternTarget: '-았/었어요', entries: [entry] },
+        { patternTarget: 'VERB + -았/었어요', entries: [{ ...entry, gloss: 'other wording' }, { decision: 'reuse', reuseId: 'ko/grammar-pattern/eu-myeon/if' }] },
+      ] as never,
+    });
+    const { patternIds, newPatterns } = publishedChapter(payload, '1');
+
+    expect(patternIds).toEqual([
+      ['ko/grammar-pattern/at-eot-eoyo/did-polite'],
+      ['ko/grammar-pattern/at-eot-eoyo/did-polite', 'ko/grammar-pattern/eu-myeon/if'],
+    ]);
+    expect(newPatterns).toEqual([
+      { language: 'ko', form: 'at-eot-eoyo', meaning: 'did-polite', headword: '-았/었어요', gloss: 'did (polite past)', id: 'ko/grammar-pattern/at-eot-eoyo/did-polite' },
+    ]);
   });
 });
 
