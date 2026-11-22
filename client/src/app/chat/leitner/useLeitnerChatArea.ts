@@ -114,8 +114,9 @@ export function useLeitnerChatArea(): ChatArea {
          which (by label). If none, say so. Refer to students by the label
          getPlayers returns, or the name the user wrote.
       2. If you don't know the book's slug or chapters, call getBooks.
-      3. Call createLeitnerGame. Default scope "review" and both aspects
-         unless the user says otherwise. It only plans.
+      3. Call createLeitnerGame. Default scope "review" and every aspect
+         (reading and writing for words, usage for grammar patterns) unless
+         the user says otherwise. It only plans.
       4. If it returns refused, tell the user why in one sentence (and what to
          do) and stop. If nothingToAsk, say so and suggest another chapter.
       5. Otherwise show <LeitnerPlan> with every value from the result, and say

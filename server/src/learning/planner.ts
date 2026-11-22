@@ -1,5 +1,6 @@
 import type { LeitnerPickReason } from '../persistence/domain-types';
 import { DEFAULT_LEITNER_CONFIG, isDue, LeitnerConfig, newTrack, TrackState } from './leitner';
+import { aspectAppliesTo } from './learning-object';
 
 /**
  * Picks a student's next learning objects × aspects
@@ -80,7 +81,9 @@ function byLevelThenDue(a: Candidate, b: Candidate): number {
  * 4. new top-up (when `fill`): if still short, more new words past
  *    `maxNew`, so a new student's first game isn't four questions long.
  * Never retired tracks, never L3 for practice, one aspect per learning
- * object per game, and unbuildable picks are skipped and reported.
+ * object per game, and unbuildable picks are skipped and reported. Only
+ * aspects that apply to the kind make tracks (`aspectAppliesTo`: `usage`
+ * for grammar patterns, `reading` and `writing` for words).
  */
 export function planNextGame(input: PlanInput): { picks: PlanPick[]; report: PlanReport } {
   const config = input.config ?? DEFAULT_LEITNER_CONFIG;
@@ -90,6 +93,7 @@ export function planNextGame(input: PlanInput): { picks: PlanPick[]; report: Pla
   const chapter: Candidate[] = [];
   input.chapterObjects.forEach((object, index) => {
     input.aspects.forEach((aspect, aspectIndex) => {
+      if (!aspectAppliesTo(object.learningObjectId, aspect)) return;
       const track = trackFor(object.learningObjectId, aspect);
       if (track.status !== 'retired') {
         chapter.push({ ...object, aspect, track, order: index * input.aspects.length + aspectIndex });
@@ -101,6 +105,7 @@ export function planNextGame(input: PlanInput): { picks: PlanPick[]; report: Pla
   input.reviewObjects.forEach((object, index) => {
     if (chapterIds.has(object.learningObjectId)) return;
     input.aspects.forEach((aspect, aspectIndex) => {
+      if (!aspectAppliesTo(object.learningObjectId, aspect)) return;
       const track = byKey.get(trackKey(object.learningObjectId, aspect));
       if (track && track.status === 'active' && isDue(track, input.now, config)) {
         review.push({ ...object, aspect, track, order: chapter.length + index * input.aspects.length + aspectIndex });

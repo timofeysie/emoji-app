@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ASSESSED_VERB_ID } from '../xapi/iris';
 import {
+  aspectAppliesTo,
   EXT_ASPECT,
   EXT_GAME_KIND,
   EXT_SOURCE_REF,
@@ -261,6 +262,7 @@ export function buildProgress(input: {
 
   for (const id of input.chapterObjectIds) {
     for (const aspect of input.aspects) {
+      if (!aspectAppliesTo(id, aspect)) continue;
       const key = trackKey(id, aspect);
       if (included.has(key)) continue;
       included.add(key);
@@ -272,6 +274,7 @@ export function buildProgress(input: {
     const chapterIds = new Set(input.chapterObjectIds);
     for (const track of input.tracks) {
       if (chapterIds.has(track.learningObjectId) || !input.aspects.includes(track.aspect)) continue;
+      if (!aspectAppliesTo(track.learningObjectId, track.aspect)) continue;
       result.push({ ...track, due: isDue(track, input.now, config), inChapter: false });
     }
   }

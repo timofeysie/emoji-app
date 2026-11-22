@@ -68,7 +68,9 @@ export function YallaChapterView() {
                     ? 'loading…'
                     : (progress.error ?? undefined)
               }
-              hrefFor={(aspect) => `${chapterPath(book, chapter)}/vocabulary?aspect=${aspect}`}
+              hrefFor={(aspect) =>
+                aspect === 'usage' ? `${chapterPath(book, chapter)}/patterns` : `${chapterPath(book, chapter)}/vocabulary?aspect=${aspect}`
+              }
             />
             {progress.linked === false && <PractisingAs />}
             {progress.error && (

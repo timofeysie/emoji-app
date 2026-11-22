@@ -5,6 +5,8 @@ import type { PlayerSummary } from '../persistence/player.repository';
 import { loadLrsConfigFromEnv, LrsRequestError } from '../xapi/lrs-client';
 import {
   chapterLearningObjects,
+  chapterPatternObjects,
+  describeLearningObject,
   UnknownBookError,
   UnknownChapterError,
   UnregisteredSensesError,
@@ -104,7 +106,7 @@ export class LearningProgressService {
    */
   async forChapter(player: PlayerSummary, query: ProgressQuery): Promise<ChapterProgress> {
     const content = await this.bookContent.getBookContent(query.book);
-    const objects = chapterLearningObjects(content, query.chapter);
+    const objects = [...chapterLearningObjects(content, query.chapter), ...chapterPatternObjects(content, query.chapter)];
     const evidence = await this.evidence(player, content);
 
     const { tracks, summary } = buildProgress({
@@ -128,12 +130,12 @@ export class LearningProgressService {
       summary,
       byAspect: countByAspect(tracks, query.aspects),
       tracks: tracks.map((track) => {
-        const sense = content.senseById.get(track.learningObjectId);
+        const described = describeLearningObject(content, track.learningObjectId);
         return {
           ...track,
-          kind: sense?.kind ?? null,
-          word: sense?.word ?? null,
-          gloss: glossById.get(track.learningObjectId) ?? sense?.gloss ?? null,
+          kind: described?.kind ?? null,
+          word: described?.word ?? null,
+          gloss: glossById.get(track.learningObjectId) ?? described?.gloss ?? null,
         };
       }),
     };
@@ -151,7 +153,7 @@ export class LearningProgressService {
     for (const chapter of [...content.chapters.keys()].sort((a, b) => Number(a) - Number(b))) {
       let objects;
       try {
-        objects = chapterLearningObjects(content, chapter);
+        objects = [...chapterLearningObjects(content, chapter), ...chapterPatternObjects(content, chapter)];
       } catch (error) {
         // A chapter that isn't fully registered has no progress yet; the others still do.
         if (error instanceof UnregisteredSensesError) continue;

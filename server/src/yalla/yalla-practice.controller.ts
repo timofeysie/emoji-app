@@ -4,15 +4,16 @@ import type { Response } from 'express';
 import { z } from 'zod';
 import type { AuthedRequest } from '../auth';
 import { AuthGuard } from '../auth.guard';
-import { firstSense, QUIZ_SLOT_LABELS, vocabSkillValues, type VocabSkill } from '../games/generators/vocab-choice';
+import { clozePrompt, clozeSentences } from '../games/generators/pattern-cloze';
+import { firstSense, leitnerAspectValues, QUIZ_SLOT_LABELS, type VocabSkill } from '../games/generators/vocab-choice';
 import { LearnerService } from '../learner.service';
 import { isTypedCorrect, typedItem } from '../learning/answer-check';
-import { UnknownBookError, type BookContent } from '../learning/book-content';
+import { patternEntriesOf, UnknownBookError, type BookContent } from '../learning/book-content';
 import { BookContentService } from '../learning/book-content.service';
 import { LrsNotConfiguredError } from '../learning/learning-progress.service';
 import { rememberSentStatements } from '../learning/student-evidence';
-import { KOREAN_BOOK } from '../learning/learning-object';
-import { LeitnerPlanner, sendPlanError, termsOf } from '../learning/leitner-planner';
+import { KOREAN_BOOK, USAGE_ASPECT } from '../learning/learning-object';
+import { LeitnerPlanner, patternsOf, sendPlanError, termsOf } from '../learning/leitner-planner';
 import { getValidationErrors } from '../learning/progress.controller';
 import { loadLrsConfigFromEnv, LrsConflictError, LrsRequestError, sendStatements } from '../xapi/lrs-client';
 import {
@@ -33,7 +34,7 @@ const sessionSchema = z
       .transform(String),
     scope: z.enum(['chapter', 'review']).default('chapter'),
     aspects: z
-      .array(z.enum(vocabSkillValues))
+      .array(z.enum(leitnerAspectValues))
       .min(1)
       .default(['reading', 'writing'])
       .transform((aspects) => [...new Set(aspects)]),
@@ -51,9 +52,12 @@ const attemptBase = {
   attemptId: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
   itemId: z.string().regex(/^\d{1,3}$/),
   book: BOOK,
-  sourceRef: z.string().regex(/^ch\d+\/vocabulary\/\d+$/),
+  /** A vocabulary entry, or a book pattern for `usage`. */
+  sourceRef: z.string().regex(/^ch\d+\/(?:vocabulary|patterns)\/\d+$/),
   learningObjectId: z.string().min(1).max(300),
-  aspect: z.enum(vocabSkillValues),
+  aspect: z.enum(leitnerAspectValues),
+  /** `usage`: which of the pattern's sentences the cloze used (`sample/0`). */
+  sentence: z.string().regex(/^(?:example|sample\/\d+|exercise\/\d+)$/).optional(),
   answeredAt: z.string().datetime({ offset: true }),
   openedAt: z.string().datetime({ offset: true }).optional(),
   /** The client's own verdict, for its feedback. Ignored: the server re-checks. */
@@ -117,6 +121,52 @@ class InvalidAttemptError extends Error {
   }
 }
 
+/** What an attempt is about, from the content: its tag, and the right answer for each channel. */
+type Expected = {
+  learning: {
+    learningObjectId: string;
+    book: string;
+    sourceRef: string;
+    aspect: string;
+    target: string;
+    native: string;
+  };
+  choice: { prompt: string; answer: string };
+  /** Null when the aspect can't be typed (usage is multiple choice only). */
+  typed: { prompt: string; answer: string } | null;
+};
+
+function expectedForWord(attempt: Attempt, content: BookContent): Expected {
+  const sense = content.senseBySourceRef.get(attempt.sourceRef);
+  const term = termsOf(content).bySourceRef.get(attempt.sourceRef);
+  if (attempt.aspect === USAGE_ASPECT || !sense || !term || sense.id !== attempt.learningObjectId) {
+    throw new InvalidAttemptError(attempt.attemptId, 'learningObjectId does not match sourceRef');
+  }
+  return {
+    learning: { learningObjectId: sense.id, book: content.book, sourceRef: attempt.sourceRef, aspect: attempt.aspect, target: term.target, native: term.native },
+    choice: expected(attempt.aspect, term),
+    typed: typedItem(attempt.aspect, term.target, term.native),
+  };
+}
+
+/** A cloze on a grammar pattern (docs/yalla/grammar-learning-objects.md, H4b): the sentence is rebuilt from the content. */
+function expectedForPattern(attempt: Attempt, content: BookContent): Expected {
+  const entry = patternEntriesOf(content, attempt.sourceRef).find((candidate) => candidate.id === attempt.learningObjectId);
+  const pattern = patternsOf(content).bySourceRef.get(attempt.sourceRef);
+  if (!entry || !pattern) {
+    throw new InvalidAttemptError(attempt.attemptId, 'learningObjectId does not match sourceRef');
+  }
+  const sentence = clozeSentences(pattern).find((candidate) => candidate.id === attempt.sentence);
+  if (!sentence) {
+    throw new InvalidAttemptError(attempt.attemptId, 'sentence is not one of the pattern\'s sentences');
+  }
+  return {
+    learning: { learningObjectId: entry.id, book: content.book, sourceRef: attempt.sourceRef, aspect: USAGE_ASPECT, target: entry.headword, native: entry.gloss },
+    choice: { prompt: clozePrompt(sentence.cloze, sentence.native), answer: sentence.cloze.blank },
+    typed: null,
+  };
+}
+
 /**
  * Re-checks one attempt against its book's content and builds its statements.
  * Choice: the client's options are accepted only if exactly one of them is
@@ -129,11 +179,8 @@ function recheck(
   now: number,
   base: { sessionId: string; externalId: string },
 ): [XApiAnsweredStatement, XApiAssessedStatement] {
-  const sense = content.senseBySourceRef.get(attempt.sourceRef);
-  const term = termsOf(content).bySourceRef.get(attempt.sourceRef);
-  if (!sense || !term || sense.id !== attempt.learningObjectId) {
-    throw new InvalidAttemptError(attempt.attemptId, 'learningObjectId does not match sourceRef');
-  }
+  const { learning, choice, typed } =
+    attempt.aspect === USAGE_ASPECT ? expectedForPattern(attempt, content) : expectedForWord(attempt, content);
 
   const answeredAt = Date.parse(attempt.answeredAt);
   if (answeredAt > now + MAX_SKEW_MS || answeredAt < now - MAX_AGE_MS) {
@@ -149,40 +196,32 @@ function recheck(
     itemId: attempt.itemId,
     answeredAt: attempt.answeredAt,
     openedAt: attempt.openedAt ?? null,
-    learning: {
-      learningObjectId: sense.id,
-      book: content.book,
-      sourceRef: attempt.sourceRef,
-      aspect: attempt.aspect,
-      target: term.target,
-      native: term.native,
-    },
+    learning,
   };
 
   if (attempt.channel === 'keyboard') {
-    const { prompt, answer } = typedItem(attempt.aspect, term.target, term.native);
+    if (!typed) throw new InvalidAttemptError(attempt.attemptId, `${attempt.aspect} is multiple choice only`);
     return buildYallaAttemptStatements({
       ...common,
       inputChannel: 'keyboard',
-      prompt,
+      prompt: typed.prompt,
       response: attempt.response,
-      correctResponse: answer,
-      success: isTypedCorrect(attempt.response, answer),
+      correctResponse: typed.answer,
+      success: isTypedCorrect(attempt.response, typed.answer),
     });
   }
 
-  const { prompt, answer } = expected(attempt.aspect, term);
   const slots = new Set(attempt.options.map((option) => option.slotLabel));
   const texts = new Set(attempt.options.map((option) => option.text));
-  const correctOptions = attempt.options.filter((option) => option.text === answer);
+  const correctOptions = attempt.options.filter((option) => option.text === choice.answer);
   if (slots.size !== attempt.options.length || texts.size !== attempt.options.length || correctOptions.length !== 1) {
     throw new InvalidAttemptError(attempt.attemptId, 'options do not match the content');
   }
   return buildYallaAttemptStatements({
     ...common,
     inputChannel: 'onscreen-choice',
-    prompt,
-    answerOptions: attempt.options.map((option) => ({ ...option, isCorrect: option.text === answer })),
+    prompt: choice.prompt,
+    answerOptions: attempt.options.map((option) => ({ ...option, isCorrect: option.text === choice.answer })),
     response: attempt.response,
   });
 }
@@ -241,6 +280,7 @@ export class YallaPracticeController {
             aspect: item.skill,
             learningObjectId: pick.learningObjectId,
             sourceRef: pick.sourceRef,
+            sentence: item.sentence ?? null,
             word: pick.word,
             gloss: pick.gloss,
             reason: pick.reason,

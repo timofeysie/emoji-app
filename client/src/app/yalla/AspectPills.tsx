@@ -1,4 +1,4 @@
-import { BookOpen, Check, Ear, Mic, PenLine, type LucideIcon } from 'lucide-react';
+import { BookOpen, Check, Ear, Mic, PenLine, Puzzle, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '../shared/utils';
 import type { AspectCounts, Level, PendingExport, ProgressTrack } from './yalla-progress';
@@ -14,6 +14,8 @@ type AspectInfo = {
 export const ASPECTS: readonly AspectInfo[] = [
   { aspect: 'reading', label: 'Reading', icon: BookOpen, enabled: true },
   { aspect: 'writing', label: 'Writing', icon: PenLine, enabled: true },
+  // Grammar patterns in a sentence (docs/yalla/grammar-learning-objects.md, GP7).
+  { aspect: 'usage', label: 'Grammar', icon: Puzzle, enabled: true },
   { aspect: 'listening', label: 'Listening', icon: Ear, enabled: false },
   { aspect: 'speaking', label: 'Speaking', icon: Mic, enabled: false },
 ];
@@ -54,8 +56,9 @@ export function AspectPills({
     <ul className="flex flex-wrap gap-2" aria-label="Progress by skill">
       {shown.map(({ aspect, label, icon: Icon }) => {
         const count = counts?.[aspect];
+        const things = aspect === 'usage' ? 'patterns' : 'words';
         const title = count
-          ? `${label}: ${count.open} of ${count.total} words still to learn, ${count.due} due now`
+          ? `${label}: ${count.open} of ${count.total} ${things} still to learn, ${count.due} due now`
           : `${label}: ${emptyReason ?? 'no progress yet'}`;
         const body = (
           <>

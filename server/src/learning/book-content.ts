@@ -1,12 +1,15 @@
 import koreanSenses from '../games/content/ko-senses.json';
+import { bookPatternsOf, type BookPattern } from '../games/generators/pattern-cloze';
 import { findCatalogueBook } from './book-catalogue';
 import {
+  GRAMMAR_PATTERN,
   KOREAN,
   KOREAN_BOOK,
   learningObjectId,
   LearningObjectKey,
   parseQualifiedSourceRef,
 } from './learning-object';
+import { filePatterns, type GrammarPattern, type PatternIndex } from './pattern-registry';
 import { chapterVocabulary, ChapterVocabulary, SenseRegistry } from './sense-registry';
 
 /**
@@ -39,7 +42,21 @@ export type BookContent = {
   senseBySourceRef: ReadonlyMap<string, SenseEntry>;
   /** Every sense in the language registry, from any book (review tracks). */
   senseById: ReadonlyMap<string, SenseEntry>;
+  /** Each chapter's grammar patterns with their sentences (cloze questions, H4b). */
+  patterns: ReadonlyMap<string, BookPattern[]>;
+  /** The language's pattern registry: which entries each book pattern teaches. */
+  patternIndex: PatternIndex;
 };
+
+function patternsByChapter(rawChapters: readonly unknown[]): Map<string, BookPattern[]> {
+  const patterns = new Map<string, BookPattern[]>();
+  for (const raw of rawChapters) {
+    const bookPatterns = bookPatternsOf(raw);
+    const chapter = chapterVocabulary(raw).chapter;
+    patterns.set(chapter, bookPatterns);
+  }
+  return patterns;
+}
 
 export class UnknownBookError extends Error {
   constructor(public readonly book: string) {
@@ -90,7 +107,60 @@ export function buildBookContent(
       }
     }
   }
-  return { book, language: registry.language, chapters, senseBySourceRef, senseById };
+  return {
+    book,
+    language: registry.language,
+    chapters,
+    senseBySourceRef,
+    senseById,
+    patterns: patternsByChapter(rawChapters),
+    patternIndex: filePatterns(registry.language),
+  };
+}
+
+/** A learning object's display name for progress: a word and its gloss, or a pattern's headword and gloss. */
+export function describeLearningObject(
+  content: BookContent,
+  learningObjectId: string,
+): { word: string; gloss: string; kind: string } | null {
+  const sense = content.senseById.get(learningObjectId);
+  if (sense) return { word: sense.word, gloss: sense.gloss, kind: sense.kind };
+  const pattern = content.patternIndex.byId.get(learningObjectId);
+  return pattern ? { word: pattern.headword, gloss: pattern.gloss, kind: GRAMMAR_PATTERN } : null;
+}
+
+/** The registry entries a book pattern teaches (`ch27/patterns/0`), in registry order. */
+export function patternEntriesOf(content: BookContent, sourceRef: string): readonly GrammarPattern[] {
+  return content.patternIndex.bySource.get(`${content.book}/${sourceRef}`) ?? [];
+}
+
+/**
+ * The chapter's grammar-pattern learning objects (docs/yalla/grammar-learning-objects.md),
+ * one per registry entry, in pattern order. A book pattern with no linked
+ * entry teaches nothing yet (user books until H4c).
+ */
+export function chapterPatternObjects(content: BookContent, chapter: string): LearningObject[] {
+  const objects = new Map<string, LearningObject>();
+  for (const pattern of content.patterns.get(chapter) ?? []) {
+    for (const entry of patternEntriesOf(content, pattern.sourceRef)) {
+      const existing = objects.get(entry.id);
+      if (existing) {
+        existing.sourceRefs.push(pattern.sourceRef);
+      } else {
+        objects.set(entry.id, {
+          language: entry.language,
+          kind: GRAMMAR_PATTERN,
+          word: entry.form,
+          sense: entry.meaning,
+          id: entry.id,
+          book: content.book,
+          gloss: entry.gloss,
+          sourceRefs: [pattern.sourceRef],
+        });
+      }
+    }
+  }
+  return [...objects.values()];
 }
 
 /**
@@ -140,16 +210,27 @@ export function buildUserBookContent(
 ): BookContent {
   const vocabularies = new Map<string, ChapterVocabulary>();
   const senseBySourceRef = new Map<string, SenseEntry>();
+  const patterns = new Map<string, BookPattern[]>();
   for (const { content, senseIds } of chapters) {
     const vocabulary = chapterVocabulary(content);
     vocabularies.set(vocabulary.chapter, vocabulary);
+    patterns.set(vocabulary.chapter, bookPatternsOf(content));
     vocabulary.entries.forEach((entry) => {
       const index = Number(entry.sourceRef.split('/').pop());
       const sense = senses.get(senseIds[index] ?? '');
       if (sense) senseBySourceRef.set(entry.sourceRef, sense);
     });
   }
-  return { book, language, chapters: vocabularies, senseBySourceRef, senseById: senses };
+  // Their book patterns aren't linked to registry entries until H4c, so they teach no patterns yet.
+  return {
+    book,
+    language,
+    chapters: vocabularies,
+    senseBySourceRef,
+    senseById: senses,
+    patterns,
+    patternIndex: filePatterns(language),
+  };
 }
 
 /** Every sense in a language's committed registry file, by id (empty for a language without one). */

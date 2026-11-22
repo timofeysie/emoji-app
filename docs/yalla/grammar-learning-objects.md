@@ -1,6 +1,6 @@
 # Grammar learning objects
 
-Status: **decided** (2026-11-22). **H4a built** (2026-11-22). H4b is next.
+Status: **decided** (2026-11-22). **H4a and H4b built** (2026-11-22). H4c (library chapters and the chat) is next.
 This is milestone **H4** of
 [`creating-games-with-hashbrown.md`](../hashbrown/creating-games-with-hashbrown.md#milestones).
 It builds on decision **A4** in
@@ -167,23 +167,40 @@ offers:
 
 ## Questions, evidence and tracks
 
-- **Item:** a cloze (learning-objects §6). The sentence comes from the
-  pattern's example, sample sentences or exercise answer keys, with the
-  word that carries the pattern blanked. The translation is shown, so only
-  one option fits.
-- **Distractors:** the same blank built with a different pattern (right
-  word, wrong pattern), and other sentences' blanks with the same pattern
-  (right pattern, wrong word). Data first, no conjugation engine: the
-  options come from the content's own sentences.
-- **Evidence:** `assessed` on each entry the book pattern teaches,
-  `role: whole`, `strength: direct`, `scorer: cloze-whole@1`. No word
-  evidence yet (the words in the blank would be `indirect`, which the fold
-  doesn't use).
-- **Tracks:** the usual `(student, learning object, aspect)`. Per
-  learning-objects §5, promotion should need success in **different
-  sentences**. The first build can use plain Leitner and record the
-  sentence in `source-ref`, so the stricter rule can be added later
-  without new statements.
+As built in H4b (2026-11-22):
+
+- **Item:** a cloze (learning-objects §6) on one of the book pattern's
+  sentences (its example, sample sentences or exercise answer keys). The
+  **pattern's own ending** is blanked, not the whole word, so the verb
+  stays visible and the question is about the grammar:
+  `계속 더 심해___. (It's getting worse and worse.)`. The translation
+  follows in brackets, with the exercises' word hints (`(to be curious =
+  궁금하다)`) dropped to keep it short.
+- **Where the blank is:** from the book pattern's text. The ending starts
+  at its first `+` and runs to the next placeholder (`-(으)면 안 돼`). The
+  part written the same after any verb (`지네`, `면`, `더니`) is found at
+  the end of a word in the sentence, and the blank runs to the end of the
+  ending's last word (`빠지[면 안 돼]`). When the ending fuses with the
+  stem (`-(으)ㄹ`, `-아/어/여`), the blank starts at the next word
+  (`쓰러질 [것 같아]`, `먹어 [보는 거예요]`). This finds the blank in all
+  67 sentences of the built-in book (a spec checks every one).
+- **Distractors:** other book patterns' endings, from this chapter first,
+  never one teaching the same grammar (ch. 27 and 28 share theirs) and
+  never the same text. Data only, with no conjugation engine. So it's
+  "which ending fits", not yet "right verb, wrong pattern" (that needs
+  conjugated forms, for example AI-written and person-checked in H4c).
+- **Evidence:** `assessed` on the **picked entry** only, `aspect: usage`,
+  `role: whole`, `strength: direct`, `scorer: choice-whole@1` (the same
+  scorer as word choices). A book pattern that teaches two entries
+  (`-아/어/여지다` and `-네`) gives evidence to the one the planner picked.
+  Both would need `Question.learning` to become `targets[]` (learning-objects
+  → Can wait). No word evidence yet.
+- **Tracks:** `(student, pattern, usage)`, plain Leitner for now.
+  `aspectAppliesTo` keeps `usage` for patterns and `reading`/`writing` for
+  words, in the planner and in progress. `source-ref` is the book pattern
+  (`korean-language-book/ch27/patterns/0`). The sentence is in the
+  `answered` statement's question text, so the §5 rule (promotion needs
+  different sentences) can be added later from statements already sent.
 
 ## Build order (GP9)
 
@@ -249,6 +266,58 @@ Judgement calls to check:
   linked: they're the frame of the example, not what the pattern teaches.
 - **Two meanings of one form.** None yet. `-는 것` covers the noun-making
   use only.
+
+## H4b: what was built
+
+Built 2026-11-22, for the built-in book.
+
+- **Cloze generator** (`server/src/games/generators/pattern-cloze.ts`):
+  `bookPatternsOf` (a chapter's patterns and sentences), `clozeOf` (where
+  the blank is), `clozeItem` (four options, shuffled by the seed, or a
+  given sentence for YALLA's re-check).
+- **Content** (`book-content.ts`): `BookContent` has each chapter's book
+  patterns and the language's pattern registry. `chapterPatternObjects`
+  gives a chapter's grammar-pattern learning objects.
+  `describeLearningObject` names any track (a word, or a pattern's
+  headword and gloss) for progress and player activity.
+- **Planner:** words and patterns plan together. `aspectAppliesTo`
+  (`learning-object.ts`) decides which tracks exist. A chapter's patterns
+  are spread through its words, so a new student meets one in their first
+  games. Pattern picks become cloze questions tagged
+  `{ learningObjectId: ko/grammar-pattern/…, sourceRef: ch27/patterns/0,
+  aspect: usage, target: headword, native: gloss }`. Review scope finds
+  patterns from other chapters too. Plans with only `reading`/`writing`
+  are unchanged, question for question.
+- **Badge games:** `POST /api/leitner-games` takes `aspects: ['usage']`.
+  The questions are ordinary four-option questions, so play and export
+  need no change.
+- **YALLA:** sessions take `usage`, and items carry `sentence`.
+  `POST /api/yalla/me/results` rebuilds the cloze from the book pattern and
+  sentence and checks the options against it. A typed `usage` answer is
+  refused (multiple choice only).
+- **Client:**
+  - The Leitner dialog and the chat's `createLeitnerGame` offer `usage`,
+    and the chat's default is every aspect.
+  - YALLA has a **Grammar** pill, which links to the Patterns tab.
+    Exercises has a Grammar skill that is always multiple choice, shows the
+    sentence smaller than a word, and says "new pattern".
+- **Specs:** 12 for the cloze (every built-in sentence, distractors, hints,
+  the same sentence again), 5 end to end (a usage badge game tagged with
+  the entry, words and patterns mixed with the right aspects, progress
+  naming, a YALLA cloze answer sent as `assessed` on
+  `…/lo/ko/grammar-pattern/a-eo-jida/become` and folded, refusals). All
+  534 server tests pass. Lint and the build are clean, and the client
+  typecheck shows the same 4 errors as before.
+
+**Not checked yet:**
+- **On screen:** the Grammar pill, the Exercises cloze and the dialog's
+  Usage box.
+- **A badge game on a real station:** whether cloze prompts fit the
+  student and referee views (G15). The longest built-in prompt is about
+  110 characters.
+- **Export to `emojiapp-dev`.**
+- **Pattern levels on the Patterns tab:** not shown yet. It has no
+  learning-object ids per pattern.
 
 ## Open questions
 

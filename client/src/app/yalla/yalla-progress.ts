@@ -4,7 +4,7 @@ import { useYallaResource, type Resource } from './yalla-api';
 import { flushOutbox } from './yalla-practice';
 
 /** The aspects with evidence today; listening and speaking come later (§5). */
-export const PRACTISED_ASPECTS = ['reading', 'writing'] as const;
+export const PRACTISED_ASPECTS = ['reading', 'writing', 'usage'] as const;
 
 export type Level = 0 | 1 | 2 | 3;
 export type TrackStatus = 'new' | 'active' | 'retired';

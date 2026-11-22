@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { Response } from 'express';
+import { clozeItem, type BookPattern } from '../games/generators/pattern-cloze';
+import { createRng, shuffle } from '../games/generators/seeded-random';
 import {
   canBuildItem,
-  generateVocabQuizForPicks,
+  vocabItem,
+  type LeitnerAspect,
   type VocabChoiceItem,
   type VocabSkill,
   type VocabTerm,
@@ -12,6 +15,8 @@ import type { PlayerSummary } from '../persistence/player.repository';
 import { loadLrsConfigFromEnv, LrsRequestError, type LrsConfig } from '../xapi/lrs-client';
 import {
   chapterLearningObjects,
+  chapterPatternObjects,
+  patternEntriesOf,
   UnknownBookError,
   UnknownChapterError,
   UnregisteredSensesError,
@@ -20,7 +25,7 @@ import {
 } from './book-content';
 import { BookContentService } from './book-content.service';
 import { foldTracks, type TrackState } from './leitner';
-import { chapterOfSourceRef, parseQualifiedSourceRef } from './learning-object';
+import { chapterOfSourceRef, parseQualifiedSourceRef, USAGE_ASPECT } from './learning-object';
 import { LrsNotConfiguredError, type PendingExport } from './learning-progress.service';
 import { planNextGame, seedFrom, type PlanObject, type PlanPick, type PlanReport } from './planner';
 import { fetchStudentEvidence } from './student-evidence';
@@ -29,7 +34,7 @@ export type PlanRequest = {
   book: string;
   chapter: string;
   scope: 'chapter' | 'review';
-  aspects: readonly VocabSkill[];
+  aspects: readonly LeitnerAspect[];
   count: number;
   maxNew: number;
   fill: boolean;
@@ -89,6 +94,44 @@ export function termsOf(content: BookContent): { byChapter: Map<string, VocabTer
   return { byChapter, bySourceRef };
 }
 
+/** Every book pattern in the book by sourceRef, and the ones teaching the same grammar as each. */
+export function patternsOf(content: BookContent): {
+  bySourceRef: Map<string, BookPattern>;
+  all: BookPattern[];
+  /** Book patterns sharing an entry with this one: never each other's distractors. */
+  sameGrammar: (sourceRef: string) => Set<string>;
+} {
+  const all = [...content.patterns.values()].flat();
+  const bySourceRef = new Map(all.map((pattern) => [pattern.sourceRef, pattern]));
+  const entryIds = (sourceRef: string) => new Set(patternEntriesOf(content, sourceRef).map((entry) => entry.id));
+  const sameGrammar = (sourceRef: string) => {
+    const ids = entryIds(sourceRef);
+    return new Set(all.filter((other) => [...entryIds(other.sourceRef)].some((id) => ids.has(id))).map((other) => other.sourceRef));
+  };
+  return { bySourceRef, all, sameGrammar };
+}
+
+/** Whether `sourceRef` (a vocabulary entry or a book pattern) teaches the learning object. */
+function teaches(content: BookContent, sourceRef: string, learningObjectId: string): boolean {
+  return (
+    content.senseBySourceRef.get(sourceRef)?.id === learningObjectId ||
+    patternEntriesOf(content, sourceRef).some((entry) => entry.id === learningObjectId)
+  );
+}
+
+/**
+ * Words first, with the chapter's patterns spread evenly through them, so
+ * new patterns come up in a chapter's first games, not after every word.
+ */
+function interleave(words: readonly PlanObject[], patterns: readonly PlanObject[]): PlanObject[] {
+  const result = [...words];
+  patterns.forEach((pattern, i) => {
+    const at = Math.round(((i + 1) * words.length) / (patterns.length + 1)) + i;
+    result.splice(Math.min(at, result.length), 0, pattern);
+  });
+  return result;
+}
+
 /**
  * Review scope (L11, L15): learning objects outside this chapter that the
  * student has evidence for, built from their latest source in this book
@@ -111,7 +154,7 @@ function reviewObjects(
         (ref) =>
           ref?.book === content.book &&
           chapterOfSourceRef(ref.sourceRef) !== chapter &&
-          content.senseBySourceRef.get(ref.sourceRef)?.id === track.learningObjectId,
+          teaches(content, ref.sourceRef, track.learningObjectId),
       )?.sourceRef;
     if (sourceRef) {
       objects.set(track.learningObjectId, { learningObjectId: track.learningObjectId, sourceRef });
@@ -150,6 +193,7 @@ export class LeitnerPlanner {
   async plan(request: PlanRequest, loadPlayer: () => Promise<PlayerSummary | null>): Promise<LeitnerPlan> {
     const content = await this.bookContent.getBookContent(request.book);
     const chapterObjects: LearningObject[] = chapterLearningObjects(content, request.chapter);
+    const patternObjects: LearningObject[] = chapterPatternObjects(content, request.chapter);
 
     let config: LrsConfig;
     try {
@@ -182,6 +226,18 @@ export class LeitnerPlanner {
     const seed = request.seed ?? seedFrom(`${player.id}:${now.toISOString().slice(0, 10)}`);
 
     const terms = termsOf(content);
+    const patterns = patternsOf(content);
+    const patternFor = (object: PlanObject) => {
+      const pattern = patterns.bySourceRef.get(object.sourceRef);
+      if (!pattern) throw new Error(`No book pattern '${object.sourceRef}' in ${content.book}.`);
+      return pattern;
+    };
+    const cloze = (object: PlanObject, rng = createRng(0)) => {
+      const pattern = patternFor(object);
+      return clozeItem(pattern, patterns.all, patterns.sameGrammar(pattern.sourceRef), rng);
+    };
+    const entryOf = (object: PlanObject) =>
+      patternEntriesOf(content, object.sourceRef).find((entry) => entry.id === object.learningObjectId);
     const termFor = (object: PlanObject) => {
       const term = terms.bySourceRef.get(object.sourceRef);
       const chapter = chapterOfSourceRef(object.sourceRef);
@@ -190,9 +246,10 @@ export class LeitnerPlanner {
       return { term, pool };
     };
 
-    const chapterIds = new Set(chapterObjects.map((object) => object.id));
+    const chapterIds = new Set([...chapterObjects, ...patternObjects].map((object) => object.id));
+    const toPlan = (object: LearningObject) => ({ learningObjectId: object.id, sourceRef: object.sourceRefs[0] });
     const { picks, report } = planNextGame({
-      chapterObjects: chapterObjects.map((object) => ({ learningObjectId: object.id, sourceRef: object.sourceRefs[0] })),
+      chapterObjects: interleave(chapterObjects.map(toPlan), patternObjects.map(toPlan)),
       reviewObjects: request.scope === 'review' ? reviewObjects(tracks, content, request.chapter, chapterIds) : [],
       aspects: request.aspects,
       tracks,
@@ -201,29 +258,38 @@ export class LeitnerPlanner {
       maxNew: request.maxNew,
       fill: request.fill,
       canBuild: (object, aspect) => {
+        if (aspect === USAGE_ASPECT) return cloze(object) !== null;
         const { term, pool } = termFor(object);
         return canBuildItem(aspect as VocabSkill, term, pool);
       },
     });
 
-    const items = generateVocabQuizForPicks(
-      picks.map((pick) => {
-        const { term, pool } = termFor(pick);
+    // One question per pick, shuffled by `seed` so aspects interleave. A
+    // pattern's tag names the registry entry: its headword and gloss.
+    const rng = createRng(seed);
+    const built = picks.map((pick): VocabChoiceItem => {
+      if (pick.aspect === USAGE_ASPECT) {
+        const entry = entryOf(pick);
+        const item = cloze(pick, rng);
+        if (!entry || !item) throw new Error(`Cannot build a usage question for '${pick.sourceRef}'.`);
         return {
-          skill: pick.aspect as VocabSkill,
-          term,
-          pool,
-          learning: {
-            learningObjectId: pick.learningObjectId,
-            book: content.book,
-            sourceRef: pick.sourceRef,
-            target: term.target,
-            native: term.native,
-          },
+          skill: 'usage',
+          termId: item.sourceRef,
+          sentence: item.sentence,
+          prompt: item.prompt,
+          options: item.options,
+          learning: { learningObjectId: pick.learningObjectId, book: content.book, sourceRef: pick.sourceRef, target: entry.headword, native: entry.gloss },
         };
-      }),
-      seed,
-    );
+      }
+      const { term, pool } = termFor(pick);
+      const item = vocabItem(pick.aspect as VocabSkill, term, pool, rng);
+      if (!item) throw new Error(`Cannot build a ${pick.aspect} question for '${term.id}'.`);
+      return {
+        ...item,
+        learning: { learningObjectId: pick.learningObjectId, book: content.book, sourceRef: pick.sourceRef, target: term.target, native: term.native },
+      };
+    });
+    const items = shuffle(built, rng);
 
     return {
       player,
@@ -232,8 +298,13 @@ export class LeitnerPlanner {
       seed,
       now,
       picks: picks.map((pick) => {
+        const chapter = chapterOfSourceRef(pick.sourceRef);
+        if (pick.aspect === USAGE_ASPECT) {
+          const entry = entryOf(pick);
+          return { ...pick, word: entry?.headword ?? pick.learningObjectId, gloss: entry?.gloss ?? '', chapter };
+        }
         const { term } = termFor(pick);
-        return { ...pick, word: term.target, gloss: term.native, chapter: chapterOfSourceRef(pick.sourceRef) };
+        return { ...pick, word: term.target, gloss: term.native, chapter };
       }),
       report,
       items,

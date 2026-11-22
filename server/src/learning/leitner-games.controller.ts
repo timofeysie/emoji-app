@@ -1,7 +1,7 @@
 import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { z, ZodError } from 'zod';
-import { toQuestionInput, vocabSkillValues } from '../games/generators/vocab-choice';
+import { leitnerAspectValues, toQuestionInput } from '../games/generators/vocab-choice';
 import { GameDataRepository } from '../persistence/game-data.repository';
 import { PlayerRepository } from '../persistence/player.repository';
 import { RefereeGuard, refereeUserIdOf, type RefereeRequest } from '../referee.guard';
@@ -21,9 +21,9 @@ const createLeitnerGameSchema = z
       .union([z.string().regex(/^\d+$/, 'must be a chapter number'), z.number().int().positive()])
       .transform(String),
     scope: z.enum(['chapter', 'review']).default('chapter'),
-    /** The generator builds reading and writing questions only (for now). */
+    /** Words: reading and writing. Grammar patterns: usage (cloze questions). */
     aspects: z
-      .array(z.enum(vocabSkillValues))
+      .array(z.enum(leitnerAspectValues))
       .min(1)
       .default(['reading', 'writing'])
       .transform((aspects) => [...new Set(aspects)]),

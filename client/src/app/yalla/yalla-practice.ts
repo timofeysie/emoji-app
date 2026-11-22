@@ -8,7 +8,8 @@ import type { Level, TrackStatus } from './yalla-progress';
  * through an outbox that survives a refresh or a dropped connection.
  */
 
-export type PracticeAspect = 'reading' | 'writing';
+/** `usage` is a grammar pattern in a sentence (docs/yalla/grammar-learning-objects.md): multiple choice only. */
+export type PracticeAspect = 'reading' | 'writing' | 'usage';
 export type SlotLabel = 'A' | 'B' | 'C' | 'D';
 
 /** How an answer arrives: tap/click/press A–D, or type it. */
@@ -22,8 +23,9 @@ export const DEFAULT_FORMAT: GameFormat = { reading: 'onscreen-choice', writing:
 
 export const OFFERED_CHANNELS: readonly InputChannel[] = ['onscreen-choice', 'keyboard'];
 
-/** The channel a session uses for `aspect`: the format's, unless that isn't offered yet. */
+/** The channel a session uses for `aspect`: the format's, unless that isn't offered yet. Usage is always A–D. */
 export function channelFor(format: GameFormat, aspect: PracticeAspect): InputChannel {
+  if (aspect === 'usage') return 'onscreen-choice';
   return OFFERED_CHANNELS.includes(format[aspect]) ? format[aspect] : 'onscreen-choice';
 }
 
@@ -32,6 +34,9 @@ export type PracticeItem = {
   aspect: PracticeAspect;
   learningObjectId: string;
   sourceRef: string;
+  /** Usage items: the pattern sentence the cloze uses, sent back for the re-check. */
+  sentence: string | null;
+  /** A word, or a grammar pattern's headword. */
   word: string;
   gloss: string;
   reason: 'overdue' | 'new' | 'practice' | 'review';
@@ -69,6 +74,7 @@ type AttemptBase = {
   sourceRef: string;
   learningObjectId: string;
   aspect: PracticeAspect;
+  sentence?: string;
   answeredAt: string;
   openedAt?: string;
   correct: boolean;

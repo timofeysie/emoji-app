@@ -43,6 +43,18 @@ export const GRAMMAR_PATTERN = 'grammar-pattern';
 export const learningObjectKindValues = [...vocabularyKindValues, GRAMMAR_PATTERN] as const;
 export type LearningObjectKind = (typeof learningObjectKindValues)[number];
 
+/** The aspect of grammar-pattern tracks: picking the right form in a sentence (GP7). */
+export const USAGE_ASPECT = 'usage';
+
+/**
+ * Which tracks exist: grammar patterns have `usage` only, words have every
+ * other aspect (`reading`, `writing`). The planner and progress both use it.
+ */
+export function aspectAppliesTo(learningObjectId: string, aspect: string): boolean {
+  const isPattern = learningObjectId.split('/')[1] === GRAMMAR_PATTERN;
+  return isPattern === (aspect === USAGE_ASPECT);
+}
+
 /** Activity type per kind: `lexeme` is one word in one sense. */
 export const LEARNING_OBJECT_TYPES: Record<LearningObjectKind, string> = {
   lexeme: `${XAPI_BASE_IRI}/activity-types/lexeme-sense`,

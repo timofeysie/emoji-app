@@ -12,6 +12,10 @@ import { createRng, Rng, shuffle } from './seeded-random';
 export const vocabSkillValues = ['reading', 'writing'] as const;
 export type VocabSkill = (typeof vocabSkillValues)[number];
 
+/** Every aspect a Leitner question can test: words' skills, and `usage` for grammar patterns (GP7). */
+export const leitnerAspectValues = [...vocabSkillValues, 'usage'] as const;
+export type LeitnerAspect = (typeof leitnerAspectValues)[number];
+
 /** Answer cards for the Phase 0 demo; one option per card. */
 export const QUIZ_SLOT_LABELS = ['A', 'B', 'C', 'D'] as const;
 const DISTRACTOR_COUNT = QUIZ_SLOT_LABELS.length - 1;
@@ -28,8 +32,11 @@ export type VocabTerm = {
 export type ChoiceOption = { text: string; isCorrect: boolean };
 
 export type VocabChoiceItem = {
-  skill: VocabSkill;
+  skill: LeitnerAspect;
+  /** The vocabulary entry or book pattern: `ch26/vocabulary/13`, `ch27/patterns/0`. */
   termId: string;
+  /** Cloze items: which of the book pattern's sentences (`sample/0`), for YALLA's re-check. */
+  sentence?: string;
   /** What players read on the view-mode screen. */
   prompt: string;
   /** Already shuffled; exactly one is correct. */
@@ -173,6 +180,11 @@ export function generateVocabQuiz(options: VocabQuizOptions): VocabChoiceItem[] 
     }
   }
   return items;
+}
+
+/** One vocabulary item: reading or writing, or null when `pool` can't make one. */
+export function vocabItem(skill: VocabSkill, term: VocabTerm, pool: readonly VocabTerm[], rng: Rng): VocabChoiceItem | null {
+  return itemBuilders[skill](term, pool, rng);
 }
 
 /** True when `skill` can make a question for `term` from `pool` (doesn't depend on the seed). */

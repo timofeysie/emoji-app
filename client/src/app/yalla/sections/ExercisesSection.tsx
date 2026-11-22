@@ -10,6 +10,7 @@ import { PractisingAs } from '../PractisingAs';
 import { useChapterPillAspects, useChapterProgress, useStudyChapter } from '../YallaChapterView';
 import { chapterPath, YallaRequestError } from '../yalla-api';
 import {
+  channelFor,
   DEFAULT_FORMAT,
   enqueueAttempt,
   flushOutbox,
@@ -31,7 +32,7 @@ import {
 } from '../yalla-practice';
 
 const COUNTS = [5, 10, 20] as const;
-const ASPECTS: readonly PracticeAspect[] = ['reading', 'writing'];
+const ASPECTS: readonly PracticeAspect[] = ['reading', 'writing', 'usage'];
 const KEY_TO_SLOT: Record<string, SlotLabel> = { a: 'A', b: 'B', c: 'C', d: 'D', '1': 'A', '2': 'B', '3': 'C', '4': 'D' };
 
 const CHANNELS: ReadonlyArray<{ channel: InputChannel; label: string; icon: typeof Keyboard }> = [
@@ -145,6 +146,13 @@ function ChannelPicker({
   value: InputChannel;
   onChange: (channel: InputChannel) => void;
 }) {
+  if (aspect === 'usage') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid={`channel-${aspect}`}>
+        <ListChecks className="h-3.5 w-3.5" aria-hidden /> Multiple choice
+      </span>
+    );
+  }
   return (
     <span
       role="radiogroup"
@@ -256,7 +264,7 @@ function SessionSetup({
             </label>
             <ChannelPicker
               aspect={aspect}
-              value={format[aspect]}
+              value={channelFor(format, aspect)}
               onChange={(channel) => onFormat({ ...format, [aspect]: channel })}
             />
           </div>
@@ -329,7 +337,7 @@ function PracticeCard({
   const [openedAt, setOpenedAt] = useState(() => new Date().toISOString());
   const choiceShown = saved.choiceShown.includes(item.itemId);
   // Once an item's options were on screen it stays A–D: typing then would be peeking.
-  const channel: InputChannel = answer?.channel ?? (choiceShown ? 'onscreen-choice' : saved.format[item.aspect]);
+  const channel: InputChannel = answer?.channel ?? (choiceShown ? 'onscreen-choice' : channelFor(saved.format, item.aspect));
 
   useEffect(() => {
     if (!answer) setOpenedAt(new Date().toISOString());
@@ -350,6 +358,7 @@ function PracticeCard({
         sourceRef: item.sourceRef,
         learningObjectId: item.learningObjectId,
         aspect: item.aspect,
+        ...(item.sentence ? { sentence: item.sentence } : {}),
         answeredAt: new Date().toISOString(),
         openedAt,
         correct: entry.correct,
@@ -384,6 +393,7 @@ function PracticeCard({
 
   /** Applies to this item (unless its options were already shown) and the rest of the session. */
   const switchTo = (to: InputChannel) => {
+    if (item.aspect === 'usage') return;
     const format = { ...saved.format, [item.aspect]: to };
     onChange({ ...saved, format });
     onFormat(format);
@@ -411,11 +421,12 @@ function PracticeCard({
   }, [answer, channel, choose, item.options, next]);
 
   const position = session.items.indexOf(item) + 1;
-  const typed = typedItem(item.aspect, item.word, item.gloss);
-  // Reading asks the Korean; writing asks the meaning and wants Korean.
-  const promptLang = item.aspect === 'reading' ? lang : 'en';
+  const usage = item.aspect === 'usage';
+  const typed = item.aspect === 'usage' ? null : typedItem(item.aspect, item.word, item.gloss);
+  // Reading asks the Korean; writing asks the meaning and wants Korean; usage is a Korean sentence with a gap.
+  const promptLang = item.aspect === 'writing' ? 'en' : lang;
   const answerLang = item.aspect === 'reading' ? 'en' : lang;
-  const sessionChannel = saved.format[item.aspect];
+  const sessionChannel = channelFor(saved.format, item.aspect);
 
   return (
     <section aria-label="Exercises" className="flex flex-col gap-4 rounded-lg border p-4" data-testid="practice-card">
@@ -424,7 +435,7 @@ function PracticeCard({
           {position} / {session.items.length}
         </span>
         <span>
-          {aspectLabel(item.aspect)} · {item.reason === 'new' ? 'new word' : item.reason}
+          {aspectLabel(item.aspect)} · {item.reason === 'new' ? (usage ? 'new pattern' : 'new word') : item.reason}
         </span>
         <ChannelPicker aspect={item.aspect} value={sessionChannel} onChange={switchTo} />
       </div>
@@ -434,12 +445,14 @@ function PracticeCard({
         </p>
       )}
 
-      {channel === 'onscreen-choice' ? (
+      {channel === 'onscreen-choice' || !typed ? (
         <>
           <p
             lang={promptLang}
-            title={item.aspect === 'reading' ? 'What does this mean?' : 'Which is the right spelling?'}
-            className="cursor-help text-center text-3xl font-semibold"
+            title={
+              usage ? 'Which ending fits the sentence?' : item.aspect === 'reading' ? 'What does this mean?' : 'Which is the right spelling?'
+            }
+            className={cn('cursor-help text-center font-semibold', usage ? 'text-xl' : 'text-3xl')}
             data-testid="practice-prompt"
           >
             {item.prompt}

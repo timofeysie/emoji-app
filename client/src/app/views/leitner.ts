@@ -4,7 +4,8 @@
  */
 
 export const LEITNER_BOOK = 'korean-language-book';
-export const LEITNER_ASPECTS = ['reading', 'writing'] as const;
+/** Words: reading and writing. Grammar patterns: usage, asked as cloze questions (docs/yalla/grammar-learning-objects.md). */
+export const LEITNER_ASPECTS = ['reading', 'writing', 'usage'] as const;
 
 export type GameKind = 'class' | 'leitner-solo';
 export type LeitnerScope = 'chapter' | 'review';

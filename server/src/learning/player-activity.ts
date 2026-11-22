@@ -1,5 +1,5 @@
 import { ANSWERED_VERB_ID, XAPI_BASE_IRI } from '../xapi/iris';
-import type { BookContent } from './book-content';
+import { describeLearningObject, type BookContent } from './book-content';
 import { DEFAULT_LEITNER_CONFIG, foldTracks, isDue, observationsFromStatements, type Level, type TrackState } from './leitner';
 import { chapterOfSourceRef, EXT_ASPECT, EXT_GAME_KIND, EXT_SOURCE_REF, parseQualifiedSourceRef } from './learning-object';
 
@@ -215,13 +215,13 @@ export function summarizePlayerActivity(input: {
     DEFAULT_LEITNER_CONFIG,
   )
     .map((track) => {
-      const sense = content.senseById.get(track.learningObjectId);
+      const described = describeLearningObject(content, track.learningObjectId);
       return {
         ...track,
         due: isDue(track, now, DEFAULT_LEITNER_CONFIG),
-        word: sense?.word ?? null,
-        gloss: sense?.gloss ?? null,
-        kind: sense?.kind ?? null,
+        word: described?.word ?? null,
+        gloss: described?.gloss ?? null,
+        kind: described?.kind ?? null,
       };
     })
     .sort(
