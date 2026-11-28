@@ -4,7 +4,7 @@ import { z, ZodError } from 'zod';
 import { ContentDraftRepository, type ContentDraftRecord } from '../persistence/content-draft.repository';
 import { GameDataRepository } from '../persistence/game-data.repository';
 import { RefereeGuard, refereeUserIdOf, type RefereeRequest } from '../referee.guard';
-import { chapterDraftPayloadSchema, chapterDraftTitle, type ChapterDraftPayload } from './chapter-draft';
+import { chapterDraftPayloadSchema, type ChapterDraftPayload } from './chapter-draft';
 import { ChapterDraftError, ChapterDraftsService } from './chapter-drafts.service';
 import {
   DEFAULT_LANGUAGE,
@@ -226,7 +226,7 @@ export class ContentDraftsController {
         ? draft.type === 'chapter'
           ? {
               payload: payloadParsed.data,
-              title: chapterDraftTitle(payloadParsed.data as ChapterDraftPayload),
+              title: await this.chapters.draftTitle(payloadParsed.data as ChapterDraftPayload),
               problems: await this.chapters.problems(payloadParsed.data as ChapterDraftPayload, draft),
             }
           : {
@@ -389,7 +389,7 @@ export class ContentDraftsController {
           ownerUserId: userId,
           type: 'chapter',
           sourceId: copy.sourceId,
-          title: chapterDraftTitle(copy.payload),
+          title: await this.chapters.draftTitle(copy.payload),
           payload: copy.payload,
           settings: CHAPTER_SETTINGS,
           problems: await this.chapters.problems(copy.payload, { ownerUserId: userId, editsChapter: links.editsChapter ?? null }),
@@ -419,7 +419,7 @@ export class ContentDraftsController {
         ownerUserId: userId,
         type: 'chapter',
         sourceId,
-        title: chapterDraftTitle(content),
+        title: await this.chapters.draftTitle(content),
         payload: content,
         settings: CHAPTER_SETTINGS,
         problems: await this.chapters.problems(content, { ownerUserId: userId, editsChapter: null }),

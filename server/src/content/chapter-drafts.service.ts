@@ -12,8 +12,10 @@ import {
 } from '../persistence/book.repository';
 import type { ChapterRefRecord, ContentDraftRecord } from '../persistence/content-draft.repository';
 import {
+  CHAPTER_DRAFT_LIMITS,
   chapterAsDraft,
   chapterDraftPayloadSchema,
+  chapterDraftTitle,
   chapterDraftProblems,
   patternRegistryProblems,
   publishedChapter,
@@ -107,6 +109,15 @@ export class ChapterDraftsService {
       sourceId: record?.sourceId ?? null,
       frozen: purpose === 'edit' && record ? frozenOf(record) : null,
     };
+  }
+
+  /** The draft's title: the chapter's, or until it has one, which book it is a new chapter for. */
+  async draftTitle(payload: ChapterDraftPayload | null): Promise<string> {
+    const title = chapterDraftTitle(payload);
+    const slug = payload?.bookSlug.trim();
+    if (title || !slug || !this.books.isAvailable()) return title;
+    const book = await this.books.getBook(slug);
+    return `New chapter for ${book?.title ?? slug}`.slice(0, CHAPTER_DRAFT_LIMITS.maxTitleLength);
   }
 
   /** Everything that stops the draft being published, including the registry and the book. */
@@ -218,6 +229,16 @@ export class ChapterDraftsService {
       const book = await this.books.getBook(existing);
       if (!book || book.archivedAt) return [{ path: 'bookSlug', message: `There is no book “${existing}”` }];
       if (book.ownerUserId !== userId) return [{ path: 'bookSlug', message: 'Chapters can only be added to your own books' }];
+      // A book's senses and patterns are per language (C5, docs/hashbrown/creating-games-with-hashbrown-improvements.md).
+      const chapterLanguage = targetLanguageOf(payload);
+      if (chapterLanguage !== book.language.target) {
+        return [
+          {
+            path: 'language',
+            message: `“${book.title}” is a book in “${book.language.target}”: a chapter for it must be too, not “${chapterLanguage}”`,
+          },
+        ];
+      }
       return [];
     }
     const slug = payload.newBook.slug.trim();

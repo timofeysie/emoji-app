@@ -1,15 +1,18 @@
 import { ChevronRight } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import { CreateChapterButton } from '../library/CreateChapterButton';
 import { AspectPills, PendingExportNotice } from './AspectPills';
 import { PractisingAs } from './PractisingAs';
 import { YallaStatus } from './YallaStatus';
-import { chapterPath, useYallaResource, type BookSummary } from './yalla-api';
+import { chapterPath, useBookChanged, useYallaResource, type BookSummary } from './yalla-api';
 import { bookProgressPath, useLearnerProgress, type BookProgress } from './yalla-progress';
 
 /** `/yalla/books/:book`: the book's chapters, each with the linked player's pills. */
 export function YallaBookView() {
   const { book = '' } = useParams();
-  const { data, loading, error } = useYallaResource<BookSummary>(`/books/${encodeURIComponent(book)}`, { cache: false });
+  const { data, loading, error, reload } = useYallaResource<BookSummary>(`/books/${encodeURIComponent(book)}`, { cache: false });
+  // A chapter published from the chat card while this page is open (C6).
+  useBookChanged(book, reload);
   const progress = useLearnerProgress<BookProgress>(bookProgressPath(book));
   const countsByChapter = new Map(progress.data?.chapters.map((item) => [item.chapter, item.byAspect]));
   const emptyReason =
@@ -24,7 +27,10 @@ export function YallaBookView() {
 
       {data && (
         <>
-          <h1 className="text-2xl font-bold">{data.title}</h1>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-2xl font-bold">{data.title}</h1>
+            {data.owner === 'mine' && <CreateChapterButton book={data.book} language={data.language} />}
+          </div>
           {data.owner && data.owner !== 'built-in' && (
             <p className="-mt-3 text-xs text-muted-foreground">
               {data.owner === 'mine' ? 'Your library book' : 'A library book another referee shared'} · {data.book}

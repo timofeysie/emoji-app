@@ -100,6 +100,26 @@ export function clearYallaContentCache(): void {
   contentCache.clear();
 }
 
+const BOOK_CHANGED = 'emoji-app:book-changed';
+
+/** A book's chapters changed (a publish or an archive), so open book pages fetch it again. */
+export function notifyBookChanged(book: string): void {
+  window.dispatchEvent(new CustomEvent(BOOK_CHANGED, { detail: { book } }));
+}
+
+/** Calls `onChange` when `notifyBookChanged` is called for this book, or for any book when `book` is null. */
+export function useBookChanged(book: string | null, onChange: () => void): void {
+  const callback = useRef(onChange);
+  callback.current = onChange;
+  useEffect(() => {
+    const listener = (event: Event) => {
+      if (book === null || (event as CustomEvent<{ book: string }>).detail.book === book) callback.current();
+    };
+    window.addEventListener(BOOK_CHANGED, listener);
+    return () => window.removeEventListener(BOOK_CHANGED, listener);
+  }, [book]);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await authFetch(`/api/yalla${path}`, init);
   if (!res.ok) {

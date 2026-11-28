@@ -2,7 +2,7 @@ import type { Response } from 'express';
 import type { ContentDraftRecord, ContentDraftRepository } from '../persistence/content-draft.repository';
 import type { GameDataRepository } from '../persistence/game-data.repository';
 import type { RefereeRequest } from '../referee.guard';
-import { emptyChapterPayload } from './chapter-draft';
+import { chapterDraftTitle, emptyChapterPayload } from './chapter-draft';
 import type { ChapterDraftsService } from './chapter-drafts.service';
 import { ContentDraftsController } from './content-drafts.controller';
 import type { GameDraftPayload } from './game-draft';
@@ -87,8 +87,10 @@ describe('ContentDraftsController', () => {
     getGameForDraft: jest.fn(),
     deleteGame: jest.fn(),
   };
-  const chapters: jest.Mocked<Pick<ChapterDraftsService, 'problems' | 'publish' | 'copyChapter' | 'myBooks' | 'frozen'>> = {
+  const chapters: jest.Mocked<Pick<ChapterDraftsService, 'problems' | 'publish' | 'copyChapter' | 'myBooks' | 'frozen' | 'draftTitle'>> = {
     problems: jest.fn(),
+    // As the service, without a book to look up.
+    draftTitle: jest.fn(async (payload) => chapterDraftTitle(payload)),
     publish: jest.fn(),
     copyChapter: jest.fn(),
     myBooks: jest.fn(),

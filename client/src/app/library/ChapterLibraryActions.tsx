@@ -3,12 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Archive, ArchiveRestore, Copy, Loader2, Pencil } from 'lucide-react';
 import { Button } from '../shared/button';
 import { chapterPath, type StudyChapter } from '../yalla/yalla-api';
+import { CreateChapterButton } from './CreateChapterButton';
 import { createChapterDraft, setChapterArchived } from './library-api';
 
 /**
  * A YALLA chapter's library actions (docs/hashbrown/creating-games-with-hashbrown.md
  * → Open content and remixing): **Remix** into a book of your own, and for
- * the owner **Edit** (G8) and **Archive**. Remixes credit the source by
+ * the owner **Edit** (G8), **Archive** and **New chapter** in the same book. Remixes credit the source by
  * title only (G12).
  */
 export function ChapterLibraryActions({ chapter, onArchived }: { chapter: StudyChapter; onArchived: () => void }) {
@@ -79,6 +80,7 @@ export function ChapterLibraryActions({ chapter, onArchived }: { chapter: StudyC
               {chapter.archived ? <ArchiveRestore aria-hidden /> : <Archive aria-hidden />}
               {chapter.archived ? 'Unarchive' : 'Archive'}
             </Button>
+            <CreateChapterButton book={chapter.book} language={chapter.language} label="New chapter" />
           </>
         )}
         {error && <span className="text-xs text-destructive">{error}</span>}

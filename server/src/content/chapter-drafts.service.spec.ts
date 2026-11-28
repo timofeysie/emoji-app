@@ -86,6 +86,44 @@ describe('ChapterDraftsService with YALLA', () => {
     expect(problems).toContainEqual({ path: 'bookSlug', message: 'Chapters can only be added to your own books' });
   });
 
+  it('Create chapter on a book page: an empty draft for the book, titled after it, publishes as its next chapter', async () => {
+    await publishStory();
+    const empty = chapterDraftPayloadSchema.parse({ bookSlug: 'rabbit-stories-1a2b', language: { target: 'ko', native: 'en' } });
+
+    expect(await service.draftTitle(empty)).toBe('New chapter for Rabbit stories');
+    const problems = await service.problems(empty, { ownerUserId: OWNER, editsChapter: null });
+    expect(problems.filter((problem) => problem.path === 'bookSlug' || problem.path === 'language')).toEqual([]);
+
+    // Filled in with what chapter 1 added, so nothing new needs confirming.
+    const story = storyPayload({ bookSlug: 'rabbit-stories-1a2b' });
+    const filled = chapterDraftPayloadSchema.parse({
+      ...story,
+      vocabulary: story.vocabulary.map((entry) =>
+        entry.sense.decision === 'new'
+          ? { ...entry, sense: { decision: 'reuse', reuseId: `ko/lexeme/${entry.targetLanguageText}/${entry.sense.newSense}` } }
+          : entry,
+      ),
+      patterns: story.patterns.map((pattern) => ({
+        ...pattern,
+        entries: pattern.entries.map((entry) =>
+          entry.decision === 'new' ? { decision: 'reuse', reuseId: `ko/grammar-pattern/at-eot-eoyo/${entry.meaning}` } : entry,
+        ),
+      })),
+    });
+    expect(await service.draftTitle(filled)).toBe('The rabbit and the turtle');
+    expect(await service.publish(draftOf(filled), OWNER)).toMatchObject({ bookSlug: 'rabbit-stories-1a2b', chapter: '2' });
+  });
+
+  it('a chapter must be in its book’s language', async () => {
+    await publishStory();
+    const japanese = chapterDraftPayloadSchema.parse({ bookSlug: 'rabbit-stories-1a2b', language: { target: 'ja', native: 'en' } });
+
+    expect(await service.problems(japanese, { ownerUserId: OWNER, editsChapter: null })).toContainEqual({
+      path: 'language',
+      message: '“Rabbit stories” is a book in “ko”: a chapter for it must be too, not “ja”',
+    });
+  });
+
   it('a remix keeps every learning object and credits the source by title', async () => {
     await publishStory();
     const copy = await service.copyChapter({ book: 'rabbit-stories-1a2b', chapter: '1' }, OTHER, 'remix');

@@ -1,5 +1,5 @@
 import { authFetch } from '../auth/authFetch';
-import { clearYallaContentCache } from '../yalla/yalla-api';
+import { clearYallaContentCache, notifyBookChanged } from '../yalla/yalla-api';
 import { DraftRequestError, type ContentDraft, type DraftView, type LanguagePair } from '../game-authoring/drafts-api';
 
 /**
@@ -169,6 +169,7 @@ export async function publishChapterDraft(draftId: string, revision: number): Pr
     body: JSON.stringify({ revision }),
   });
   clearYallaContentCache();
+  notifyBookChanged(published.chapter.book);
   return published;
 }
 
@@ -199,6 +200,7 @@ export async function setChapterArchived(book: string, chapter: string, archived
     { method: 'POST', body: JSON.stringify({ archived }) },
   );
   clearYallaContentCache();
+  notifyBookChanged(book);
   return result;
 }
 

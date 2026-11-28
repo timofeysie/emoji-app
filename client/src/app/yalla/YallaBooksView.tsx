@@ -2,7 +2,7 @@ import { BookOpen, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PractisingAs } from './PractisingAs';
 import { YallaStatus } from './YallaStatus';
-import { bookPath, useYallaResource, type BookOwner, type BookSummary } from './yalla-api';
+import { bookPath, useBookChanged, useYallaResource, type BookOwner, type BookSummary } from './yalla-api';
 
 const GROUPS: Array<{ owner: BookOwner; title: string }> = [
   { owner: 'built-in', title: 'Books' },
@@ -16,7 +16,8 @@ const GROUPS: Array<{ owner: BookOwner; title: string }> = [
  */
 export function YallaBooksView() {
   // Not cached: other referees publish books while the app is open.
-  const { data, loading, error } = useYallaResource<{ books: BookSummary[] }>('/books', { cache: false });
+  const { data, loading, error, reload } = useYallaResource<{ books: BookSummary[] }>('/books', { cache: false });
+  useBookChanged(null, reload);
 
   return (
     <div className="flex flex-col gap-4">

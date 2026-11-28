@@ -54,7 +54,7 @@ In development, Vite proxies `/api` to `localhost:3000`. In production, Express 
 | `client/src/app/views/GameDraftsView.tsx`, `GameDraftView.tsx` | Draft Game pages: `/games/drafts` and `/games/drafts/:draftId` |
 | `client/src/app/library/` | Library chapters (H2): `kogs.chapter.v1` Skillet schema, recipe, `library-api`, `ChapterDraftEditor`, sense suggestions, YALLA Remix/Edit/Archive actions |
 | `server/src/content/` | Draft rules (`game-draft.ts`, `chapter-draft.ts`, `kogs-chapter.ts`), `/api/content/drafts`, `ChapterDraftsService`, `/api/senses` and `/api/books` |
-| `server/src/learning/book-content.service.ts` | Async book content: built-in JSON books plus user books from Mongo, against the sense file merged with the `senses` collection |
+| `server/src/learning/book-content.service.ts` | Async book content: built-in JSON books plus user books from Mongo, against the sense file merged with the `senses` collection and the pattern file merged with the `patterns` collection |
 | `server/src/main.ts` | Express server — `/api/chat` streaming endpoint + SPA static serving |
 
 ## Generative UI Pattern
@@ -62,7 +62,7 @@ In development, Vite proxies `/api` to `localhost:3000`. In production, Express 
 `RichChatPanel.tsx` combines **chat areas** (`client/src/app/chat/`). Each area hook returns a `ChatArea` (tools, runtime functions, components, and a prompt section written with the `section` tag); `composePrompt` joins the sections into one `prompt`. Add a feature's chat support as a new area rather than growing the panel.
 - `useCoreChatArea`: who the assistant is, `Markdown` and `Card` components
 - `game-authoring/useGameAuthoringChatArea`: `proposeGame`, `reviseGameDraft`, `getMyDrafts`, `getGameDraft`, and the `GameDraft`, `OpenGame`, `OpenDraft` components. `proposeGame` gets only the passage's first words and finds the passage in the user's messages (`findPassage`); it returns `problems` and a `mixProblem` for the model to fix with `reviseGameDraft`
-- `library/useLibraryChatArea`: `getBooks`, `findSenses`, `proposeChapter`, `reviseChapterDraft`, `getChapterDraft`, `remixChapter`, and the `ChapterDraft`, `OpenYallaChapter` components. Only when the user asks for a library chapter; new senses are confirmed by the user on the card, never by the model
+- `library/useLibraryChatArea`: `getBooks`, `findSenses`, `findPatterns`, `proposeChapter`, `reviseChapterDraft`, `getChapterDraft`, `remixChapter`, and the `ChapterDraft`, `OpenYallaChapter` components. Only when the user asks for a library chapter; each pattern lists the grammar entries it teaches (`PATTERN_RULES`); new senses and new patterns are confirmed by the user on the card, never by the model
 - `leitner/useLeitnerChatArea`: `getPlayers` (matches names in the browser, returns only id and label), `createLeitnerGame` (always a dry run) and the `LeitnerPlan` card, which re-plans with the same seed and time and creates the game on the referee's click
 - `useSmartHomeChatArea`: `getLights`, `getScenes`, `controlLight`, `deleteLight`, `deleteScene`, `createLight` (javascript runtime), `LightChat` and `AddScene` components
 - `useDomChatArea`: `setFormInputValue`, `clickButtonByText`, `selectOptionByText` — manipulate React form elements directly via DOM APIs, allowing the AI to fill forms and submit dialogs
@@ -73,9 +73,15 @@ The panel has its own `HashbrownProvider` (`chat/ChatSessionProvider.tsx`) that 
 
 **Game drafts** (docs/hashbrown/creating-games-with-hashbrown.md): the AI's output is only ever a draft until the owner clicks Create game. The server re-checks every draft with `gameDraftProblems()`, so keep its `GAME_DRAFT_LIMITS` equal to the client's `GAME_LIMITS` (a spec compares them). The length limits depend on the screens that show game text: read "Text length and screens" in that doc before changing a limit or showing game text somewhere new. Generated options are shuffled in `useGameGeneration`, because models put the correct one first.
 
-**Library chapters** (same doc, Feature 2): a chapter draft publishes into a user `Book` as a `Chapter` (`kogs.chapter.v1` plus `senseIds`). Published vocabulary is frozen (G8): entries can be corrected or appended, never reordered or removed, because `sourceRef` (`ch1/vocabulary/3`) and sense ids reach the LRS. Keep `CHAPTER_DRAFT_LIMITS` equal to the client's `CHAPTER_LIMITS` (a spec compares them). Anything that reads a book by slug (Leitner planner, progress, YALLA practice, export) goes through `BookContentService`, so it works for user books too (H3); the synchronous `getBookContent()` only knows built-in books.
+**Library chapters** (same doc, Feature 2): a chapter draft publishes into a user `Book` as a `Chapter` (`kogs.chapter.v1` plus `senseIds`). Published vocabulary is frozen (G8): entries can be corrected or appended, never reordered or removed, because `sourceRef` (`ch1/vocabulary/3`) and sense ids reach the LRS. Keep `CHAPTER_DRAFT_LIMITS` equal to the client's `CHAPTER_LIMITS` (a spec compares them). On the owner's book and chapter pages, **Create chapter** (`library/CreateChapterButton.tsx`) starts an empty draft for that book (docs/hashbrown/creating-games-with-hashbrown-improvements.md, I1a); a chapter must be in its book's language, and `notifyBookChanged` refreshes open book pages after a publish or archive. Anything that reads a book by slug (Leitner planner, progress, YALLA practice, export) goes through `BookContentService`, so it works for user books too (H3); the synchronous `getBookContent()` only knows built-in books.
 
 **Grammar patterns** (docs/yalla/grammar-learning-objects.md, H4): a pattern's id comes from its headword's normalised spelling key, romanised (`ko/grammar-pattern/a-eo-jida/become`), never typed. `patternKey`/`patternForm` (`server/src/learning/grammar-pattern.ts`) and the registry (`ko-patterns.json`, `pattern-registry.ts`) are permanent once pilot statements use them. Patterns are Leitner tracks with the aspect `usage` only (`aspectAppliesTo`), asked as cloze questions (`games/generators/pattern-cloze.ts`).
+- Library chapters (H4c):
+  - A draft pattern's `entries` reuse a registry entry or add a new one the user confirms, like senses.
+  - A published chapter stores them as `Chapter.patternIds[i]`, and an edit can add links but never remove one (G8).
+  - Entries users add go into the `patterns` collection. `BookContentService.patterns()` merges it with the file, and the file wins on a clash.
+  - `GET /api/patterns?spelling=…` returns exact and contained matches.
+  - A user book borrows the built-in book's endings as cloze distractors (`distractorPatterns`).
 
 Tool arguments are validated with Hashbrown's schema system (`s.object`, `s.string`, etc.).
 

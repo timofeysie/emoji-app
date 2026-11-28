@@ -1,6 +1,6 @@
 # Grammar learning objects
 
-Status: **decided** (2026-11-22). **H4a and H4b built** (2026-11-22). H4c (library chapters and the chat) is next.
+Status: **decided** (2026-11-22). **H4a, H4b and H4c built** (2026-11-22).
 This is milestone **H4** of
 [`creating-games-with-hashbrown.md`](../hashbrown/creating-games-with-hashbrown.md#milestones).
 It builds on decision **A4** in
@@ -148,7 +148,7 @@ Like the sense registry (`ko-senses.json` plus the `senses` collection):
 | Layer | Holds |
 | --- | --- |
 | `server/src/games/content/ko-patterns.json` (committed) | Entries for the built-in book: `key`, `form` (romanised key), `meaning` (slug), `headword`, `gloss`, `spellings[]`, `sources[]` (book-qualified pattern refs, `korean-language-book/ch27/patterns/0`) |
-| `patterns` collection (Mongo) | Entries users add when they publish a library chapter. The file wins on a clash. |
+| `patterns` collection (Mongo) | Entries users add when they publish a library chapter (`language`, `form`, `meaning`, `headword`, `gloss`, `spellings[]`, `sources[]`), unique on `(language, form, meaning)`. The file wins on a clash. |
 
 **Book pattern links.** Each book pattern stores the entries it teaches,
 like a chapter's `senseIds`: `ch27/patterns/0` →
@@ -318,6 +318,126 @@ Built 2026-11-22, for the built-in book.
 - **Export to `emojiapp-dev`.**
 - **Pattern levels on the Patterns tab:** not shown yet. It has no
   learning-object ids per pattern.
+
+## H4c: what was built
+
+Built 2026-11-22, so user books get pattern tracks too.
+
+- **Draft decisions** (`content/chapter-draft.ts`): each draft pattern has
+  `entries[]`, at most 3. An entry either reuses an id (`decision: reuse`,
+  `reuseId`) or is new (`decision: new`, `headword`, `meaning`, `gloss`,
+  `confirmed`). A new entry's id comes from its headword and meaning
+  (`patternId`), never typed (GP3). Publishing is blocked when:
+  - a pattern teaches nothing;
+  - a new entry's headword can't be read (the `PatternSpellingError`
+    message is shown), or its meaning slug or gloss is missing or invalid;
+  - a new entry isn't confirmed;
+  - an entry is linked twice;
+  - a reused id isn't a grammar pattern of the language, or doesn't exist;
+  - a "new" entry already exists.
+
+  Two patterns may add the same new entry: it's created once.
+- **Freezing (G8):** an edit keeps each published pattern's links. Others
+  can be added. `FrozenChapter.patternIds` holds them.
+- **Storage:**
+  - `Chapter.patternIds[i]` holds the entries book pattern i teaches.
+    Chapters published before H4c have none, and their patterns teach
+    nothing until an edit links them.
+  - Publishing creates the new entries in the `patterns` collection, in the
+    same transaction as the chapter. A clash is `PatternTakenError` (409),
+    like senses.
+  - Publishing also adds `book/chN/patterns/i` to each DB entry's
+    `sources`. When a book pattern links exactly one entry, its spelling is
+    added to that entry's `spellings`.
+  - Entries in the file are never written to the DB.
+- **Merged registry** (`mergePatterns`, `BookContentService.patterns`):
+  - the file's entries, plus the DB rows (a row for a file id only adds
+    spellings and sources);
+  - plus every built-in book pattern's own text as a spelling of the
+    entries it teaches. So `계속 더 ADJECTIVE + -아/어/여지네` matches both
+    `-아/어/여지다` and `-네` exactly.
+
+  It's cached per language and cleared on publish.
+- **Matching** (`findPatternMatches`, `GET /api/patterns?spelling=…`, one
+  `spelling` per pattern, up to 10). Each pattern gets:
+  - `exact`: entries with the same key;
+  - `contained`: entries whose key, without its dictionary `다`, is inside
+    it. A one-syllable stem (`네`, `면`) only counts at the end of a token;
+  - `problem`: why the spelling can't be read.
+- **User book content** (`buildUserBookContent`): links come from
+  `patternIds` against the merged registry. Remix and edit copy them as
+  reuse decisions, and built-in chapters copy the file's links.
+- **Cloze changes** (`pattern-cloze.ts`):
+  - A pattern written without `+` (`-(으)면`, `V-(으)면`) now has its
+    ending found from the first word starting with `-` or `~`. Library
+    chapters write it that way.
+  - Distractors come from the chapter first, then the book, then other
+    books. A user book borrows the built-in book's endings
+    (`BookContent.distractorPatterns`), because two or three patterns of
+    its own aren't enough.
+- **Editor** (`ChapterDraftEditor` Patterns tab, `pattern-suggest.ts`):
+  - Each pattern has a "Teaches" panel listing its entries.
+  - A reused entry is shown in orange, like senses.
+  - A new entry has inputs for headword, meaning and gloss, and a Confirmed
+    box. Editing an input clears Confirmed.
+  - An "Add an entry…" menu offers exact and contained matches, or a new
+    entry.
+  - Published links are locked.
+  - "Look up patterns" and "Confirm all" buttons.
+
+  Opening or generating a draft looks up senses and patterns together:
+  - an unlinked pattern reuses every exact match;
+  - with no exact match, it gets one unconfirmed new entry named after the
+    pattern (placeholders and `+` dropped);
+  - a pattern whose spelling can't be read stays unlinked for the user.
+- **Chat** (`useLibraryChatArea`):
+  - `findPatterns` looks up the patterns before `proposeChapter`.
+  - `proposeChapter` and `reviseChapterDraft` take each pattern's
+    `entries`.
+  - `getChapterDraft` shows what each pattern teaches.
+  - `PATTERN_RULES` (`chapter-authoring.prompt.ts`): reuse exact matches;
+    a combination is several entries; adverbs and the sentence ending
+    aren't entries; a new headword is in dictionary style, never
+    conjugated.
+  - The recipe asks for `patternTarget` after what it attaches to, with the
+    ending as the sentences use it (`ADJECTIVE + -아/어/여지네`).
+  - Unconfirmed patterns count as `forTheUser`, like senses.
+- **Chat card:** lists each pattern and what it teaches. Its Confirm button
+  confirms new senses and new patterns.
+- **Specs:**
+  - pattern decisions and their problems, the registry check, publish
+    output and freezing (`chapter-draft.spec.ts`);
+  - DB entries and `patternIds` on publish, a second publish reusing them,
+    remix and edit links, the built-in book's links on remix, matching
+    (file, built-in combination, library spelling, contained, unreadable)
+    (`chapter-drafts.service.spec.ts`);
+  - a library chapter's usage clozes, tagged with its linked entries,
+    distractors from the built-in book, and progress naming
+    (`leitner-user-books.spec.ts`).
+
+  All 542 server tests pass. Lint and the build are clean, and the client
+  typecheck shows the same 4 errors as before.
+
+**Known limits:**
+- A combination's spelling isn't recorded from user books: one of its
+  entries may be in the file, so a match on the others alone would mislead.
+  A file entry gets no new spellings from user books either.
+- Contracted conjugations (`졌` for `지었`) aren't matched, exactly or as
+  contained.
+- A pattern whose ending isn't written the way its sentences use it (a
+  dictionary-form `-아/어지다` with conjugated sentences) gets no cloze
+  question, and nothing warns the user.
+- The cloze for a past-tense pattern blanks the part written the same
+  after any verb (`했[어요]`), so it tests the polite ending more than the
+  past.
+
+**Not checked yet:**
+- **On screen:** the Teaches panel, the chat card's patterns and the
+  Confirm button.
+- **The chat with a real model:** `findPatterns`, then `proposeChapter`
+  with entries.
+- **Publishing against real Mongo:** the nested `patternIds` array and the
+  `patterns` index.
 
 ## Open questions
 
